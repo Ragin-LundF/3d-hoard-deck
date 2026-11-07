@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { commands, describeError, unwrap, type AccessModeDto, type LibraryDto, type MetadataStorageDto } from "../../ipc";
 import { Icon } from "../../shared/icons";
 import { isScanning, type ScanStatus } from "../library/use-scan-status";
@@ -49,6 +50,12 @@ export function LibrarySettings({ library, scan, onError }: Props) {
   });
   const rescan = (full: boolean) => unwrap(commands.scanLibrary(library.id, full)).catch((error) => onError(describeError(error)));
   const scanning = isScanning(scan);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   // Metadata files need write access; going back to read-only also switches them off.
   const setAccess = (access: AccessModeDto) =>
     save.mutate({ access, metadata: access === "readOnly" ? "indexOnly" : library.metadata });
@@ -76,7 +83,9 @@ export function LibrarySettings({ library, scan, onError }: Props) {
           </div>
           <pre className="failures">{scan.unreadableExamples.join("\n")}</pre>
           <div className="actions">
-            <button className="btn" onClick={() => void navigator.clipboard.writeText(scan.unreadableExamples.join("\n"))}>{t("Copy list")}</button>
+            <button className="btn" onClick={() => void navigator.clipboard.writeText(scan.unreadableExamples.join("\n")).then(() => setCopied(true))}>
+              {copied ? t("Copied") : t("Copy list")}
+            </button>
           </div>
         </div>
       )}

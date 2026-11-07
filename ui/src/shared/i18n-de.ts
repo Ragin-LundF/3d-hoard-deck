@@ -333,4 +333,5 @@ export const de: Record<string, string> = {
   "Zoom in": "Vergrößern",
   "Fit to the box": "An die Fläche anpassen",
   "Fit": "Einpassen",
+  "Copied": "Kopiert",
 };

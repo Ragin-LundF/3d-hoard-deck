@@ -12,9 +12,30 @@ export type ScanStatus = {
   error: IpcError | null;
 };
 
+const STORAGE_KEY = "lastScanProblems";
+
+/** What the last finished scan could not read, so the list survives a restart or a language switch. */
+function remembered(): Record<number, ScanStatus> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Record<number, { unreadable: number; unreadableExamples: string[] }>;
+    return Object.fromEntries(
+      Object.entries(stored).map(([library, problems]) => [library, { phase: "done", folders: 0, files: 0, error: null, ...problems }]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function remember(library: number, unreadable: number, unreadableExamples: string[]) {
+  const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Record<number, unknown>;
+  if (unreadable > 0) stored[library] = { unreadable, unreadableExamples };
+  else delete stored[library];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+}
+
 /** Latest scan progress per library; refreshes every query when a scan ends and reports each failure once. */
 export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<number, ScanStatus> {
-  const [status, setStatus] = useState<Record<number, ScanStatus>>({});
+  const [status, setStatus] = useState<Record<number, ScanStatus>>(remembered);
   const queryClient = useQueryClient();
   useEffect(() => {
     const unlisten = events.scanProgressEvent.listen(({ payload }) => {
@@ -29,6 +50,7 @@ export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<num
           error: payload.error ?? null,
         },
       }));
+      if (payload.phase === "done") remember(payload.library, payload.unreadable ?? 0, payload.unreadableExamples);
       if (payload.phase === "done" || payload.phase === "failed") void queryClient.invalidateQueries();
       if (payload.error) onFailed(new IpcFailure(payload.error));
     });

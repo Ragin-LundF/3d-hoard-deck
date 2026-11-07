@@ -19,3 +19,13 @@ export function clamp(view: View, box: Size, image: Size): View {
   const bound = (value: number, max: number) => Math.min(max, Math.max(-max, value));
   return { zoom, x: bound(view.x, limit(shown.width, box.width)), y: bound(view.y, limit(shown.height, box.height)) };
 }
+
+/** Zooms by `factor` keeping the point `at` (relative to the box centre) where it is on screen. */
+export function zoomAt(view: View, factor: number, at: { x: number; y: number }): View {
+  return { zoom: view.zoom * factor, x: at.x - (at.x - view.x) * factor, y: at.y - (at.y - view.y) * factor };
+}
+
+/** A smooth factor from a wheel event: a mouse notch is about 1.2×, trackpads scroll in small steps, pinch is ctrl+wheel. */
+export function wheelFactor(deltaY: number, pinch: boolean): number {
+  return Math.exp(-deltaY * (pinch ? 0.01 : 0.0015));
+}
