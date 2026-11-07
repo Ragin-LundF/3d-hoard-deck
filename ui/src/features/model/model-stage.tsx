@@ -3,6 +3,7 @@ import { fileUrl, thumbUrl, type ModelFileDto_Serialize } from "../../ipc";
 import { fileName } from "../../shared/format";
 import type { MeshFormat } from "../viewer/formats";
 import { t } from "../../shared/i18n";
+import { ZoomImage } from "./zoom-image";
 
 // three.js is only downloaded when a model is opened in 3D.
 const MeshViewer = lazy(() => import("../viewer/mesh-viewer"));
@@ -32,7 +33,7 @@ export function ModelStage({ library, title, view, images, firstMesh, onView, co
             <MeshViewer library={library} path={view.path} format={view.format} />
           </Suspense>
         ) : view.path ? (
-          <img src={fileUrl(library, view.path)} alt={title} />
+          <ZoomImage src={fileUrl(library, view.path)} alt={title} />
         ) : (
           <span className="crumbs">{t("No preview image in this folder")}</span>
         )}

@@ -132,7 +132,12 @@ body[data-ui="light"] .ft.step { color: #1D4FA8; }
 .dbody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr); }
 .stagecol { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
 .stage { position: relative; flex: 1; min-height: 280px; background: radial-gradient(ellipse at 50% 35%, var(--hover) 0%, var(--panel) 60%, var(--bg) 100%); display: grid; place-items: center; overflow: hidden; }
-.stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.zoom { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; touch-action: none; }
+.zoom img { max-width: none; transform-origin: center; transition: transform .12s ease-out; user-select: none; }
+.zoom.zoomed { cursor: grab; }
+.zoom.dragging { cursor: grabbing; }
+.zoom.dragging img { transition: none; }
+.zoom-controls { position: absolute; top: 12px; left: 12px; z-index: 2; }
 .gallery { display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; border-top: 1px solid var(--line); background: var(--panel); }
 .gallery button { flex: none; width: 96px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); padding: 0; background: var(--raised); }
 .gallery button.on { border-color: var(--accent); }

@@ -328,4 +328,9 @@ export const de: Record<string, string> = {
   "Their earlier index data is kept, and the next scan tries again. Each line names the path and the reason the system gave.":
     "Ihre bisherigen Indexdaten bleiben erhalten, und der nächste Scan versucht es erneut. Jede Zeile nennt den Pfad und den Grund, den das System gemeldet hat.",
   "Copy list": "Liste kopieren",
+  "Zoom": "Zoom",
+  "Zoom out": "Verkleinern",
+  "Zoom in": "Vergrößern",
+  "Fit to the box": "An die Fläche anpassen",
+  "Fit": "Einpassen",
 };
