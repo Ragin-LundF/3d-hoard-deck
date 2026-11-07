@@ -21,3 +21,6 @@ vite.config.ts.timestamp-*
 .vscode/*
 
 /src-tauri/gen
+
+# Orynt3D samples from a private library; keep out of git until cleared
+/docs/samples/

@@ -10,7 +10,7 @@ use super::id32;
 use super::library::FolderDto;
 use super::model::ModelSummaryDto;
 
-#[derive(Debug, Clone, Copy, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum FolderRoleDto {
     Model,

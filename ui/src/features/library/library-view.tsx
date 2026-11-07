@@ -4,11 +4,23 @@ import { formatCount, folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import type { LibraryRoute, Route } from "../../shared/route";
 import { Breadcrumbs } from "../folders/breadcrumbs";
+import { NameInput } from "../collections/name-input";
+import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
 import { useFolderPage, useSearch } from "./queries";
 import { VirtualGrid } from "./virtual-grid";
 
 type Item = { kind: "folder"; folder: FolderDto_Serialize } | { kind: "model"; model: ModelSummaryDto_Serialize };
+
+/** "Save as smart collection" for the current search. */
+function SaveSearch({ query, onError, onSaved }: { query: string; onError: (message: string) => void; onSaved: (id: number) => void }) {
+  const [naming, setNaming] = useState(false);
+  const create = useCreateCollection(onError, onSaved);
+  if (naming) {
+    return <NameInput placeholder="Smart collection name" initial={query} onSubmit={(name) => { setNaming(false); create.mutate({ name, query }); }} onCancel={() => setNaming(false)} />;
+  }
+  return <button className="btn ghost" onClick={() => setNaming(true)}><Icon name="search" />Save as smart collection</button>;
+}
 
 type Props = {
   library: LibraryDto;
@@ -16,9 +28,10 @@ type Props = {
   navigate: (route: Route) => void;
   onFolderMenu: (folder: FolderDto_Serialize) => (event: MouseEvent) => void;
   onShownChange: (shown: number) => void;
+  onError: (message: string) => void;
 };
 
-export function LibraryView({ library, route, navigate, onFolderMenu, onShownChange }: Props) {
+export function LibraryView({ library, route, navigate, onFolderMenu, onShownChange, onError }: Props) {
   const [sort, setSort] = useState<SortDto>("name");
   const [cardWidth, setCardWidth] = useState(208);
   const searching = route.q.trim().length > 0;
@@ -65,6 +78,9 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
           )}
         </div>
         <div className="filters">
+          {searching && (
+            <SaveSearch query={route.q} onError={onError} onSaved={(id) => navigate({ view: "collection", id })} />
+          )}
           {searching && route.folder && (
             <span className="scope">
               in {folderName(route.folder)}

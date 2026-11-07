@@ -41,6 +41,7 @@ export function FolderMenu({ target, onClose, onError }: { target: MenuTarget; o
       <button role="menuitemcheckbox" aria-checked={target.isCollection} onClick={choose("collection")}>Treat as collection</button>
       <hr />
       <button role="menuitem" onClick={choose(null)}>Detect automatically</button>
+      <p className="menu-hint">Rules for whole patterns (suggested collections) are listed in Settings › Libraries.</p>
     </div>
   );
 }

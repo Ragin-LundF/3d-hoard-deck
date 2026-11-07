@@ -48,6 +48,9 @@ impl SearchModels {
         let hits = self.search.search(&SearchQuery {
             words: parsed.words,
             formats: parsed.formats,
+            tags: parsed.tags,
+            favorite: parsed.favorite,
+            printed: parsed.printed,
             library: request.library,
             scope,
             offset: request.offset,

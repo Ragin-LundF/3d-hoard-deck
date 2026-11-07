@@ -5,7 +5,16 @@ use hoarddeck_domain::{FileFormat, Folder, LibraryId, ModelId, ModelKind, RelPat
 use rusqlite::Row;
 use rusqlite::types::Type;
 
-pub(crate) const SUMMARY_COLUMNS: &str = "id, library_id, path, folder, kind, title, released, cover, formats, file_count, total_size, collection, marked_by_user";
+/// Models joined with what the user set on them; `m` and `mm` are the aliases used in every model query.
+pub(crate) const SUMMARY_FROM: &str =
+    "models m LEFT JOIN model_meta mm ON mm.library_id = m.library_id AND mm.path = m.path";
+
+/// The title the user sees: their display name, else the derived one.
+pub(crate) const TITLE: &str = "COALESCE(mm.display_name, m.title)";
+
+pub(crate) const SUMMARY_COLUMNS: &str = "m.id, m.library_id, m.path, m.folder, m.kind, COALESCE(mm.display_name, m.title), \
+     m.released, COALESCE(mm.cover, m.cover), m.formats, m.file_count, m.total_size, m.collection, m.marked_by_user, \
+     COALESCE(mm.favorite, 0), COALESCE(mm.printed, 0)";
 
 pub(crate) const FOLDER_COLUMNS: &str =
     "path, display_name, released, direct_models, total_models, cover, is_collection";
@@ -25,6 +34,8 @@ pub(crate) fn summary(row: &Row<'_>) -> rusqlite::Result<ModelSummary> {
         total_size: to_u64(row.get(10)?),
         collection: optional_rel_path(row, 11)?,
         marked_by_user: row.get(12)?,
+        favorite: row.get(13)?,
+        printed: row.get(14)?,
     })
 }
 

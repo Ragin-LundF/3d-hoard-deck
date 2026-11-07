@@ -7,7 +7,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::schema;
 
-const FILE_NAME: &str = "index.sqlite";
+pub(crate) const FILE_NAME: &str = "index.sqlite";
 const MAX_IDLE_READERS: usize = 4;
 
 /// The SQLite index. One writer connection; readers come from a small pool, so reads never wait for a scan.

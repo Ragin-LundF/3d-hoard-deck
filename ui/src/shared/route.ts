@@ -4,6 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 export type Route =
   | { view: "library"; library: number | null; folder: string; all: boolean; q: string }
   | { view: "model"; id: number }
+  | { view: "collection"; id: number }
   | { view: "settings" };
 
 export type LibraryRoute = Extract<Route, { view: "library" }>;
@@ -16,6 +17,7 @@ export function parseRoute(hash: string): Route {
   if (view === "settings") return { view: "settings" };
   const id = Number(params.get("id"));
   if (view === "model" && Number.isInteger(id) && id > 0) return { view: "model", id };
+  if (view === "collection" && Number.isInteger(id) && id > 0) return { view: "collection", id };
   const library = Number(params.get("lib"));
   return {
     view: "library",
@@ -28,7 +30,7 @@ export function parseRoute(hash: string): Route {
 
 export function formatRoute(route: Route): string {
   const params = new URLSearchParams({ view: route.view });
-  if (route.view === "model") params.set("id", String(route.id));
+  if (route.view === "model" || route.view === "collection") params.set("id", String(route.id));
   if (route.view === "library") {
     if (route.library !== null) params.set("lib", String(route.library));
     if (route.folder) params.set("folder", route.folder);

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use hoarddeck_domain::LibraryId;
 
@@ -7,16 +7,27 @@ use crate::AppError;
 
 /// One writer per library at a time: a scan and a regroup must not interleave their catalog writes.
 #[derive(Debug, Default)]
-pub struct LibraryLocks(Mutex<HashSet<LibraryId>>);
+pub struct LibraryLocks {
+    libraries: Mutex<HashSet<LibraryId>>,
+    search: Mutex<()>,
+}
 
 impl LibraryLocks {
     /// # Errors
     /// Returns [`AppError::LibraryBusy`] when the library is already locked.
     pub fn lock(&self, library: LibraryId) -> Result<LibraryLock<'_>, AppError> {
-        if !self.0.lock().unwrap_or_else(PoisonError::into_inner).insert(library) {
+        if !self.libraries.lock().unwrap_or_else(PoisonError::into_inner).insert(library) {
             return Err(AppError::LibraryBusy(library));
         }
         Ok(LibraryLock { locks: self, library })
+    }
+}
+
+impl LibraryLocks {
+    /// Held while documents are read from the index and written to the search index, so an edit made during a
+    /// regroup is never overwritten by the regroup's older copy.
+    pub fn search_sync(&self) -> MutexGuard<'_, ()> {
+        self.search.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -28,7 +39,7 @@ pub struct LibraryLock<'a> {
 
 impl Drop for LibraryLock<'_> {
     fn drop(&mut self) {
-        self.locks.0.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.library);
+        self.locks.libraries.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.library);
     }
 }
 

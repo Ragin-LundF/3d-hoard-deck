@@ -70,7 +70,7 @@ impl ScanLibrary {
         let mut report = self.walk(&library, &rules, mode)?;
         self.progress(id, ScanPhase::Grouping, &report);
         (report.models, report.folders) =
-            regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), id, &rules)?;
+            regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
         self.progress(id, ScanPhase::Done, &report);
         Ok(report)
     }

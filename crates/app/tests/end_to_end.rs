@@ -90,6 +90,21 @@ fn scan_browse_and_search_a_library_without_writing_into_it() {
     let loose = search("13661 type:3mf");
     assert_eq!(loose.first().map(|m| m.kind), Some(ModelKind::File));
     assert_eq!(search("turtle in:Makerworld"), Vec::new());
+
+    let proposals = app.collection_presets.propose(library.id).expect("propose");
+    assert_eq!(proposals.iter().map(|p| (p.id.as_str(), p.matches)).collect::<Vec<_>>(), vec![("creator-releases", 1)]);
+    assert_eq!(proposals[0].samples, vec!["September Release"]);
+    app.collection_presets.accept(library.id, "creator-releases").expect("accept");
+    let wolverine = search("wolverine");
+    let release = RelPath::new("Miniatures/Creator/2022-09 - September Release").expect("valid");
+    assert_eq!(wolverine[0].collection, Some(release.clone()), "the release became a collection");
+    assert!(
+        app.collection_presets.propose(library.id).expect("propose again").is_empty(),
+        "accepted presets are not proposed again"
+    );
+    let rules = app.folder_rules.list(library.id).expect("rules");
+    app.folder_rules.remove(library.id, &rules[0].pattern).expect("remove");
+    assert_eq!(search("wolverine")[0].collection, None);
 }
 
 #[test]

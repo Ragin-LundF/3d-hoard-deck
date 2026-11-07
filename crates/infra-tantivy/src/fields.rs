@@ -6,7 +6,7 @@ use tantivy::schema::{
 use tantivy::tokenizer::{AsciiFoldingFilter, LowerCaser, RemoveLongFilter, SimpleTokenizer, TextAnalyzer};
 
 /// Bump when fields or analyzers change; a mismatch wipes the folder and triggers a rebuild from SQLite.
-pub(crate) const SCHEMA_VERSION: &str = "2";
+pub(crate) const SCHEMA_VERSION: &str = "3";
 pub(crate) const ANALYZER: &str = "hoard";
 
 #[derive(Clone, Copy)]
@@ -17,6 +17,13 @@ pub(crate) struct Fields {
     pub path: Field,
     pub folder: Field,
     pub format: Field,
+    /// Tag words for free-text search.
+    pub tags: Field,
+    /// Exact lower-case tags for `tag:` filters.
+    pub tag: Field,
+    pub notes: Field,
+    /// `favorite`, `printed`.
+    pub flag: Field,
 }
 
 impl Fields {
@@ -29,7 +36,11 @@ impl Fields {
             model_id: builder.add_u64_field("model_id", INDEXED | STORED | FAST),
             library: builder.add_u64_field("library", INDEXED),
             title: builder.add_text_field("title", words.clone()),
-            path: builder.add_text_field("path", words),
+            path: builder.add_text_field("path", words.clone()),
+            tags: builder.add_text_field("tags", words.clone()),
+            notes: builder.add_text_field("notes", words),
+            tag: builder.add_text_field("tag", STRING),
+            flag: builder.add_text_field("flag", STRING),
             folder: builder.add_facet_field("folder", FacetOptions::default()),
             format: builder.add_text_field("format", STRING),
         };

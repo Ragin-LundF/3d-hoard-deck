@@ -5,19 +5,63 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
-	listLibraries: () => typedError<LibraryDto[], IpcError>(__TAURI_INVOKE("list_libraries")),
-	addLibrary: (name: string, root: string) => typedError<LibraryDto, IpcError>(__TAURI_INVOKE("add_library", { name, root })),
+	listLibraries: () => typedError<LibraryDto[], IpcError_Serialize>(__TAURI_INVOKE("list_libraries")),
+	addLibrary: (name: string, root: string) => typedError<LibraryDto, IpcError_Serialize>(__TAURI_INVOKE("add_library", { name, root })),
+	/**
+	 *  Saves what the app may write into a library. Switching metadata files on writes them for existing data at once;
+	 *  returns how many files were written.
+	 */
+	updateLibrarySettings: (library: number, access: AccessModeDto, metadata: MetadataStorageDto) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("update_library_settings", { library, access, metadata })),
+	/**  The folder the index was opened from. */
+	indexLocation: () => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("index_location")),
+	/**
+	 *  Moves the index to `folder` and restarts at once, so nothing is written to the old copy afterwards.
+	 *  `existing` decides what happens when `folder` already holds an index: `ask` fails with `index_exists`.
+	 */
+	moveIndexLocation: (folder: string, existing: ExistingIndexDto) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("move_index_location", { folder, existing })),
 	/**
 	 *  Starts a scan in the background and returns at once; progress arrives as `ScanProgressEvent`s.
 	 *  `full` also lists folders whose mtime did not change, to catch files overwritten in place.
 	 */
-	scanLibrary: (library: number, full: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("scan_library", { library, full })),
-	browseFolder: (request: BrowseRequestDto_Deserialize) => typedError<FolderPageDto_Serialize, IpcError>(__TAURI_INVOKE("browse_folder", { request })),
-	folderChildren: (library: number, folder: string) => typedError<FolderDto_Serialize[], IpcError>(__TAURI_INVOKE("folder_children", { library, folder })),
-	searchModels: (request: SearchRequestDto_Deserialize) => typedError<SearchResultDto_Serialize, IpcError>(__TAURI_INVOKE("search_models", { request })),
+	scanLibrary: (library: number, full: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("scan_library", { library, full })),
+	browseFolder: (request: BrowseRequestDto_Deserialize) => typedError<FolderPageDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("browse_folder", { request })),
+	folderChildren: (library: number, folder: string) => typedError<FolderDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folder_children", { library, folder })),
+	searchModels: (request: SearchRequestDto_Deserialize) => typedError<SearchResultDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("search_models", { request })),
 	/**  Marks a folder as one model or a collection (`None` = automatic detection) and regroups at once. */
-	setFolderRole: (library: number, folder: string, role: FolderRoleDto | null) => typedError<null, IpcError>(__TAURI_INVOKE("set_folder_role", { library, folder, role })),
-	getModel: (id: number) => typedError<ModelDetailDto_Serialize | null, IpcError>(__TAURI_INVOKE("get_model", { id })),
+	setFolderRole: (library: number, folder: string, role: FolderRoleDto | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_folder_role", { library, folder, role })),
+	getModel: (id: number) => typedError<ModelDetailDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("get_model", { id })),
+	listSlicers: () => typedError<SlicerDto[], IpcError_Serialize>(__TAURI_INVOKE("list_slicers")),
+	listCollections: () => typedError<CollectionDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("list_collections")),
+	/**  `query`: search text for a smart collection, `None` for a hand-made one. */
+	createCollection: (name: string, query: string | null) => typedError<CollectionDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("create_collection", { name, query })),
+	renameCollection: (id: number, name: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("rename_collection", { id, name })),
+	/**  Deletes the collection; its models stay in the library. */
+	deleteCollection: (id: number) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_collection", { id })),
+	addToCollection: (id: number, models: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("add_to_collection", { id, models })),
+	removeFromCollection: (id: number, models: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_from_collection", { id, models })),
+	/**  Moves a member of a hand-made collection to position `index` (0 = first). */
+	moveInCollection: (id: number, model: number, index: number) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("move_in_collection", { id, model, index })),
+	collectionModels: (id: number, offset: number, limit: number) => typedError<SearchResultDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("collection_models", { id, offset, limit })),
+	/**  Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it. */
+	updateModelMeta: (id: number, meta: ModelMetaDto_Deserialize) => typedError<ModelDetailDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("update_model_meta", { id, meta })),
+	listTags: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("list_tags", { library })),
+	/**  Restores names, tags, marks and notes from the library's `.3dhoarddeck` files (reads only). */
+	rebuildFromSidecars: (library: number) => typedError<RebuildReportDto, IpcError_Serialize>(__TAURI_INVOKE("rebuild_from_sidecars", { library })),
+	/**  Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again). */
+	importOrynt3d: (library: number) => typedError<ImportReportDto, IpcError_Serialize>(__TAURI_INVOKE("import_orynt3d", { library })),
+	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
+	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
+	/**  Collection presets that match this library's folders and are not in use yet. */
+	proposePresets: (library: number) => typedError<PresetProposalDto[], IpcError_Serialize>(__TAURI_INVOKE("propose_presets", { library })),
+	acceptPreset: (library: number, id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("accept_preset", { library, id })),
+	/**  Replaces the list as edited in Settings; the first entry is the default. */
+	saveSlicers: (slicers: SlicerDto[]) => typedError<SlicerDto[], IpcError_Serialize>(__TAURI_INVOKE("save_slicers", { slicers })),
+	detectSlicers: () => typedError<SlicerDto[], IpcError_Serialize>(__TAURI_INVOKE("detect_slicers")),
+	/**
+	 *  Opens model files in a slicer: `files` (empty = the model's 3MF projects or main meshes) in slicer number
+	 *  `slicer` (`None` = the first that opens them). Returns the slicer's name.
+	 */
+	openInSlicer: (model: number, files: string[], slicer: number | null) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("open_in_slicer", { model, files, slicer })),
 };
 
 /** Events */
@@ -26,6 +70,9 @@ export const events = {
 };
 
 /* Types */
+/**  What the app may write into the library. */
+export type AccessModeDto = "readOnly" | "metadataWrite" | "managed";
+
 export type BrowseRequestDto = BrowseRequestDto_Serialize | BrowseRequestDto_Deserialize;
 
 export type BrowseRequestDto_Deserialize = {
@@ -46,10 +93,33 @@ export type BrowseRequestDto_Serialize = {
 	limit: number,
 };
 
+export type CollectionDto = CollectionDto_Serialize | CollectionDto_Deserialize;
+
+export type CollectionDto_Deserialize = {
+	id: number,
+	name: string,
+	/**  Search text of a smart collection; `None` for a hand-made one. */
+	query?: string | null,
+	/**  Members of a hand-made collection; `None` for smart ones. */
+	count?: number | null,
+};
+
+export type CollectionDto_Serialize = {
+	id: number,
+	name: string,
+	/**  Search text of a smart collection; `None` for a hand-made one. */
+	query: string | null,
+	/**  Members of a hand-made collection; `None` for smart ones. */
+	count: number | null,
+};
+
 export type CursorDto = {
 	key: string,
 	id: number,
 };
+
+/**  What to do when the chosen index folder already holds an index. */
+export type ExistingIndexDto = "ask" | "use" | "replace";
 
 export type FolderDto = FolderDto_Serialize | FolderDto_Deserialize;
 
@@ -89,29 +159,68 @@ export type FolderPageDto_Serialize = {
 
 export type FolderRoleDto = "model" | "collection";
 
-export type IpcError = {
-	/**  Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `invalid_input`, `internal`. */
+export type FolderRuleDto = {
+	/**  Glob relative to the library root; a single folder for marks made by right-click. */
+	pattern: string,
+	role: FolderRoleDto,
+};
+
+export type ImportReportDto = {
+	updated: number,
+	unreadable: number,
+};
+
+export type IpcError = IpcError_Serialize | IpcError_Deserialize;
+
+export type IpcError_Deserialize = {
+	/**
+	 *  Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `index_exists`,
+	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `invalid_input`, `internal`.
+	 */
 	code: string,
 	message: string,
+	/**  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970. */
+	details?: string | null,
+};
+
+export type IpcError_Serialize = {
+	/**
+	 *  Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `index_exists`,
+	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `invalid_input`, `internal`.
+	 */
+	code: string,
+	message: string,
+	/**  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970. */
+	details: string | null,
 };
 
 export type LibraryDto = {
 	id: number,
 	name: string,
 	root: string,
-	readOnly: boolean,
+	access: AccessModeDto,
+	metadata: MetadataStorageDto,
 };
+
+/**  Where tags, names and notes are kept. */
+export type MetadataStorageDto = "indexOnly" | "indexAndSidecar";
 
 export type ModelDetailDto = ModelDetailDto_Serialize | ModelDetailDto_Deserialize;
 
 export type ModelDetailDto_Deserialize = {
 	summary: ModelSummaryDto_Deserialize,
 	files: ModelFileDto_Deserialize[],
+	/**  Name derived from the folder or file, shown next to a display name. */
+	originalTitle: string,
+	meta: ModelMetaDto_Deserialize,
 };
 
 export type ModelDetailDto_Serialize = {
 	summary: ModelSummaryDto_Serialize,
 	files: ModelFileDto_Serialize[],
+	/**  Name derived from the folder or file, shown next to a display name. */
+	originalTitle: string,
+	meta: ModelMetaDto_Serialize,
 };
 
 export type ModelFileDto = ModelFileDto_Serialize | ModelFileDto_Deserialize;
@@ -132,6 +241,28 @@ export type ModelFileDto_Serialize = {
 	variant: string | null,
 };
 
+export type ModelMetaDto = ModelMetaDto_Serialize | ModelMetaDto_Deserialize;
+
+export type ModelMetaDto_Deserialize = {
+	displayName?: string | null,
+	tags: string[],
+	favorite: boolean,
+	printed: boolean,
+	notes: string,
+	/**  An image path of the model picked as cover, or `None` for the detected one. */
+	cover?: string | null,
+};
+
+export type ModelMetaDto_Serialize = {
+	displayName: string | null,
+	tags: string[],
+	favorite: boolean,
+	printed: boolean,
+	notes: string,
+	/**  An image path of the model picked as cover, or `None` for the detected one. */
+	cover: string | null,
+};
+
 export type ModelSummaryDto = ModelSummaryDto_Serialize | ModelSummaryDto_Deserialize;
 
 export type ModelSummaryDto_Deserialize = {
@@ -142,6 +273,8 @@ export type ModelSummaryDto_Deserialize = {
 	/**  `folder` or `file`. */
 	kind: string,
 	title: string,
+	favorite: boolean,
+	printed: boolean,
 	released?: string | null,
 	cover?: string | null,
 	/**  Folder path of the collection the model belongs to. */
@@ -161,6 +294,8 @@ export type ModelSummaryDto_Serialize = {
 	/**  `folder` or `file`. */
 	kind: string,
 	title: string,
+	favorite: boolean,
+	printed: boolean,
 	released: string | null,
 	cover: string | null,
 	/**  Folder path of the collection the model belongs to. */
@@ -170,6 +305,19 @@ export type ModelSummaryDto_Serialize = {
 	formats: string[],
 	fileCount: number,
 	totalSize: number | null,
+};
+
+export type PresetProposalDto = {
+	id: string,
+	name: string,
+	pattern: string,
+	matches: number,
+	samples: string[],
+};
+
+export type RebuildReportDto = {
+	restored: number,
+	unreadable: number,
 };
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
@@ -182,7 +330,7 @@ export type ScanProgressEvent_Deserialize = {
 	folders: number | null,
 	files: number | null,
 	/**  Set when `phase` is `failed`; same codes as command errors. */
-	error?: IpcError | null,
+	error?: IpcError_Deserialize | null,
 };
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
@@ -192,7 +340,7 @@ export type ScanProgressEvent_Serialize = {
 	folders: number | null,
 	files: number | null,
 	/**  Set when `phase` is `failed`; same codes as command errors. */
-	error: IpcError | null,
+	error: IpcError_Serialize | null,
 };
 
 export type SearchRequestDto = SearchRequestDto_Serialize | SearchRequestDto_Deserialize;
@@ -225,7 +373,22 @@ export type SearchResultDto_Serialize = {
 	total: number,
 };
 
+export type SlicerDto = {
+	name: string,
+	/**  Executable, or an `.app` bundle on macOS. */
+	program: string,
+	/**  `{files}` stands for the files to open. */
+	args: string[],
+	/**  Lower-case file extensions, e.g. `stl`, `3mf`. */
+	extensions: string[],
+};
+
 export type SortDto = "name" | "added" | "released";
+
+export type TagCountDto = {
+	name: string,
+	count: number,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

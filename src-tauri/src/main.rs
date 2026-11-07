@@ -10,6 +10,7 @@ mod protocol;
 use std::sync::Arc;
 
 use hoarddeck_app::App;
+use hoarddeck_infra_thumbs::ThumbnailCache;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
@@ -27,7 +28,9 @@ fn main() {
             specta.mount_events(tauri_app);
             let index_dir = hoarddeck_infra_fs::resolve_index_dir()?;
             let events = Arc::new(events::TauriEvents::new(tauri_app.handle().clone()));
-            tauri_app.manage(Arc::new(App::open(&index_dir, SCAN_THREADS, events)?));
+            let app = App::open(&index_dir, SCAN_THREADS, events)?;
+            tauri_app.manage(Arc::new(ThumbnailCache::new(app.index_dir.join("thumbnails"))));
+            tauri_app.manage(Arc::new(app));
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -37,14 +40,37 @@ fn main() {
 fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
-            commands::list_libraries,
-            commands::add_library,
-            commands::scan_library,
-            commands::browse_folder,
-            commands::folder_children,
-            commands::search_models,
-            commands::set_folder_role,
-            commands::get_model,
+            commands::library::list_libraries,
+            commands::library::add_library,
+            commands::library::update_library_settings,
+            commands::index::index_location,
+            commands::index::move_index_location,
+            commands::library::scan_library,
+            commands::browse::browse_folder,
+            commands::browse::folder_children,
+            commands::browse::search_models,
+            commands::rules::set_folder_role,
+            commands::browse::get_model,
+            commands::slicers::list_slicers,
+            commands::collections::list_collections,
+            commands::collections::create_collection,
+            commands::collections::rename_collection,
+            commands::collections::delete_collection,
+            commands::collections::add_to_collection,
+            commands::collections::remove_from_collection,
+            commands::collections::move_in_collection,
+            commands::collections::collection_models,
+            commands::organize::update_model_meta,
+            commands::organize::list_tags,
+            commands::organize::rebuild_from_sidecars,
+            commands::organize::import_orynt3d,
+            commands::rules::folder_rules,
+            commands::rules::remove_folder_rule,
+            commands::rules::propose_presets,
+            commands::rules::accept_preset,
+            commands::slicers::save_slicers,
+            commands::slicers::detect_slicers,
+            commands::slicers::open_in_slicer,
         ])
         .events(collect_events![events::ScanProgressEvent])
 }

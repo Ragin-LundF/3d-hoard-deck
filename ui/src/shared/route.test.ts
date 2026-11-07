@@ -7,6 +7,10 @@ describe("route", () => {
     expect(parseRoute(formatRoute(route))).toEqual(route);
   });
 
+  it("round-trips collections", () => {
+    expect(parseRoute(formatRoute({ view: "collection", id: 7 }))).toEqual({ view: "collection", id: 7 });
+  });
+
   it("falls back to the library home for unknown or broken hashes", () => {
     expect(parseRoute("")).toEqual({ view: "library", library: null, folder: "", all: false, q: "" });
     expect(parseRoute("#view=model&id=abc").view).toBe("library");

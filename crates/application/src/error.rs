@@ -26,6 +26,14 @@ pub enum AppError {
     LibraryNotFound(LibraryId),
     #[error("library {0:?} is being scanned or regrouped; try again when it is done")]
     LibraryBusy(LibraryId),
+    #[error("an index already exists in that folder")]
+    IndexExists { modified: i64 },
+    #[error("the index must not be stored on {0}: SQLite files get damaged there")]
+    UnsafeIndexLocation(String),
+    #[error("no slicer in your list opens these files")]
+    NoSlicer,
+    #[error("the slicer could not be started: {0}")]
+    LaunchFailed(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error(transparent)]

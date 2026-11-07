@@ -1,0 +1,12 @@
+[package]
+name = "hoarddeck-infra-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+
+[lints]
+workspace = true

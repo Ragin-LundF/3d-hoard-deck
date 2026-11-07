@@ -1,4 +1,4 @@
-use hoarddeck_domain::{FileFormat, LibraryId, ModelFile, ModelId, ModelKind, RelPath, YearMonth};
+use hoarddeck_domain::{FileFormat, LibraryId, ModelFile, ModelId, ModelKind, ModelMeta, RelPath, YearMonth};
 
 /// What a grid tile or list row needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,7 +8,10 @@ pub struct ModelSummary {
     pub path: RelPath,
     pub folder: RelPath,
     pub kind: ModelKind,
+    /// The user's display name if set, else the name derived from the folder or file.
     pub title: String,
+    pub favorite: bool,
+    pub printed: bool,
     pub released: Option<YearMonth>,
     pub cover: Option<RelPath>,
     pub collection: Option<RelPath>,
@@ -23,4 +26,7 @@ pub struct ModelSummary {
 pub struct ModelDetail {
     pub summary: ModelSummary,
     pub files: Vec<ModelFile>,
+    /// The name derived from the folder or file, shown next to a display name.
+    pub original_title: String,
+    pub meta: ModelMeta,
 }

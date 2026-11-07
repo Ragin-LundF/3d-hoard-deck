@@ -17,6 +17,8 @@ hoarddeck-domain.workspace = true
 hoarddeck-application.workspace = true
 hoarddeck-app.workspace = true
 hoarddeck-infra-fs.workspace = true
+hoarddeck-infra-mesh.workspace = true
+hoarddeck-infra-thumbs.workspace = true
 serde.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"

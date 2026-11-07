@@ -32,7 +32,7 @@ export function SearchBox({ value, onSearch }: { value: string; onSearch: (text:
         ref={input}
         type="search"
         value={text}
-        placeholder="Search models… try  dragon type:3mf  in:Miniatures"
+        placeholder="Search models… try  dragon type:3mf  tag:resin  is:favorite"
         aria-label="Search library"
         autoComplete="off"
         spellCheck={false}

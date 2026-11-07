@@ -12,7 +12,7 @@ use hoarddeck_application::scan::{
 };
 use hoarddeck_application::search::{SearchDocument, SearchHits, SearchQuery};
 use hoarddeck_application::{AppError, IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
-use hoarddeck_domain::{AccessMode, Catalog, Entry, Folder, Library, LibraryId, ModelId, RelPath};
+use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, RelPath};
 
 #[derive(Default)]
 struct Store {
@@ -28,10 +28,18 @@ impl LibraryRepository for Store {
         Ok(Vec::new())
     }
     fn get(&self, id: LibraryId) -> Result<Option<Library>, IndexError> {
-        Ok(Some(Library { id, name: "NAS".to_owned(), root: "/Volumes/gone".to_owned(), access: AccessMode::ReadOnly }))
+        Ok(Some(Library {
+            id,
+            name: "NAS".to_owned(),
+            root: "/Volumes/gone".to_owned(),
+            settings: LibrarySettings::default(),
+        }))
     }
     fn scan_rules(&self, _: LibraryId) -> Result<ScanRules, IndexError> {
         Ok(ScanRules::default())
+    }
+    fn save_settings(&self, _: LibraryId, _: LibrarySettings) -> Result<(), IndexError> {
+        Ok(())
     }
     fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
         Ok(())
@@ -49,6 +57,12 @@ impl EntryStore for Store {
         *self.finished.lock().expect("lock") = true;
         Ok(0)
     }
+    fn folders(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
+        Ok(Vec::new())
+    }
+    fn same_size_files(&self, _: u64) -> Result<Vec<Vec<(LibraryId, RelPath, u64)>>, IndexError> {
+        Ok(Vec::new())
+    }
     fn files(&self, _: LibraryId) -> Result<Vec<Entry>, IndexError> {
         Ok(Vec::new())
     }
@@ -62,6 +76,9 @@ impl ModelRepository for Store {
     fn search_documents(&self, _: LibraryId) -> Result<Vec<SearchDocument>, IndexError> {
         Ok(Vec::new())
     }
+    fn search_document(&self, _: ModelId) -> Result<Option<SearchDocument>, IndexError> {
+        Ok(None)
+    }
     fn summaries(&self, _: &[ModelId]) -> Result<Vec<ModelSummary>, IndexError> {
         Ok(Vec::new())
     }
@@ -70,6 +87,9 @@ impl ModelRepository for Store {
     }
     fn browse(&self, _: &BrowseRequest) -> Result<BrowsePage, IndexError> {
         Ok(BrowsePage { models: Vec::new(), next: None })
+    }
+    fn model_of_file(&self, _: LibraryId, _: &RelPath) -> Result<Option<ModelId>, IndexError> {
+        Ok(None)
     }
     fn child_folders(&self, _: LibraryId, _: &RelPath) -> Result<Vec<Folder>, IndexError> {
         Ok(Vec::new())
@@ -80,6 +100,9 @@ struct NoSearch;
 
 impl SearchIndex for NoSearch {
     fn replace_library(&self, _: LibraryId, _: &[SearchDocument]) -> Result<(), SearchError> {
+        Ok(())
+    }
+    fn update_documents(&self, _: &[SearchDocument]) -> Result<(), SearchError> {
         Ok(())
     }
     fn search(&self, _: &SearchQuery) -> Result<SearchHits, SearchError> {

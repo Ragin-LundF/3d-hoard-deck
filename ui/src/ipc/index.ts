@@ -14,10 +14,12 @@ export async function unwrap<T>(result: Promise<Result<T>>): Promise<T> {
 
 export class IpcFailure extends Error {
   readonly code: string;
+  readonly details: string | null;
 
   constructor(error: IpcError) {
     super(error.message);
     this.code = error.code;
+    this.details = error.details ?? null;
   }
 }
 
@@ -26,6 +28,9 @@ const MESSAGES: Record<string, string> = {
   library_busy: "This library is being scanned right now. Try again when the scan is done.",
   invalid_input: "That did not work: the input was not valid.",
   library_not_found: "This library no longer exists.",
+  no_slicer: "None of your slicers opens these files. Add one or adjust its file types in Settings › Slicers.",
+  launch_failed: "The slicer could not be started. Check its program path in Settings › Slicers.",
+  unsafe_location: "Network shares and cloud-sync folders (iCloud, Dropbox, OneDrive, Google Drive) damage the index database. Choose a folder on a local disk.",
 };
 
 /** A message for the user, chosen by error code, never by matching message text. */
@@ -37,4 +42,14 @@ export function describeError(error: unknown): string {
 /** URL of a library file, served read-only by the shell's `hoard://` protocol. */
 export function fileUrl(library: number, path: string): string {
   return convertFileSrc(`${library}/${path}`, "hoard");
+}
+
+/** URL of a small cached thumbnail of a library image, for grids and galleries. */
+export function thumbUrl(library: number, path: string): string {
+  return convertFileSrc(`thumb/${library}/${path}`, "hoard");
+}
+
+/** URL of a 3MF's build plates, read and flattened by the shell. */
+export function platesUrl(library: number, path: string): string {
+  return convertFileSrc(`plates/${library}/${path}`, "hoard");
 }

@@ -6,6 +6,7 @@ use serde::Serialize;
 use specta::Type;
 
 use super::id32;
+use super::meta::ModelMetaDto;
 
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +18,8 @@ pub struct ModelSummaryDto {
     /// `folder` or `file`.
     pub kind: String,
     pub title: String,
+    pub favorite: bool,
+    pub printed: bool,
     pub released: Option<String>,
     pub cover: Option<String>,
     /// Folder path of the collection the model belongs to.
@@ -38,6 +41,8 @@ impl From<ModelSummary> for ModelSummaryDto {
             folder: model.folder.into(),
             kind: model.kind.code().to_owned(),
             title: model.title,
+            favorite: model.favorite,
+            printed: model.printed,
             released: model.released.map(|r| r.to_string()),
             cover: model.cover.map(String::from),
             collection: model.collection.map(String::from),
@@ -76,10 +81,18 @@ impl From<ModelFile> for ModelFileDto {
 pub struct ModelDetailDto {
     pub summary: ModelSummaryDto,
     pub files: Vec<ModelFileDto>,
+    /// Name derived from the folder or file, shown next to a display name.
+    pub original_title: String,
+    pub meta: ModelMetaDto,
 }
 
 impl From<ModelDetail> for ModelDetailDto {
     fn from(detail: ModelDetail) -> Self {
-        Self { summary: detail.summary.into(), files: detail.files.into_iter().map(Into::into).collect() }
+        Self {
+            summary: detail.summary.into(),
+            files: detail.files.into_iter().map(Into::into).collect(),
+            original_title: detail.original_title,
+            meta: detail.meta.into(),
+        }
     }
 }

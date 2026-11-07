@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 2] = [
+const MIGRATIONS: [&str; 6] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -77,6 +77,45 @@ CREATE INDEX model_files_model ON model_files (model_id);
     r"
 -- 2: remember which models exist because the user marked their folder, so the UI can offer to undo it.
 ALTER TABLE models ADD COLUMN marked_by_user INTEGER NOT NULL DEFAULT 0;
+",
+    r"
+-- 3: where a library keeps tags, names and notes: index_only or index_and_sidecar.
+ALTER TABLE libraries ADD COLUMN metadata_storage TEXT NOT NULL DEFAULT 'index_only';
+",
+    r"
+-- 4: app-wide settings as JSON values, e.g. the slicer list.
+CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+",
+    r"
+-- 5: what the user sets on a model, keyed by path so it survives regrouping.
+CREATE TABLE model_meta (
+    library_id   INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path         TEXT NOT NULL,
+    display_name TEXT,
+    favorite     INTEGER NOT NULL DEFAULT 0,
+    printed      INTEGER NOT NULL DEFAULT 0,
+    notes        TEXT NOT NULL DEFAULT '',
+    tags         TEXT NOT NULL DEFAULT '[]',  -- JSON array of tag names
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
+",
+    r"
+-- 6: a cover the user picked, and collections (hand-made: ordered members; smart: a saved search).
+ALTER TABLE model_meta ADD COLUMN cover TEXT;
+ALTER TABLE model_meta ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE collections (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    query      TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE collection_items (
+    collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    library_id    INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path          TEXT NOT NULL,
+    position      INTEGER NOT NULL,
+    PRIMARY KEY (collection_id, library_id, path)
+) WITHOUT ROWID;
 ",
 ];
 

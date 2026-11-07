@@ -5,7 +5,7 @@ use hoarddeck_application::ports::ModelRepository;
 use hoarddeck_application::search::SearchDocument;
 use hoarddeck_application::{IndexError, ModelDetail, ModelSummary};
 use hoarddeck_domain::{Catalog, Folder, LibraryId, Model, ModelId, RelPath};
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::SqliteIndex;
 use crate::rows::{formats_to_text, to_i64};
@@ -36,6 +36,10 @@ impl ModelRepository for SqliteIndex {
         self.read(|connection| crate::queries::search_documents(connection, library))
     }
 
+    fn search_document(&self, id: ModelId) -> Result<Option<SearchDocument>, IndexError> {
+        self.read(|connection| crate::queries::search_document(connection, id))
+    }
+
     fn summaries(&self, ids: &[ModelId]) -> Result<Vec<ModelSummary>, IndexError> {
         self.read(|connection| crate::queries::summaries(connection, ids))
     }
@@ -46,6 +50,18 @@ impl ModelRepository for SqliteIndex {
 
     fn browse(&self, request: &BrowseRequest) -> Result<BrowsePage, IndexError> {
         self.read(|connection| crate::queries::browse(connection, request))
+    }
+
+    fn model_of_file(&self, library: LibraryId, file: &RelPath) -> Result<Option<ModelId>, IndexError> {
+        self.read(|connection| {
+            connection
+                .query_row(
+                    "SELECT m.id FROM model_files f JOIN models m ON m.id = f.model_id WHERE m.library_id = ?1 AND f.path = ?2",
+                    params![library.0, file.as_str()],
+                    |row| Ok(ModelId(row.get(0)?)),
+                )
+                .optional()
+        })
     }
 
     fn child_folders(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<Folder>, IndexError> {

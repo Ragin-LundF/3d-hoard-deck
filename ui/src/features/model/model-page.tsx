@@ -1,11 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
-import { commands, describeError, fileUrl, unwrap, type LibraryDto, type ModelFileDto_Serialize } from "../../ipc";
-import { fileName, formatBytes, formatClass, folderName } from "../../shared/format";
+import { commands, describeError, unwrap, type LibraryDto, type ModelFileDto_Serialize } from "../../ipc";
 import { Icon } from "../../shared/icons";
+import { viewerFormat, type MeshFormat } from "../viewer/formats";
+import { ModelDetails } from "./model-details";
+import { ModelFiles } from "./model-files";
+import { ModelHeader } from "./model-header";
+import { ModelStage, type StageView } from "./model-stage";
+import { useMetaSaver } from "../organize/use-save-meta";
 
-type Props = { id: number; libraries: LibraryDto[]; onBack: () => void; onOpenFolder: (library: number, folder: string) => void };
+type Props = {
+  id: number;
+  libraries: LibraryDto[];
+  onBack: () => void;
+  onOpenFolder: (library: number, folder: string) => void;
+  onMessage: (message: string) => void;
+};
 
 /** Absolute path on this machine, in the root's own separator style. */
 function absolutePath(root: string, path: string): string {
@@ -13,27 +24,19 @@ function absolutePath(root: string, path: string): string {
   return `${root.replace(/[\\/]+$/, "")}${separator}${path.split("/").join(separator)}`;
 }
 
-function groupByVariant(files: ModelFileDto_Serialize[]): [string, ModelFileDto_Serialize[]][] {
-  const groups = new Map<string, ModelFileDto_Serialize[]>();
+function firstViewable(files: ModelFileDto_Serialize[]): { path: string; format: MeshFormat } | null {
   for (const file of files) {
-    const key = file.variant ?? "";
-    groups.set(key, [...(groups.get(key) ?? []), file]);
+    const format = viewerFormat(file.kind);
+    if (format) return { path: file.path, format };
   }
-  return [...groups.entries()];
+  return null;
 }
 
-export function ModelPage({ id, libraries, onBack, onOpenFolder }: Props) {
+export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Props) {
   const { data, error, isPending } = useQuery({ queryKey: ["model", id], queryFn: () => unwrap(commands.getModel(id)) });
-  const [picked, setPicked] = useState<string | null>(null);
+  const saveMetaFor = useMetaSaver(onMessage);
+  const [picked, setPicked] = useState<StageView | null>(null);
   const [tab, setTab] = useState<"files" | "details">("files");
-  const queryClient = useQueryClient();
-  const detectAutomatically = useMutation({
-    mutationFn: (model: { library: number; path: string }) => unwrap(commands.setFolderRole(model.library, model.path, null)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries();
-      onBack();
-    },
-  });
   if (isPending) return <div className="empty">Loading…</div>;
   if (error) return <div className="empty err">{describeError(error)}</div>;
   if (!data) return <div className="empty">This model is no longer in the library.</div>;
@@ -41,8 +44,13 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder }: Props) {
   const { summary, files } = data;
   const library = libraries.find((candidate) => candidate.id === summary.library);
   const images = files.filter((file) => file.kind === "image");
-  const shown = picked ?? summary.cover ?? images[0]?.path ?? null;
+  const firstMesh = firstViewable(files);
+  // Folder images first; models without any image open straight in 3D.
+  const cover = summary.cover ?? images[0]?.path ?? null;
+  const view: StageView = picked ?? (cover || !firstMesh ? { kind: "image", path: cover } : { kind: "mesh", ...firstMesh });
   const reveal = (path: string) => library && void revealItemInDir(absolutePath(library.root, path));
+  const viewing = view.kind === "mesh" ? view.path : null;
+  const saveMeta = (change: Partial<typeof data.meta>) => saveMetaFor(data, change);
 
   return (
     <>
@@ -51,73 +59,37 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder }: Props) {
         <span className="crumbs">{summary.folder}</span>
       </div>
       <div className="dbody">
-        <div className="stagecol">
-          <div className="stage">
-            {shown ? <img src={fileUrl(summary.library, shown)} alt={summary.title} /> : <span className="crumbs">No preview image in this folder</span>}
-          </div>
-          {images.length > 1 && (
-            <div className="gallery" aria-label="Images">
-              {images.map((image) => (
-                <button key={image.path} className={image.path === shown ? "on" : ""} onClick={() => setPicked(image.path)} title={fileName(image.path)}>
-                  <img src={fileUrl(summary.library, image.path)} alt="" loading="lazy" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <ModelStage
+          library={summary.library}
+          title={summary.title}
+          view={view}
+          images={images}
+          firstMesh={firstMesh}
+          onView={setPicked}
+          cover={summary.cover}
+          onUseCover={(path) => saveMeta({ cover: path })}
+        />
         <div className="info">
-          <div className="info-top">
-            <h2>{summary.title}</h2>
-            <div className="mpath">{summary.path}</div>
-            <div className="actions">
-              <button className="btn" onClick={() => reveal(summary.path)} disabled={!library}>
-                <Icon name="folder" />Show in folder
-              </button>
-              {summary.markedByUser && (
-                <button
-                  className="btn"
-                  title="You marked this folder as one model. Split it again the way it is detected automatically."
-                  disabled={detectAutomatically.isPending}
-                  onClick={() => detectAutomatically.mutate({ library: summary.library, path: summary.path })}
-                >
-                  Detect automatically
-                </button>
-              )}
-              {summary.collection && (
-                <button className="btn" onClick={() => onOpenFolder(summary.library, summary.collection ?? "")}>
-                  <Icon name="box" />{folderName(summary.collection)}
-                </button>
-              )}
-            </div>
-            {detectAutomatically.isError && <span className="err">{describeError(detectAutomatically.error)}</span>}
-          </div>
+          <ModelHeader
+            model={data}
+            viewing={viewing}
+            canReveal={library !== undefined}
+            onReveal={() => reveal(summary.path)}
+            onBack={onBack}
+            onOpenFolder={onOpenFolder}
+            onMessage={onMessage}
+          />
           <div className="itabs" role="tablist">
             <button role="tab" aria-selected={tab === "files"} className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>Files ({files.length})</button>
-            <button role="tab" aria-selected={tab === "details"} className={tab === "details" ? "on" : ""} onClick={() => setTab("details")}>Details</button>
+            <button role="tab" aria-selected={tab === "details"} className={tab === "details" ? "on" : ""} onClick={() => setTab("details")}>
+              Tags &amp; notes{data.meta.tags.length > 0 ? ` (${data.meta.tags.length})` : ""}
+            </button>
           </div>
           <div className="ipane" role="tabpanel">
             {tab === "files" ? (
-              groupByVariant(files).map(([variant, group]) => (
-                <div className="fgroup" key={variant}>
-                  <h4>{variant || "Main folder"}</h4>
-                  {group.map((file) => (
-                    <div className="frow" key={file.path} onDoubleClick={() => reveal(file.path)} title={file.path}>
-                      <span className={formatClass(file.kind)}>{file.kind}</span>
-                      <span className="fn">{fileName(file.path)}</span>
-                      <span className="fs">{formatBytes(file.size)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))
+              <ModelFiles files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
             ) : (
-              <dl className="kv">
-                <dt>Formats</dt><dd>{summary.formats.join(", ").toUpperCase() || "–"}</dd>
-                <dt>Files</dt><dd>{summary.fileCount}</dd>
-                <dt>Size</dt><dd>{formatBytes(summary.totalSize)}</dd>
-                <dt>Released</dt><dd>{summary.released ?? "–"}</dd>
-                <dt>Collection</dt><dd>{summary.collection ?? "–"}</dd>
-                <dt>Library</dt><dd>{library?.name ?? "–"}</dd>
-              </dl>
+              <ModelDetails model={data} library={library} onMessage={onMessage} />
             )}
           </div>
         </div>

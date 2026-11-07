@@ -68,6 +68,25 @@ impl SearchIndex for TantivySearchIndex {
         result
     }
 
+    fn update_documents(&self, docs: &[SearchDocument]) -> Result<(), SearchError> {
+        let mut writer = self.writer.lock().map_err(|_| SearchError("writer lock poisoned".to_owned()))?;
+        let result = (|| {
+            for document in docs {
+                writer.delete_term(Term::from_field_u64(
+                    self.fields.model_id,
+                    u64::try_from(document.id.0).unwrap_or_default(),
+                ));
+            }
+            self.add_documents(&mut writer, docs)?;
+            writer.commit().map_err(search_error)?;
+            self.reader.reload().map_err(search_error)
+        })();
+        if result.is_err() {
+            writer.rollback().map_err(search_error)?;
+        }
+        result
+    }
+
     fn search(&self, query: &SearchQuery) -> Result<SearchHits, SearchError> {
         let mut analyzer = self.index.tokenizers().get(ANALYZER).unwrap_or_else(analyzer);
         let tantivy_query = query::build(query, self.fields, &mut analyzer);
@@ -87,27 +106,42 @@ impl SearchIndex for TantivySearchIndex {
 }
 
 impl TantivySearchIndex {
+    fn add_documents(&self, writer: &mut IndexWriter, docs: &[SearchDocument]) -> Result<(), SearchError> {
+        let fields = self.fields;
+        for document in docs {
+            let mut tantivy_doc = doc!(
+                fields.model_id => u64::try_from(document.id.0).unwrap_or_default(),
+                fields.library => library_term_value(document.library),
+                fields.title => nfc(&document.title),
+                fields.path => nfc(document.path.as_str()),
+                fields.folder => folder_facet(document.library, &document.folder),
+                fields.notes => nfc(&document.notes),
+            );
+            for format in &document.formats {
+                tantivy_doc.add_text(fields.format, format.code());
+            }
+            for tag in &document.tags {
+                tantivy_doc.add_text(fields.tags, nfc(tag));
+                tantivy_doc.add_text(fields.tag, nfc(&tag.to_lowercase()));
+            }
+            for (on, flag) in [(document.favorite, "favorite"), (document.printed, "printed")] {
+                if on {
+                    tantivy_doc.add_text(fields.flag, flag);
+                }
+            }
+            writer.add_document(tantivy_doc).map_err(search_error)?;
+        }
+        Ok(())
+    }
+
     fn write_library(
         &self,
         writer: &mut IndexWriter,
         library: LibraryId,
         docs: &[SearchDocument],
     ) -> Result<(), SearchError> {
-        let fields = self.fields;
-        writer.delete_term(Term::from_field_u64(fields.library, library_term_value(library)));
-        for document in docs {
-            let mut tantivy_doc = doc!(
-                fields.model_id => u64::try_from(document.id.0).unwrap_or_default(),
-                fields.library => library_term_value(library),
-                fields.title => nfc(&document.title),
-                fields.path => nfc(document.path.as_str()),
-                fields.folder => folder_facet(library, &document.folder),
-            );
-            for format in &document.formats {
-                tantivy_doc.add_text(fields.format, format.code());
-            }
-            writer.add_document(tantivy_doc).map_err(search_error)?;
-        }
+        writer.delete_term(Term::from_field_u64(self.fields.library, library_term_value(library)));
+        self.add_documents(writer, docs)?;
         writer.commit().map_err(search_error)?;
         self.reader.reload().map_err(search_error)
     }

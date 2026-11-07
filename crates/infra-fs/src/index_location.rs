@@ -1,14 +1,33 @@
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use hoarddeck_application::IndexError;
+use hoarddeck_application::ports::IndexLocationStore;
+use serde::{Deserialize, Serialize};
 
 const APP_DIR: &str = ".3dhoarddeck";
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Bootstrap {
     index_dir: PathBuf,
+}
+
+/// Writes `~/.3dhoarddeck/config.json` so the next start opens the index in `dir`.
+pub struct BootstrapFile;
+
+impl IndexLocationStore for BootstrapFile {
+    fn save(&self, dir: &Path) -> Result<(), IndexError> {
+        let to_error = |error: io::Error| IndexError(format!("index location: {error}"));
+        let home = app_home().map_err(to_error)?;
+        fs::create_dir_all(&home).map_err(to_error)?;
+        let json = serde_json::to_vec_pretty(&Bootstrap { index_dir: dir.to_path_buf() })
+            .map_err(|e| IndexError(e.to_string()))?;
+        // Write next to the target and rename, so a crash never leaves a half-written file behind.
+        let temporary = home.join("config.json.tmp");
+        fs::write(&temporary, json).map_err(to_error)?;
+        fs::rename(&temporary, home.join("config.json")).map_err(to_error)
+    }
 }
 
 /// `~/.3dhoarddeck` (`%USERPROFILE%\.3dhoarddeck` on Windows). Holds `config.json` and, by default, the index.

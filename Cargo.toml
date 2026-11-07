@@ -14,6 +14,9 @@ hoarddeck-infra-fs = { path = "crates/infra-fs" }
 hoarddeck-infra-sqlite = { path = "crates/infra-sqlite" }
 hoarddeck-infra-tantivy = { path = "crates/infra-tantivy" }
 hoarddeck-app = { path = "crates/app" }
+hoarddeck-infra-mesh = { path = "crates/infra-mesh" }
+hoarddeck-infra-thumbs = { path = "crates/infra-thumbs" }
+hoarddeck-infra-platform = { path = "crates/infra-platform" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

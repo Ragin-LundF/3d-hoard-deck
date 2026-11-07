@@ -1,26 +1,26 @@
 use hoarddeck_application::IndexError;
 use hoarddeck_application::ports::LibraryRepository;
 use hoarddeck_application::scan::ScanRules;
-use hoarddeck_domain::{AccessMode, Library, LibraryId};
+use hoarddeck_domain::{AccessMode, Library, LibraryId, LibrarySettings, MetadataStorage};
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::SqliteIndex;
 use crate::rows::converted;
 
-const COLUMNS: &str = "id, name, root, access_mode";
+const COLUMNS: &str = "id, name, root, access_mode, metadata_storage";
 
 impl LibraryRepository for SqliteIndex {
     fn add(&self, name: &str, root: &str, rules: &ScanRules) -> Result<Library, IndexError> {
         let rules = serde_json::to_string(rules).map_err(|error| IndexError(error.to_string()))?;
-        let access = AccessMode::default();
+        let settings = LibrarySettings::default();
         let id = self.write(|connection| {
             connection.execute(
-                "INSERT INTO libraries (name, root, access_mode, scan_rules) VALUES (?1, ?2, ?3, ?4)",
-                params![name, root, access.code(), rules],
+                "INSERT INTO libraries (name, root, access_mode, metadata_storage, scan_rules) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![name, root, settings.access().code(), settings.metadata().code(), rules],
             )?;
             Ok(connection.last_insert_rowid())
         })?;
-        Ok(Library { id: LibraryId(id), name: name.to_owned(), root: root.to_owned(), access })
+        Ok(Library { id: LibraryId(id), name: name.to_owned(), root: root.to_owned(), settings })
     }
 
     fn list(&self) -> Result<Vec<Library>, IndexError> {
@@ -43,6 +43,17 @@ impl LibraryRepository for SqliteIndex {
         serde_json::from_str(&json).map_err(|error| IndexError(format!("scan rules of library {}: {error}", id.0)))
     }
 
+    fn save_settings(&self, id: LibraryId, settings: LibrarySettings) -> Result<(), IndexError> {
+        self.write(|connection| {
+            connection
+                .execute(
+                    "UPDATE libraries SET access_mode = ?2, metadata_storage = ?3 WHERE id = ?1",
+                    params![id.0, settings.access().code(), settings.metadata().code()],
+                )
+                .map(|_| ())
+        })
+    }
+
     fn save_scan_rules(&self, id: LibraryId, rules: &ScanRules) -> Result<(), IndexError> {
         let json = serde_json::to_string(rules).map_err(|error| IndexError(error.to_string()))?;
         self.write(|connection| {
@@ -52,10 +63,12 @@ impl LibraryRepository for SqliteIndex {
 }
 
 fn library(row: &Row<'_>) -> rusqlite::Result<Library> {
+    let access = converted(3, AccessMode::from_code(&row.get::<_, String>(3)?))?;
+    let metadata = converted(4, MetadataStorage::from_code(&row.get::<_, String>(4)?))?;
     Ok(Library {
         id: LibraryId(row.get(0)?),
         name: row.get(1)?,
         root: row.get(2)?,
-        access: converted(3, AccessMode::from_code(&row.get::<_, String>(3)?))?,
+        settings: converted(3, LibrarySettings::new(access, metadata))?,
     })
 }

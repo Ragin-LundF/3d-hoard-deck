@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hoarddeck_application::IndexError;
 use hoarddeck_application::ports::EntryStore;
 use hoarddeck_application::scan::{Generation, KnownDir, KnownDirs, ScanItem};
-use hoarddeck_domain::{Entry, EntryKind, FileKind, LibraryId};
+use hoarddeck_domain::{Entry, EntryKind, FileKind, LibraryId, RelPath};
 use rusqlite::params;
 
 use crate::SqliteIndex;
@@ -49,6 +49,41 @@ impl EntryStore for SqliteIndex {
             transaction.execute("UPDATE libraries SET last_scan_at = ?2 WHERE id = ?1", params![library.0, now])?;
             transaction.commit()?;
             Ok(removed as u64)
+        })
+    }
+
+    fn folders(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError> {
+        self.read(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT path FROM entries WHERE library_id = ?1 AND is_dir = 1 AND path <> '' ORDER BY path",
+            )?;
+            statement.query_map([library.0], |row| rel_path(row, 0))?.collect()
+        })
+    }
+
+    fn same_size_files(&self, min_size: u64) -> Result<Vec<Vec<(LibraryId, RelPath, u64)>>, IndexError> {
+        self.read(|connection| {
+            // Model files only: meshes, slicer projects and archives.
+            let mut statement = connection.prepare(
+                "SELECT library_id, path, size FROM entries
+                 WHERE is_dir = 0 AND size >= ?1 AND kind NOT IN ('image', 'doc', 'other') AND size IN (
+                     SELECT size FROM entries
+                     WHERE is_dir = 0 AND size >= ?1 AND kind NOT IN ('image', 'doc', 'other')
+                     GROUP BY size HAVING COUNT(*) > 1)
+                 ORDER BY size DESC, library_id, path",
+            )?;
+            let rows = statement.query_map([to_i64(min_size)], |row| {
+                Ok((LibraryId(row.get(0)?), rel_path(row, 1)?, to_u64(row.get(2)?)))
+            })?;
+            let mut groups: Vec<Vec<(LibraryId, RelPath, u64)>> = Vec::new();
+            for row in rows {
+                let row = row?;
+                match groups.last_mut() {
+                    Some(group) if group[0].2 == row.2 => group.push(row),
+                    _ => groups.push(vec![row]),
+                }
+            }
+            Ok(groups)
         })
     }
 

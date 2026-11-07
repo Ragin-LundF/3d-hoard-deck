@@ -14,6 +14,7 @@ hoarddeck-domain.workspace = true
 hoarddeck-application.workspace = true
 hoarddeck-app.workspace = true
 hoarddeck-infra-fs.workspace = true
+hoarddeck-infra-mesh.workspace = true
 
 [lints]
 workspace = true

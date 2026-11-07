@@ -1,12 +1,12 @@
 import { useState, type MouseEvent } from "react";
-import { fileUrl, type FolderDto_Serialize, type ModelSummaryDto_Serialize } from "../../ipc";
+import { thumbUrl, type FolderDto_Serialize, type ModelSummaryDto_Serialize } from "../../ipc";
 import { formatClass } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 
 function Cover({ library, path, fallback }: { library: number; path: string | null; fallback: string }) {
   const [broken, setBroken] = useState(false);
   if (!path || broken) return <span className="ph">{fallback}</span>;
-  return <img src={fileUrl(library, path)} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />;
+  return <img src={thumbUrl(library, path)} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />;
 }
 
 export function ModelCard({ model, onOpen }: { model: ModelSummaryDto_Serialize; onOpen: () => void }) {
@@ -15,6 +15,12 @@ export function ModelCard({ model, onOpen }: { model: ModelSummaryDto_Serialize;
       <div className="cover">
         <Cover library={model.library} path={model.cover} fallback={(model.formats[0] ?? "file").toUpperCase()} />
         {model.fileCount > 1 && <span className="count">{model.fileCount} files</span>}
+        {(model.favorite || model.printed) && (
+          <span className="marks">
+            {model.favorite && <span className="fav" title="Favorite"><Icon name="starFilled" /></span>}
+            {model.printed && <span className="done" title="Printed"><Icon name="check" /></span>}
+          </span>
+        )}
       </div>
       <div className="cname">{model.title}</div>
       <div className="cmeta">

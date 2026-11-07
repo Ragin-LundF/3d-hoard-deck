@@ -5,10 +5,15 @@ use hoarddeck_domain::{FileFormat, RelPath};
 pub struct ParsedQuery {
     pub words: Vec<String>,
     pub formats: Vec<FileFormat>,
+    /// Lower-case tag names from `tag:` filters.
+    pub tags: Vec<String>,
+    pub favorite: bool,
+    pub printed: bool,
     pub scope: Option<RelPath>,
 }
 
-/// Parses `dragon type:3mf in:"Miniatures/Wild Life"`. Unknown filters and invalid values are searched as words.
+/// Parses `dragon type:3mf tag:resin is:favorite in:"Miniatures/Wild Life"`. Unknown filters and invalid values
+/// are searched as words.
 #[must_use]
 pub fn parse_query(input: &str) -> ParsedQuery {
     let mut parsed = ParsedQuery::default();
@@ -19,6 +24,9 @@ pub fn parse_query(input: &str) -> ParsedQuery {
                 Ok(format) => parsed.formats.push(format),
                 Err(_) => parsed.words.push(token),
             },
+            Some(("tag", value)) => parsed.tags.push(value.to_lowercase()),
+            Some(("is", "favorite" | "favourite" | "fav")) => parsed.favorite = true,
+            Some(("is", "printed")) => parsed.printed = true,
             Some(("in", value)) => match RelPath::new(value.trim_matches('/')) {
                 Ok(scope) => parsed.scope = Some(scope),
                 Err(_) => parsed.words.push(token),
@@ -64,9 +72,17 @@ mod tests {
     }
 
     #[test]
+    fn tags_and_marks_are_filters() {
+        let parsed = parse_query(r#"tag:"Sci Fi" tag:Resin is:favorite is:printed knight"#);
+        assert_eq!(parsed.tags, vec!["sci fi", "resin"]);
+        assert!(parsed.favorite && parsed.printed);
+        assert_eq!(parsed.words, vec!["knight"]);
+    }
+
+    #[test]
     fn unknown_filters_are_plain_words() {
-        let parsed = parse_query("type:banana tag:mini in:../etc 10:30");
-        assert_eq!(parsed.words, vec!["type:banana", "tag:mini", "in:../etc", "10:30"]);
+        let parsed = parse_query("type:banana is:sleepy in:../etc 10:30");
+        assert_eq!(parsed.words, vec!["type:banana", "is:sleepy", "in:../etc", "10:30"]);
         assert!(parsed.formats.is_empty() && parsed.scope.is_none());
     }
 }

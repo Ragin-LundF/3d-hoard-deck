@@ -10,9 +10,11 @@ hoarddeck-application.workspace = true
 hoarddeck-infra-fs.workspace = true
 hoarddeck-infra-sqlite.workspace = true
 hoarddeck-infra-tantivy.workspace = true
+hoarddeck-infra-platform.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

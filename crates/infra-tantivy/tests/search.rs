@@ -1,6 +1,6 @@
 use hoarddeck_application::ports::SearchIndex;
 use hoarddeck_application::search::{SearchDocument, SearchQuery};
-use hoarddeck_domain::{FileFormat, LibraryId, ModelId, RelPath};
+use hoarddeck_domain::{FileFormat, LibraryId, ModelId, ModelKind, RelPath};
 use hoarddeck_infra_tantivy::TantivySearchIndex;
 
 const LIBRARY: LibraryId = LibraryId(1);
@@ -14,6 +14,11 @@ fn document(id: i64, title: &str, path: &str, formats: Vec<FileFormat>) -> Searc
         folder: path.parent().expect("not root"),
         path,
         formats,
+        kind: ModelKind::Folder,
+        tags: Vec::new(),
+        notes: String::new(),
+        favorite: false,
+        printed: false,
     }
 }
 
@@ -21,6 +26,9 @@ fn query(words: &[&str]) -> SearchQuery {
     SearchQuery {
         words: words.iter().map(|w| (*w).to_owned()).collect(),
         formats: Vec::new(),
+        tags: Vec::new(),
+        favorite: false,
+        printed: false,
         library: Some(LIBRARY),
         scope: None,
         offset: 0,
@@ -90,4 +98,21 @@ fn reopening_keeps_the_index_and_replacing_a_library_drops_old_documents() {
     assert_eq!(index.search(&query(&[])).expect("all").total, 5);
     index.replace_library(LIBRARY, &[document(9, "Benchy", "Calibration/Benchy", vec![])]).expect("replace");
     assert_eq!(ids(&index, &query(&[])), vec![9]);
+}
+
+#[test]
+fn tags_notes_and_marks_are_searchable_and_filterable_after_an_update() {
+    let (_dir, index) = index();
+    let mut wolverine = document(1, "Wolverine", "Marvel/Heroes/Wolverine", vec![FileFormat::Stl]);
+    wolverine.tags = vec!["Sci Fi".to_owned(), "Resin".to_owned()];
+    wolverine.notes = "print with tree supports".to_owned();
+    wolverine.favorite = true;
+    index.update_documents(&[wolverine]).expect("update");
+
+    assert_eq!(ids(&index, &query(&["resin"])), vec![1], "tags are words too");
+    assert_eq!(ids(&index, &query(&["supports"])), vec![1], "notes are searched");
+    assert_eq!(ids(&index, &SearchQuery { tags: vec!["sci fi".to_owned()], ..query(&[]) }), vec![1]);
+    assert_eq!(ids(&index, &SearchQuery { favorite: true, ..query(&[]) }), vec![1]);
+    assert_eq!(ids(&index, &SearchQuery { printed: true, ..query(&[]) }), Vec::<i64>::new());
+    assert_eq!(index.search(&query(&[])).expect("all").total, 5, "the update replaced, not duplicated");
 }

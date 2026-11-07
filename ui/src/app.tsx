@@ -1,7 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { commands, describeError, unwrap, type IpcFailure, type LibraryDto } from "./ipc";
 import { FolderMenu, useFolderMenu } from "./features/folders/folder-menu";
 import { FolderTree } from "./features/folders/folder-tree";
+import { LibraryNav } from "./features/organize/library-nav";
+import { CollectionsNav } from "./features/collections/collections-nav";
+import { CollectionView } from "./features/collections/collection-view";
 import { LibraryView } from "./features/library/library-view";
 import { useLibraries } from "./features/library/queries";
 import { isScanning, useScanStatus, type ScanStatus } from "./features/library/use-scan-status";
@@ -61,12 +65,12 @@ export function App() {
           {list.map((item) => (
             <div className="sec" key={item.id}>
               <h3>{item.name}</h3>
-              <button className={`nav${libraryRoute && item.id === library?.id && !libraryRoute.folder && !libraryRoute.all ? " on" : ""}`} onClick={() => navigate({ ...HOME, library: item.id })}>
-                <Icon name="folder" />Browse folders
-              </button>
-              <button className={`nav${libraryRoute && item.id === library?.id && !libraryRoute.folder && libraryRoute.all ? " on" : ""}`} onClick={() => navigate({ ...HOME, library: item.id, all: true })}>
-                <Icon name="grid" />All models
-              </button>
+              <LibraryNav
+                library={item.id}
+                route={libraryRoute && item.id === library?.id ? libraryRoute : null}
+                onNavigate={(patch) => navigate({ ...HOME, library: item.id, ...patch })}
+              />
+              <h4 className="subhead">Folders</h4>
               <FolderTree
                 library={item.id}
                 current={libraryRoute && item.id === library?.id ? libraryRoute.folder : null}
@@ -75,8 +79,9 @@ export function App() {
               />
             </div>
           ))}
+          <CollectionsNav current={route.view === "collection" ? route.id : null} onOpen={(id) => navigate({ view: "collection", id })} onError={setToast} />
         </div>
-        {library && <SourceCard library={library} scan={scans[library.id]} />}
+        {library && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate({ view: "settings" })} />}
       </aside>
 
       <main className="main">
@@ -84,8 +89,10 @@ export function App() {
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
           <SettingsView libraries={list} scans={scans} onError={setToast} />
+        ) : route.view === "collection" ? (
+          <CollectionView id={route.id} onOpenModel={(id) => navigate({ view: "model", id })} onDeleted={() => navigate(HOME)} onError={setToast} />
         ) : route.view === "model" ? (
-          <ModelPage id={route.id} libraries={list} onBack={() => history.back()} onOpenFolder={(id, folder) => navigate({ ...HOME, library: id, folder, all: true })} />
+          <ModelPage id={route.id} libraries={list} onBack={() => history.back()} onOpenFolder={(id, folder) => navigate({ ...HOME, library: id, folder, all: true })} onMessage={setToast} />
         ) : library && libraryRoute ? (
           <LibraryView
             key={library.id}
@@ -94,11 +101,12 @@ export function App() {
             navigate={navigate}
             onFolderMenu={(folder) => menu.open(library.id, folder.path, folder.isCollection)}
             onShownChange={setShown}
+            onError={setToast}
           />
         ) : (
           <div className="empty">
             <h2>Add your first library</h2>
-            <span>Pick the folder with your STL and 3MF files. It stays untouched: 3D Hoard Deck only reads it.</span>
+            <span>Pick the folder with your STL and 3MF files. The files stay where they are.</span>
             <button className="btn primary" onClick={() => addLibrary.mutate()} disabled={addLibrary.isPending}>
               <Icon name="plus" />Add library folder
             </button>
@@ -109,8 +117,6 @@ export function App() {
       <footer className="status">
         {route.view === "library" && <span><b>{shown.toLocaleString()}</b> shown</span>}
         <span>{list.length === 1 ? "1 library" : `${list.length} libraries`}</span>
-        <span className="spacer" />
-        <span>Libraries are read-only</span>
       </footer>
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
@@ -119,15 +125,16 @@ export function App() {
   );
 }
 
-function SourceCard({ library, scan }: { library: LibraryDto; scan: ScanStatus | undefined }) {
+function SourceCard({ library, scan, onSettings }: { library: LibraryDto; scan: ScanStatus | undefined; onSettings: () => void }) {
   const scanning = isScanning(scan);
+  const proposals = useQuery({ queryKey: ["presets", library.id], queryFn: () => unwrap(commands.proposePresets(library.id)) });
+  const suggestions = proposals.data?.length ?? 0;
   const label = scan?.phase === "failed" ? "Scan failed" : scanning ? (scan?.phase === "grouping" ? "Grouping models…" : "Scanning…") : "Up to date";
   return (
     <div className="source">
       <div className="row">
         <Icon name="drive" />
         <b style={{ fontWeight: 500 }}>{library.name}</b>
-        {library.readOnly && <span className="pill lock" style={{ marginLeft: "auto" }}>Read-only</span>}
       </div>
       <div className="path">{library.root}</div>
       {scanning && <div className="bar"><i /></div>}
@@ -135,6 +142,11 @@ function SourceCard({ library, scan }: { library: LibraryDto; scan: ScanStatus |
         <span className={scan?.phase === "failed" ? "err" : undefined}>{label}</span>
         {scanning && scan && <span className="mono">{scan.files.toLocaleString()} files</span>}
       </div>
+      {suggestions > 0 && !scanning && (
+        <button className="linkish" onClick={onSettings}>
+          {suggestions === 1 ? "1 collection suggestion" : `${suggestions} collection suggestions`} ›
+        </button>
+      )}
     </div>
   );
 }

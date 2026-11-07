@@ -1,0 +1,15 @@
+[package]
+name = "hoarddeck-infra-thumbs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

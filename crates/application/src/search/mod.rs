@@ -4,7 +4,7 @@ mod query;
 mod rebuild_search_index;
 mod search_models;
 
-use hoarddeck_domain::{FileFormat, LibraryId, ModelId, RelPath};
+use hoarddeck_domain::{FileFormat, LibraryId, ModelId, ModelKind, RelPath};
 
 pub use query::{ParsedQuery, parse_query};
 pub use rebuild_search_index::RebuildSearchIndex;
@@ -15,16 +15,26 @@ pub use search_models::{SearchModels, SearchRequest, SearchResult};
 pub struct SearchDocument {
     pub id: ModelId,
     pub library: LibraryId,
+    pub kind: ModelKind,
+    /// Display name and original name, so both find the model.
     pub title: String,
     pub path: RelPath,
     pub folder: RelPath,
     pub formats: Vec<FileFormat>,
+    pub tags: Vec<String>,
+    pub notes: String,
+    pub favorite: bool,
+    pub printed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchQuery {
     pub words: Vec<String>,
     pub formats: Vec<FileFormat>,
+    /// Lower-case tags; every one must be present.
+    pub tags: Vec<String>,
+    pub favorite: bool,
+    pub printed: bool,
     /// Restricts results to one library, optionally to a folder inside it (recursive).
     pub library: Option<LibraryId>,
     pub scope: Option<RelPath>,

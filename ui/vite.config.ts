@@ -6,5 +6,6 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: { port: 5173, strictPort: true },
-  build: { target: "es2022", outDir: "dist" },
+  // The 3D viewer chunk (three.js) is ~600 kB but only loads when a model opens in 3D.
+  build: { target: "es2022", outDir: "dist", chunkSizeWarningLimit: 700 },
 });

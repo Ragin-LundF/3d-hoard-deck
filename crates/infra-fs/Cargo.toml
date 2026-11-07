@@ -8,6 +8,7 @@ rust-version.workspace = true
 hoarddeck-domain.workspace = true
 hoarddeck-application.workspace = true
 rayon.workspace = true
+blake3 = "1.8"
 serde.workspace = true
 serde_json.workspace = true
 

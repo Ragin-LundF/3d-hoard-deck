@@ -19,7 +19,8 @@ const USAGE: &str = "usage: hoarddeck [--index DIR] [--threads N] <command>
   scan <library> [--full]            walk, group and index a library; --full relists unchanged folders
   search <library|all> <query...>    e.g. search 1 wolverin type:stl in:Miniatures
   browse <library> [folder] [--all]  a folder page; --all = everything inside
-  model <id>                         one model with its files";
+  model <id>                         one model with its files
+  plates <file.3mf> [--binary]       build plates of a 3MF (read-only); --binary writes the viewer format";
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1).collect()) {
@@ -39,6 +40,10 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
     let threads = take_option(&mut args, "--threads")?
         .map_or(Ok(6), |n| n.parse().map_err(|_| format!("--threads: not a number: {n}")))?;
     let recursive = take_flag(&mut args, "--all");
+    let binary = take_flag(&mut args, "--binary");
+    if args.first().map(String::as_str) == Some("plates") {
+        return print_plates(args.get(1).ok_or(USAGE)?, binary);
+    }
     let mode = if take_flag(&mut args, "--full") { ScanMode::Full } else { ScanMode::Incremental };
     let app = App::open(&index_dir, threads, Arc::new(StderrProgress::default())).map_err(|e| e.to_string())?;
     let started = Instant::now();
@@ -46,7 +51,13 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
     match (arg(0), arg(1)) {
         (Some("libraries"), _) => {
             for library in app.libraries.list().map_err(|e| e.to_string())? {
-                println!("{:>3}  {:<24} {}  [{:?}]", library.id.0, library.name, library.root, library.access);
+                println!(
+                    "{:>3}  {:<24} {}  [{:?}]",
+                    library.id.0,
+                    library.name,
+                    library.root,
+                    library.settings.access()
+                );
             }
         }
         (Some("add"), Some(name)) => {
@@ -100,6 +111,19 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
         _ => return Err(USAGE.to_owned()),
     }
     eprintln!("took {:.1} ms", started.elapsed().as_secs_f64() * 1000.0);
+    Ok(())
+}
+
+/// Needs no index: reads the 3MF directly.
+fn print_plates(file: &str, binary: bool) -> Result<(), String> {
+    let plates = hoarddeck_infra_mesh::read_plates(std::path::Path::new(file)).map_err(|e| e.to_string())?;
+    if binary {
+        return std::io::Write::write_all(&mut std::io::stdout(), &hoarddeck_infra_mesh::encode_plates(&plates))
+            .map_err(|e| e.to_string());
+    }
+    for plate in &plates {
+        println!("plate {}: {} triangles", plate.number, plate.positions.len() / 9);
+    }
     Ok(())
 }
 

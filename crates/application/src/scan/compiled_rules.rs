@@ -29,7 +29,7 @@ impl CompiledRules {
 
     #[must_use]
     pub fn is_ignored(&self, path: &RelPath) -> bool {
-        self.ignore.is_match(path.as_str())
+        is_own_file(path.name()) || self.ignore.is_match(path.as_str())
     }
 
     /// True when a folder is ignored as a whole, e.g. `@eaDir` for the pattern `**/@eaDir/**`.
@@ -56,6 +56,13 @@ impl CompiledRules {
         let name = normalize(folder_name);
         self.variants.contains(&name) || is_scale(&name)
     }
+}
+
+/// The app's metadata files and their temporary copies are never library content, whatever the rules say.
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // compared lower-cased; `.3dhoarddeck` has no extension
+fn is_own_file(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".3dhoarddeck") || (lower.contains(".3dhoarddeck.") && lower.ends_with(".tmp"))
 }
 
 fn glob_set<'a>(patterns: impl Iterator<Item = &'a String>) -> Result<GlobSet, AppError> {
@@ -100,6 +107,10 @@ mod tests {
         assert!(rules.is_ignored(&path("Minis/.DS_Store")));
         assert!(!rules.is_ignored(&path("Minis/Dragon/dragon.stl")));
         assert!(rules.is_ignored_dir(&path("Minis/@eaDir")));
+        let none = CompiledRules::compile(&ScanRules { ignore: Vec::new(), ..ScanRules::default() }).expect("valid");
+        assert!(none.is_ignored(&path("Minis/Dragon/.3dhoarddeck")), "own files even without any rule");
+        assert!(none.is_ignored(&path("Makerworld/a.3mf.3dhoarddeck")));
+        assert!(none.is_ignored(&path("Minis/Dragon/.3dhoarddeck.12.3.tmp")));
         assert!(rules.is_ignored_dir(&path("_orynt3d")));
         assert!(!rules.is_ignored_dir(&path("Minis/Dragon")));
     }

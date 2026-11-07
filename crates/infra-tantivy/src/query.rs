@@ -18,6 +18,14 @@ pub(crate) fn build(query: &SearchQuery, fields: Fields, analyzer: &mut TextAnal
             clauses.push((Occur::Must, term(Term::from_facet(fields.folder, &folder_facet(library, scope)))));
         }
     }
+    for tag in &query.tags {
+        clauses.push((Occur::Must, term(Term::from_field_text(fields.tag, &nfc(tag)))));
+    }
+    for (wanted, flag) in [(query.favorite, "favorite"), (query.printed, "printed")] {
+        if wanted {
+            clauses.push((Occur::Must, term(Term::from_field_text(fields.flag, flag))));
+        }
+    }
     if !query.formats.is_empty() {
         let any_format = query
             .formats
@@ -39,11 +47,15 @@ fn word_query(fields: Fields, word: &str) -> Box<dyn Query> {
         _ => 2,
     };
     let title = Term::from_field_text(fields.title, word);
-    let path = Term::from_field_text(fields.path, word);
+    let fuzzy = |field| -> Box<dyn Query> {
+        Box::new(FuzzyTermQuery::new_prefix(Term::from_field_text(field, word), distance, true))
+    };
     Box::new(BooleanQuery::new(vec![
         (Occur::Should, Box::new(BoostQuery::new(term(title.clone()), 4.0))),
         (Occur::Should, Box::new(BoostQuery::new(Box::new(FuzzyTermQuery::new_prefix(title, distance, true)), 2.0))),
-        (Occur::Should, Box::new(FuzzyTermQuery::new_prefix(path, distance, true))),
+        (Occur::Should, Box::new(BoostQuery::new(fuzzy(fields.tags), 1.5))),
+        (Occur::Should, fuzzy(fields.path)),
+        (Occur::Should, Box::new(BoostQuery::new(fuzzy(fields.notes), 0.5))),
     ]))
 }
 
