@@ -1,0 +1,30 @@
+[package]
+name = "hoarddeck-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.90"
+description = "3D Hoard Deck desktop shell"
+
+[[bin]]
+name = "3d-hoard-deck"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+hoarddeck-app.workspace = true
+hoarddeck-infra-fs.workspace = true
+serde.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+percent-encoding = "2"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.26", features = ["derive"] }
+specta-typescript = "=0.0.13"
+
+[lints]
+workspace = true

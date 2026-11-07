@@ -1,0 +1,18 @@
+[package]
+name = "hoarddeck-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+hoarddeck-infra-fs.workspace = true
+hoarddeck-infra-sqlite.workspace = true
+hoarddeck-infra-tantivy.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

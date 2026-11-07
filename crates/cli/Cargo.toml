@@ -1,0 +1,19 @@
+[package]
+name = "hoarddeck-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Read-only spike tool: index a library and measure scan, browse and search speed."
+
+[[bin]]
+name = "hoarddeck"
+path = "src/main.rs"
+
+[dependencies]
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+hoarddeck-app.workspace = true
+hoarddeck-infra-fs.workspace = true
+
+[lints]
+workspace = true

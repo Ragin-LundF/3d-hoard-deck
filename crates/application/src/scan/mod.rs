@@ -1,0 +1,19 @@
+//! Scanning: walk a library, store raw entries, group them into folders and models.
+
+mod compiled_rules;
+mod detect;
+mod items;
+mod library_locks;
+mod regroup;
+mod scan_library;
+mod scan_rules;
+mod set_folder_role;
+
+pub use compiled_rules::CompiledRules;
+pub use detect::detect;
+pub use items::{Generation, KnownDir, KnownDirs, ScanItem, ScanPhase, ScanProgress};
+pub use library_locks::{LibraryLock, LibraryLocks};
+use regroup::regroup;
+pub use scan_library::{ScanLibrary, ScanMode, ScanReport};
+pub use scan_rules::{FolderRole, FolderRule, ScanRules};
+pub use set_folder_role::SetFolderRole;

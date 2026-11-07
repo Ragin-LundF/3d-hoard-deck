@@ -1,0 +1,39 @@
+use hoarddeck_domain::{DomainError, LibraryId};
+use thiserror::Error;
+
+/// Failure of an index adapter (SQLite).
+#[derive(Debug, Error)]
+#[error("index: {0}")]
+pub struct IndexError(pub String);
+
+/// Failure of the search adapter (Tantivy).
+#[derive(Debug, Error)]
+#[error("search index: {0}")]
+pub struct SearchError(pub String);
+
+/// Failure of a library walk as a whole. Single unreadable folders are reported as scan items instead.
+#[derive(Debug, Error)]
+pub enum ScanError {
+    #[error("library folder is not reachable: {0}")]
+    Offline(String),
+    #[error("scan stopped: {0}")]
+    Aborted(String),
+}
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("library {0:?} not found")]
+    LibraryNotFound(LibraryId),
+    #[error("library {0:?} is being scanned or regrouped; try again when it is done")]
+    LibraryBusy(LibraryId),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error(transparent)]
+    Domain(#[from] DomainError),
+    #[error(transparent)]
+    Index(#[from] IndexError),
+    #[error(transparent)]
+    Search(#[from] SearchError),
+    #[error(transparent)]
+    Scan(#[from] ScanError),
+}
