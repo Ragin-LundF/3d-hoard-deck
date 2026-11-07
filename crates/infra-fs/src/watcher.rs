@@ -180,7 +180,10 @@ mod tests {
         }
         assert_eq!(settled.len(), 1);
         assert_eq!(settled[0].root, root);
-        assert!(settled[0].dirs.iter().any(|dir| dir.as_str() == "Minis") || settled[0].everything);
+        // macOS reports the file in `Minis`; inotify (Linux) watches the new folder only after it appeared, so it may
+        // report just the root, which is enough: the root is listed again and finds `Minis` as a new folder.
+        let reported = |name: &str| settled[0].dirs.iter().any(|dir| dir.as_str() == name);
+        assert!(reported("Minis") || reported("") || settled[0].everything, "{:?}", settled[0]);
         assert_eq!(watcher.settled(Duration::ZERO), Vec::new(), "reported once");
     }
 }
