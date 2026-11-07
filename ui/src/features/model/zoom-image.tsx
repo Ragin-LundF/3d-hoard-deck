@@ -33,13 +33,43 @@ export function ZoomImage({ src, alt }: { src: string; alt: string }) {
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      // WebKit may report a pinch both ways; the gesture events win then.
+      if (event.ctrlKey && gesturing) return;
       const rect = element.getBoundingClientRect();
       const at = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 };
       const factor = wheelFactor(event.deltaY, event.ctrlKey);
       setView((current) => clamp(zoomAt(current, factor, at), { width: rect.width, height: rect.height }, size));
     };
+    let gesturing = false;
+    // Safari's WebKit (the macOS app) reports a trackpad pinch as gesture events with a running scale.
+    let previous = 1;
+    const onGestureStart = (event: Event) => {
+      event.preventDefault();
+      previous = 1;
+      gesturing = true;
+    };
+    const onGestureEnd = () => {
+      gesturing = false;
+    };
+    const onGestureChange = (event: Event) => {
+      event.preventDefault();
+      const gesture = event as Event & { scale: number; clientX: number; clientY: number };
+      const rect = element.getBoundingClientRect();
+      const at = { x: gesture.clientX - rect.left - rect.width / 2, y: gesture.clientY - rect.top - rect.height / 2 };
+      const factor = gesture.scale / previous;
+      previous = gesture.scale;
+      setView((current) => clamp(zoomAt(current, factor, at), { width: rect.width, height: rect.height }, size));
+    };
     element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
+    element.addEventListener("gesturestart", onGestureStart);
+    element.addEventListener("gesturechange", onGestureChange);
+    element.addEventListener("gestureend", onGestureEnd);
+    return () => {
+      element.removeEventListener("gestureend", onGestureEnd);
+      element.removeEventListener("wheel", onWheel);
+      element.removeEventListener("gesturestart", onGestureStart);
+      element.removeEventListener("gesturechange", onGestureChange);
+    };
   }, [size.width, size.height]);
 
   const change = (next: View) => setView(clamp(next, box, size));
