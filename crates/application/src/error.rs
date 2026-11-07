@@ -20,6 +20,25 @@ pub enum ScanError {
     Aborted(String),
 }
 
+/// Requests the app turns down for a reason the user can fix; the UI words them in its own language.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Refusal {
+    #[error("{0} already exists")]
+    AlreadyExists(String),
+    #[error("\"{0}\" cannot be used as a name: it is empty")]
+    EmptyName(String),
+    #[error("\"{0}\" cannot be used as a name: it contains one of \\ / : * ? \" < > | or a control character")]
+    ForbiddenCharacter(String),
+    #[error("\"{0}\" cannot be used as a name: it ends with a dot or a space")]
+    TrailingDotOrSpace(String),
+    #[error("\"{0}\" cannot be used as a name: Windows reserves it for devices")]
+    ReservedName(String),
+    #[error("a smart collection fills itself from its search")]
+    SmartCollection,
+    #[error("{0} does not allow renaming or moving files; change it under Settings › Libraries")]
+    NotManaged(String),
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("library {0:?} not found")]
@@ -34,6 +53,10 @@ pub enum AppError {
     NoSlicer,
     #[error("the slicer could not be started: {0}")]
     LaunchFailed(String),
+    #[error("cancelled")]
+    Cancelled,
+    #[error(transparent)]
+    Refused(#[from] Refusal),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error(transparent)]

@@ -32,7 +32,7 @@ impl<'a> ImagesByDir<'a> {
 }
 
 /// `dragon.stl.txt` → `dragon`, so `dragon.jpg` is found as its cover.
-pub(super) fn model_stem(name: &str) -> &str {
+pub(crate) fn model_stem(name: &str) -> &str {
     name.to_ascii_lowercase().find(".stl.").map_or_else(|| stem(name), |index| &name[..index])
 }
 

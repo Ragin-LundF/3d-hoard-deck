@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 6] = [
+const MIGRATIONS: [&str; 8] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -106,7 +106,9 @@ ALTER TABLE model_meta ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE collections (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
-    query      TEXT,
+    query      TEXT,                -- search text of a smart collection, NULL for a hand-made one
+    library_id INTEGER REFERENCES libraries(id) ON DELETE SET NULL,
+    scope      TEXT,                -- folder the smart search is limited to
     created_at INTEGER NOT NULL
 );
 CREATE TABLE collection_items (
@@ -116,6 +118,32 @@ CREATE TABLE collection_items (
     position      INTEGER NOT NULL,
     PRIMARY KEY (collection_id, library_id, path)
 ) WITHOUT ROWID;
+",
+    r"
+-- 7: renames and moves done on disk, for undo; file fingerprints for the duplicate finder.
+CREATE TABLE file_journal (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    from_path  TEXT NOT NULL,
+    to_path    TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    done_at    INTEGER NOT NULL,
+    undone_at  INTEGER
+);
+CREATE TABLE file_hashes (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    mtime      INTEGER NOT NULL,
+    quick      BLOB,
+    full       BLOB,
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
+",
+    r"
+-- 8: journal entries go pending → done or failed, and undoing → undone, so a crash mid-change can be settled.
+ALTER TABLE file_journal ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+UPDATE file_journal SET status = 'undone' WHERE undone_at IS NOT NULL;
 ",
 ];
 

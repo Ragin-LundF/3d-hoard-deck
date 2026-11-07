@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from "react";
 import { thumbUrl, type FolderDto_Serialize, type ModelSummaryDto_Serialize } from "../../ipc";
 import { formatClass } from "../../shared/format";
 import { Icon } from "../../shared/icons";
+import { t, plural, formatNumber } from "../../shared/i18n";
 
 function Cover({ library, path, fallback }: { library: number; path: string | null; fallback: string }) {
   const [broken, setBroken] = useState(false);
@@ -14,11 +15,11 @@ export function ModelCard({ model, onOpen }: { model: ModelSummaryDto_Serialize;
     <button className="card" onClick={onOpen} title={model.path}>
       <div className="cover">
         <Cover library={model.library} path={model.cover} fallback={(model.formats[0] ?? "file").toUpperCase()} />
-        {model.fileCount > 1 && <span className="count">{model.fileCount} files</span>}
+        {model.fileCount > 1 && <span className="count">{plural(model.fileCount, "{count} file", "{count} files")}</span>}
         {(model.favorite || model.printed) && (
           <span className="marks">
-            {model.favorite && <span className="fav" title="Favorite"><Icon name="starFilled" /></span>}
-            {model.printed && <span className="done" title="Printed"><Icon name="check" /></span>}
+            {model.favorite && <span className="fav" title={t("Favorite")}><Icon name="starFilled" /></span>}
+            {model.printed && <span className="done" title={t("Printed")}><Icon name="check" /></span>}
           </span>
         )}
       </div>
@@ -49,9 +50,9 @@ export function FolderCard({ library, folder, onOpen, onMenu }: FolderCardProps)
         </div>
         <span className={folder.isCollection ? "badge coll" : "badge"} style={{ zIndex: 2 }}>
           <Icon name={folder.isCollection ? "box" : "folder"} />
-          {folder.isCollection ? "Collection" : "Folder"}
+          {folder.isCollection ? t("Collection") : t("Folder")}
         </span>
-        <span className="count" style={{ zIndex: 2 }}>{folder.totalModels.toLocaleString()}</span>
+        <span className="count" style={{ zIndex: 2 }}>{formatNumber(folder.totalModels)}</span>
       </div>
       <div className="cname">{folder.name}</div>
       <div className="cmeta">{folder.released && <span className="date">{folder.released}</span>}</div>

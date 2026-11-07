@@ -4,6 +4,8 @@ mod collections;
 mod database;
 mod entries;
 mod export;
+mod hashes;
+mod journal;
 mod libraries;
 mod meta;
 mod models;

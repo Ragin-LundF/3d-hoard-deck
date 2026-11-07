@@ -60,6 +60,12 @@ impl LibraryRepository for SqliteIndex {
             connection.execute("UPDATE libraries SET scan_rules = ?2 WHERE id = ?1", params![id.0, json]).map(|_| ())
         })
     }
+
+    fn last_scan_at(&self, id: LibraryId) -> Result<Option<i64>, IndexError> {
+        self.read(|connection| {
+            connection.query_row("SELECT last_scan_at FROM libraries WHERE id = ?1", [id.0], |row| row.get(0))
+        })
+    }
 }
 
 fn library(row: &Row<'_>) -> rusqlite::Result<Library> {

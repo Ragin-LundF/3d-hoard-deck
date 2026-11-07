@@ -1,10 +1,9 @@
 //! Hand-made and smart collections.
 
-use hoarddeck_domain::CollectionId;
-use hoarddeck_domain::ModelId;
+use hoarddeck_domain::{CollectionId, LibraryId, ModelId, SmartSearch};
 
 use super::AppState;
-use crate::dto::{CollectionDto, IpcError, SearchResultDto};
+use crate::dto::{CollectionDto, IpcError, SearchResultDto, rel_path};
 
 #[tauri::command]
 #[specta::specta]
@@ -12,16 +11,26 @@ pub async fn list_collections(app: AppState<'_>) -> Result<Vec<CollectionDto>, I
     Ok(app.collections.list()?.into_iter().map(Into::into).collect())
 }
 
-/// `query`: search text for a smart collection, `None` for a hand-made one.
+/// `query`: search text for a smart collection (with the `library` and folder `scope` it searched), `None` for a
+/// hand-made one.
 #[tauri::command]
 #[specta::specta]
 pub async fn create_collection(
     app: AppState<'_>,
     name: String,
     query: Option<String>,
+    library: Option<u32>,
+    scope: Option<String>,
 ) -> Result<CollectionDto, IpcError> {
-    let collection = app.collections.create(&name, query.as_deref())?;
-    let count = collection.query.is_none().then_some(0);
+    let smart = query.map(|text| -> Result<SmartSearch, IpcError> {
+        Ok(SmartSearch {
+            text,
+            library: library.map(|id| LibraryId(i64::from(id))),
+            scope: scope.as_deref().filter(|scope| !scope.is_empty()).map(rel_path).transpose()?,
+        })
+    });
+    let collection = app.collections.create(&name, smart.transpose()?)?;
+    let count = collection.smart.is_none().then_some(0);
     Ok((collection, count).into())
 }
 

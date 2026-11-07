@@ -30,10 +30,15 @@ export const commands = {
 	/**  Marks a folder as one model or a collection (`None` = automatic detection) and regroups at once. */
 	setFolderRole: (library: number, folder: string, role: FolderRoleDto | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_folder_role", { library, folder, role })),
 	getModel: (id: number) => typedError<ModelDetailDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("get_model", { id })),
+	/**  The files inside a ZIP archive, read without unpacking it. */
+	archiveContents: (library: number, path: string) => typedError<ArchiveEntryDto[], IpcError_Serialize>(__TAURI_INVOKE("archive_contents", { library, path })),
 	listSlicers: () => typedError<SlicerDto[], IpcError_Serialize>(__TAURI_INVOKE("list_slicers")),
 	listCollections: () => typedError<CollectionDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("list_collections")),
-	/**  `query`: search text for a smart collection, `None` for a hand-made one. */
-	createCollection: (name: string, query: string | null) => typedError<CollectionDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("create_collection", { name, query })),
+	/**
+	 *  `query`: search text for a smart collection (with the `library` and folder `scope` it searched), `None` for a
+	 *  hand-made one.
+	 */
+	createCollection: (name: string, query: string | null, library: number | null, scope: string | null) => typedError<CollectionDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("create_collection", { name, query, library, scope })),
 	renameCollection: (id: number, name: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("rename_collection", { id, name })),
 	/**  Deletes the collection; its models stay in the library. */
 	deleteCollection: (id: number) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_collection", { id })),
@@ -49,6 +54,18 @@ export const commands = {
 	rebuildFromSidecars: (library: number) => typedError<RebuildReportDto, IpcError_Serialize>(__TAURI_INVOKE("rebuild_from_sidecars", { library })),
 	/**  Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again). */
 	importOrynt3d: (library: number) => typedError<ImportReportDto, IpcError_Serialize>(__TAURI_INVOKE("import_orynt3d", { library })),
+	/**  Identical model files across all libraries. Reads files, which takes a while over a network share. */
+	findDuplicates: () => typedError<DuplicateGroupDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("find_duplicates")),
+	/**  Stops a running duplicate search; it then fails with `cancelled`. */
+	cancelDuplicates: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_duplicates")),
+	/**
+	 *  Renames the model on disk (`rename`) or moves it into `folder`; exactly one must be given.
+	 *  Returns the journal id for undo, and a warning when the files moved but the rescan did not work.
+	 */
+	moveModel: (id: number, rename: string | null, folder: string | null) => typedError<FileChangeDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("move_model", { id, rename, folder })),
+	undoFileOperation: (id: number) => typedError<FileChangeDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("undo_file_operation", { id })),
+	/**  The latest renames and moves across all libraries, newest first. */
+	fileJournal: (limit: number) => typedError<JournalEntryDto[], IpcError_Serialize>(__TAURI_INVOKE("file_journal", { limit })),
 	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
 	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
 	/**  Collection presets that match this library's folders and are not in use yet. */
@@ -66,12 +83,20 @@ export const commands = {
 
 /** Events */
 export const events = {
+	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
 };
 
 /* Types */
 /**  What the app may write into the library. */
 export type AccessModeDto = "readOnly" | "metadataWrite" | "managed";
+
+/**  A file inside a ZIP archive. */
+export type ArchiveEntryDto = {
+	/**  Path inside the archive, with `/`. */
+	name: string,
+	size: number | null,
+};
 
 export type BrowseRequestDto = BrowseRequestDto_Serialize | BrowseRequestDto_Deserialize;
 
@@ -100,6 +125,9 @@ export type CollectionDto_Deserialize = {
 	name: string,
 	/**  Search text of a smart collection; `None` for a hand-made one. */
 	query?: string | null,
+	/**  Library and folder the smart search is limited to. */
+	library?: number | null,
+	scope?: string | null,
 	/**  Members of a hand-made collection; `None` for smart ones. */
 	count?: number | null,
 };
@@ -109,6 +137,9 @@ export type CollectionDto_Serialize = {
 	name: string,
 	/**  Search text of a smart collection; `None` for a hand-made one. */
 	query: string | null,
+	/**  Library and folder the smart search is limited to. */
+	library: number | null,
+	scope: string | null,
 	/**  Members of a hand-made collection; `None` for smart ones. */
 	count: number | null,
 };
@@ -118,8 +149,55 @@ export type CursorDto = {
 	id: number,
 };
 
+export type DuplicateFileDto = DuplicateFileDto_Serialize | DuplicateFileDto_Deserialize;
+
+export type DuplicateFileDto_Deserialize = {
+	library: number,
+	path: string,
+	model?: number | null,
+};
+
+export type DuplicateFileDto_Serialize = {
+	library: number,
+	path: string,
+	model: number | null,
+};
+
+export type DuplicateGroupDto = DuplicateGroupDto_Serialize | DuplicateGroupDto_Deserialize;
+
+export type DuplicateGroupDto_Deserialize = {
+	size: number | null,
+	files: DuplicateFileDto_Deserialize[],
+};
+
+export type DuplicateGroupDto_Serialize = {
+	size: number | null,
+	files: DuplicateFileDto_Serialize[],
+};
+
+/**  Pushed while duplicates are searched: `done` of `total` groups of same-size files compared. */
+export type DuplicatesProgressEvent = {
+	done: number,
+	total: number,
+};
+
 /**  What to do when the chosen index folder already holds an index. */
 export type ExistingIndexDto = "ask" | "use" | "replace";
+
+/**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
+export type FileChangeDto = FileChangeDto_Serialize | FileChangeDto_Deserialize;
+
+/**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
+export type FileChangeDto_Deserialize = {
+	journal: number,
+	warning?: string | null,
+};
+
+/**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
+export type FileChangeDto_Serialize = {
+	journal: number,
+	warning: string | null,
+};
 
 export type FolderDto = FolderDto_Serialize | FolderDto_Deserialize;
 
@@ -175,23 +253,43 @@ export type IpcError = IpcError_Serialize | IpcError_Deserialize;
 export type IpcError_Deserialize = {
 	/**
 	 *  Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `index_exists`,
-	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `invalid_input`, `internal`.
+	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `cancelled`, the refusals below, `smart_collection`, `invalid_input`, `internal`.
 	 */
 	code: string,
 	message: string,
-	/**  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970. */
+	/**
+	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
+	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
+	 *  `not_managed`), the path, name or library concerned.
+	 */
 	details?: string | null,
 };
 
 export type IpcError_Serialize = {
 	/**
 	 *  Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `index_exists`,
-	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `invalid_input`, `internal`.
+	 *  `unsafe_location`, `no_slicer`, `launch_failed`, `cancelled`, the refusals below, `smart_collection`, `invalid_input`, `internal`.
 	 */
 	code: string,
 	message: string,
-	/**  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970. */
+	/**
+	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
+	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
+	 *  `not_managed`), the path, name or library concerned.
+	 */
 	details: string | null,
+};
+
+/**  One rename or move on disk, newest first in lists. */
+export type JournalEntryDto = {
+	id: number,
+	library: number,
+	from: string,
+	to: string,
+	/**  Seconds since 1970, as a JavaScript-safe number. */
+	doneAt: number | null,
+	/**  `pending`, `done`, `failed`, `undoing` or `undone`; only `done` can be undone. */
+	status: string,
 };
 
 export type LibraryDto = {
@@ -329,6 +427,10 @@ export type ScanProgressEvent_Deserialize = {
 	phase: string,
 	folders: number | null,
 	files: number | null,
+	/**  Folders and files that could not be read; their previous index data is kept. */
+	unreadable: number | null,
+	/**  `path: reason` for the first of them. */
+	unreadableExamples: string[],
 	/**  Set when `phase` is `failed`; same codes as command errors. */
 	error?: IpcError_Deserialize | null,
 };
@@ -339,6 +441,10 @@ export type ScanProgressEvent_Serialize = {
 	phase: string,
 	folders: number | null,
 	files: number | null,
+	/**  Folders and files that could not be read; their previous index data is kept. */
+	unreadable: number | null,
+	/**  `path: reason` for the first of them. */
+	unreadableExamples: string[],
 	/**  Set when `phase` is `failed`; same codes as command errors. */
 	error: IpcError_Serialize | null,
 };

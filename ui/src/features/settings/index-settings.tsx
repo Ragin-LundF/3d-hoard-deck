@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { commands, describeError, IpcFailure, unwrap, type ExistingIndexDto } from "../../ipc";
+import { t, formatDate } from "../../shared/i18n";
 
 type Conflict = { folder: string; modified: Date | null };
 
@@ -22,7 +23,7 @@ export function IndexSettings({ onError }: { onError: (message: string) => void 
     },
   });
   const choose = async () => {
-    const folder = await open({ directory: true, title: "Choose a folder for the index" });
+    const folder = await open({ directory: true, title: t("Choose a folder for the index") });
     if (typeof folder === "string") move.mutate({ folder, existing: "ask" });
   };
   const decide = (existing: ExistingIndexDto) => {
@@ -34,25 +35,25 @@ export function IndexSettings({ onError }: { onError: (message: string) => void 
     <div className="panel">
       <div className="prow2">
         <div className="t">
-          <b>Index folder</b>
+          <b>{t("Index folder")}</b>
           <span className="mono">{location.data ?? "…"}</span>
-          <span>Holds the database and the search index. Default is <span className="code">.3dhoarddeck</span> in your home folder. Pick a folder on a local disk: network shares and cloud-sync folders are refused because they damage the database.</span>
+          <span>{t("Holds the database and the search index. Default is .3dhoarddeck in your home folder. Pick a folder on a local disk: network shares and cloud-sync folders are refused because they damage the database.")}</span>
         </div>
         <button className="btn" onClick={() => void choose()} disabled={move.isPending || conflict !== null}>
-          {move.isPending ? "Moving and restarting…" : "Choose folder…"}
+          {move.isPending ? t("Moving and restarting…") : t("Choose folder…")}
         </button>
       </div>
       {conflict && (
         <div className="prow2 stack">
           <div className="t">
-            <b>That folder already holds a 3D Hoard Deck index</b>
+            <b>{t("That folder already holds a 3D Hoard Deck index")}</b>
             <span className="mono">{conflict.folder}</span>
-            <span>Last changed {conflict.modified ? conflict.modified.toLocaleString() : "at an unknown time"}. The app restarts right after you choose.</span>
+            <span>{conflict.modified ? t("Last changed {time}.", { time: formatDate(conflict.modified) }) : t("Last change time unknown.")} {t("The app restarts right after you choose.")}</span>
           </div>
           <div className="actions">
-            <button className="btn" onClick={() => decide("use")}>Use that index</button>
-            <button className="btn" onClick={() => decide("replace")}>Replace it with my current index</button>
-            <button className="btn ghost" onClick={() => setConflict(null)}>Cancel</button>
+            <button className="btn" onClick={() => decide("use")}>{t("Use that index")}</button>
+            <button className="btn" onClick={() => decide("replace")}>{t("Replace it with my current index")}</button>
+            <button className="btn ghost" onClick={() => setConflict(null)}>{t("Cancel")}</button>
           </div>
         </div>
       )}

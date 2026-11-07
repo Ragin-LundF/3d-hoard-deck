@@ -1,5 +1,6 @@
 //! Scanning: walk a library, store raw entries, group them into folders and models.
 
+mod auto_rescan;
 mod compiled_rules;
 mod detect;
 mod folder_rules;
@@ -12,8 +13,10 @@ mod scan_library;
 mod scan_rules;
 mod set_folder_role;
 
+pub use auto_rescan::AutoRescan;
 pub use compiled_rules::CompiledRules;
 pub use detect::detect;
+pub(crate) use detect::model_stem;
 pub use folder_rules::FolderRules;
 pub use items::{Generation, KnownDir, KnownDirs, ScanItem, ScanPhase, ScanProgress};
 pub use library_locks::{LibraryLock, LibraryLocks};

@@ -4,6 +4,7 @@ import { Icon } from "../../shared/icons";
 import type { MeshFormat } from "./formats";
 import { loadMesh, type LoadedPlate } from "./load-mesh";
 import { ViewerScene, type SceneInfo } from "./scene";
+import { t, plural, formatNumber } from "../../shared/i18n";
 
 type Props = { library: number; path: string; format: MeshFormat };
 
@@ -11,7 +12,7 @@ type Props = { library: number; path: string; format: MeshFormat };
 export default function MeshViewer({ library, path, format }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const scene = useRef<ViewerScene | null>(null);
-  const [state, setState] = useState<{ loading: boolean; error: string | null; info: SceneInfo | null }>({ loading: true, error: null, info: null });
+  const [state, setState] = useState<{ loading: boolean; error: string | null; info: SceneInfo | null; simplifiedFrom: number | null }>({ loading: true, error: null, info: null, simplifiedFrom: null });
   const [wireframe, setWireframe] = useState(false);
   const [plate, setPlate] = useState(true);
   const [plates, setPlates] = useState<LoadedPlate[]>([]);
@@ -19,7 +20,7 @@ export default function MeshViewer({ library, path, format }: Props) {
 
   useEffect(() => {
     if (!stage.current) return;
-    scene.current = new ViewerScene(stage.current, "3D preview");
+    scene.current = new ViewerScene(stage.current, t("3D preview"));
     return () => {
       scene.current?.dispose();
       scene.current = null;
@@ -28,16 +29,16 @@ export default function MeshViewer({ library, path, format }: Props) {
 
   useEffect(() => {
     const abort = new AbortController();
-    setState({ loading: true, error: null, info: null });
+    setState({ loading: true, error: null, info: null, simplifiedFrom: null });
     loadMesh(library, path, format, abort.signal)
-      .then((loaded) => {
+      .then(({ plates: loaded, simplifiedFrom }) => {
         setPlates(loaded);
         setShownPlate(null);
         const info = scene.current?.show(loaded) ?? null;
-        setState({ loading: false, error: loaded.length === 0 ? "This file has nothing on its plates." : null, info });
+        setState({ loading: false, error: loaded.length === 0 ? t("This file has nothing on its plates.") : null, info, simplifiedFrom });
       })
       .catch((error: unknown) => {
-        if (!abort.signal.aborted) setState({ loading: false, error: error instanceof Error ? error.message : String(error), info: null });
+        if (!abort.signal.aborted) setState({ loading: false, error: error instanceof Error ? error.message : String(error), info: null, simplifiedFrom: null });
       });
     return () => abort.abort();
   }, [library, path, format]);
@@ -56,17 +57,17 @@ export default function MeshViewer({ library, path, format }: Props) {
     <div className="viewer">
       <div className="viewer-canvas" ref={stage} />
       <div className="vtools">
-        <div className="vgroup" role="group" aria-label="Render mode">
-          <button className={wireframe ? "" : "on"} aria-pressed={!wireframe} onClick={() => setWireframe(false)}>Solid</button>
-          <button className={wireframe ? "on" : ""} aria-pressed={wireframe} onClick={() => setWireframe(true)}>Wireframe</button>
+        <div className="vgroup" role="group" aria-label={t("Render mode")}>
+          <button className={wireframe ? "" : "on"} aria-pressed={!wireframe} onClick={() => setWireframe(false)}>{t("Solid")}</button>
+          <button className={wireframe ? "on" : ""} aria-pressed={wireframe} onClick={() => setWireframe(true)}>{t("Wireframe")}</button>
         </div>
-        <div className="vgroup" role="group" aria-label="Viewer options">
-          <button className={plate ? "on" : ""} aria-pressed={plate} onClick={() => setPlate(!plate)} title="Build plate 256 × 256 mm">Plate</button>
-          <button onClick={() => scene.current?.resetView()} aria-label="Reset view" title="Reset view"><Icon name="refresh" /></button>
+        <div className="vgroup" role="group" aria-label={t("Viewer options")}>
+          <button className={plate ? "on" : ""} aria-pressed={plate} onClick={() => setPlate(!plate)} title={t("Build plate 256 × 256 mm")}>{t("Plate")}</button>
+          <button onClick={() => scene.current?.resetView()} aria-label={t("Reset view")} title={t("Reset view")}><Icon name="refresh" /></button>
         </div>
         {plates.length > 1 && (
-          <div className="vgroup" role="group" aria-label="Plates">
-            <button className={shownPlate === null ? "on" : ""} aria-pressed={shownPlate === null} onClick={() => showPlate(null)}>All plates</button>
+          <div className="vgroup" role="group" aria-label={t("Plates")}>
+            <button className={shownPlate === null ? "on" : ""} aria-pressed={shownPlate === null} onClick={() => showPlate(null)}>{t("All plates")}</button>
             {plates.map((p) => (
               <button key={p.number} className={shownPlate === p.number ? "on" : ""} aria-pressed={shownPlate === p.number} onClick={() => showPlate(p.number)}>
                 {p.number}
@@ -75,12 +76,16 @@ export default function MeshViewer({ library, path, format }: Props) {
           </div>
         )}
       </div>
-      {state.loading && <div className="vstatus">Loading {fileName(path)}…</div>}
+      {state.loading && <div className="vstatus">{t("Loading {file}…", { file: fileName(path) })}</div>}
       {state.error && <div className="vstatus err">{state.error}</div>}
       {info && (
         <div className="vinfo">
-          <span><b>{info.size.x.toFixed(1)} × {info.size.y.toFixed(1)} × {info.size.z.toFixed(1)}</b> mm</span>
-          <span><b>{info.triangles.toLocaleString()}</b> triangles</span>
+          <span><b>{formatNumber(info.size.x, 1)} × {formatNumber(info.size.y, 1)} × {formatNumber(info.size.z, 1)}</b> mm</span>
+          <span title={state.simplifiedFrom ? t("The file is too large for the viewer, so a lighter copy is shown. The slicer gets the original.") : undefined}>
+            {state.simplifiedFrom
+              ? t("Simplified preview: {count} of {total} triangles", { count: info.triangles, total: state.simplifiedFrom })
+              : plural(info.triangles, "{count} triangle", "{count} triangles")}
+          </span>
           <span>{fileName(path)}</span>
         </div>
       )}

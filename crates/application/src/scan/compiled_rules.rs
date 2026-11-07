@@ -36,7 +36,10 @@ impl CompiledRules {
     #[must_use]
     pub fn is_ignored_dir(&self, dir: &RelPath) -> bool {
         // Probe with a child name no real pattern targets, so `X/**` patterns match the folder itself.
-        !dir.is_root() && (self.ignore.is_match(dir.as_str()) || self.ignore.is_match(format!("{dir}/\u{0}")))
+        !dir.is_root()
+            && (is_own_file(dir.name())
+                || self.ignore.is_match(dir.as_str())
+                || self.ignore.is_match(format!("{dir}/\u{0}")))
     }
 
     /// Marked as one model by the user. Wins over a collection mark on the same folder.
@@ -62,7 +65,9 @@ impl CompiledRules {
 #[allow(clippy::case_sensitive_file_extension_comparisons)] // compared lower-cased; `.3dhoarddeck` has no extension
 fn is_own_file(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.ends_with(".3dhoarddeck") || (lower.contains(".3dhoarddeck.") && lower.ends_with(".tmp"))
+    lower.ends_with(".3dhoarddeck")
+        || lower.ends_with(".3dhoarddeck-renaming")
+        || (lower.contains(".3dhoarddeck.") && lower.ends_with(".tmp"))
 }
 
 fn glob_set<'a>(patterns: impl Iterator<Item = &'a String>) -> Result<GlobSet, AppError> {

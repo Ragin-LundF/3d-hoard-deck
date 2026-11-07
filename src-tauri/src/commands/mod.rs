@@ -2,6 +2,7 @@
 
 pub mod browse;
 pub mod collections;
+pub mod files;
 pub mod index;
 pub mod library;
 pub mod organize;

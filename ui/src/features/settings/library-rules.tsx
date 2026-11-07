@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, describeError, unwrap } from "../../ipc";
+import { t, plural } from "../../shared/i18n";
 
 type Props = { library: number; onError: (message: string) => void };
 
@@ -18,31 +19,31 @@ export function LibraryRules({ library, onError }: Props) {
       {(proposals.data?.length ?? 0) > 0 && (
         <div className="prow2 stack">
           <div className="t">
-            <b>Suggested collections</b>
-            <span>These folder layouts were found in this library. Using one groups every matching folder as a collection; models inside stay separate.</span>
+            <b>{t("Suggested collections")}</b>
+            <span>{t("These folder layouts were found in this library. Using one groups every matching folder as a collection; models inside stay separate.")}</span>
           </div>
           {proposals.data?.map((proposal) => (
             <div className="rule" key={proposal.id}>
               <div className="t">
-                <b>{proposal.name} · {proposal.matches.toLocaleString()} {proposal.matches === 1 ? "folder" : "folders"}</b>
+                <b>{proposal.name} · {plural(proposal.matches, "{count} folder", "{count} folders")}</b>
                 <span>{proposal.samples.join(", ")}{proposal.matches > proposal.samples.length ? ", …" : ""}</span>
                 <span className="code">{proposal.pattern}</span>
               </div>
-              <button className="btn" disabled={busy} onClick={() => accept.mutate(proposal.id)}>Use</button>
+              <button className="btn" disabled={busy} onClick={() => accept.mutate(proposal.id)}>{t("Use")}</button>
             </div>
           ))}
         </div>
       )}
       {(rules.data?.length ?? 0) > 0 && (
         <div className="prow2 stack">
-          <div className="t"><b>Folder rules</b><span>Marks from right-clicking a folder and accepted suggestions.</span></div>
+          <div className="t"><b>{t("Folder rules")}</b><span>{t("Marks from right-clicking a folder and accepted suggestions.")}</span></div>
           {rules.data?.map((rule) => (
             <div className="rule" key={rule.pattern}>
               <div className="t">
-                <b>{rule.role === "model" ? "One model" : "Collection"}</b>
+                <b>{rule.role === "model" ? t("One model") : t("Collection")}</b>
                 <span className="code">{rule.pattern}</span>
               </div>
-              <button className="btn ghost" disabled={busy} onClick={() => remove.mutate(rule.pattern)}>Remove</button>
+              <button className="btn ghost" disabled={busy} onClick={() => remove.mutate(rule.pattern)}>{t("Remove")}</button>
             </div>
           ))}
         </div>

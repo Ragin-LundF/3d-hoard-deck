@@ -91,3 +91,12 @@ impl From<FolderPage> for FolderPageDto {
         }
     }
 }
+
+/// A file inside a ZIP archive.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveEntryDto {
+    /// Path inside the archive, with `/`.
+    pub name: String,
+    pub size: f64,
+}

@@ -30,6 +30,15 @@ fn main() {
             let events = Arc::new(events::TauriEvents::new(tauri_app.handle().clone()));
             let app = App::open(&index_dir, SCAN_THREADS, events)?;
             tauri_app.manage(Arc::new(ThumbnailCache::new(app.index_dir.join("thumbnails"))));
+            let auto_rescan = Arc::clone(&app.auto_rescan);
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if let Err(error) = auto_rescan.tick(std::time::Instant::now()) {
+                        eprintln!("automatic rescan: {error}");
+                    }
+                }
+            });
             tauri_app.manage(Arc::new(app));
             Ok(())
         })
@@ -51,6 +60,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::browse::search_models,
             commands::rules::set_folder_role,
             commands::browse::get_model,
+            commands::browse::archive_contents,
             commands::slicers::list_slicers,
             commands::collections::list_collections,
             commands::collections::create_collection,
@@ -64,6 +74,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::organize::list_tags,
             commands::organize::rebuild_from_sidecars,
             commands::organize::import_orynt3d,
+            commands::organize::find_duplicates,
+            commands::organize::cancel_duplicates,
+            commands::files::move_model,
+            commands::files::undo_file_operation,
+            commands::files::file_journal,
             commands::rules::folder_rules,
             commands::rules::remove_folder_rule,
             commands::rules::propose_presets,
@@ -72,7 +87,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::slicers::detect_slicers,
             commands::slicers::open_in_slicer,
         ])
-        .events(collect_events![events::ScanProgressEvent])
+        .events(collect_events![events::ScanProgressEvent, events::DuplicatesProgressEvent])
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! IPC error shape and input checks.
 
-use hoarddeck_application::AppError;
+use hoarddeck_application::{AppError, Refusal};
 use hoarddeck_domain::RelPath;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -9,10 +9,12 @@ use specta::Type;
 #[serde(rename_all = "camelCase")]
 pub struct IpcError {
     /// Stable code the UI maps to a message: `library_not_found`, `offline`, `library_busy`, `index_exists`,
-    /// `unsafe_location`, `no_slicer`, `launch_failed`, `invalid_input`, `internal`.
+    /// `unsafe_location`, `no_slicer`, `launch_failed`, `cancelled`, the refusals below, `smart_collection`, `invalid_input`, `internal`.
     pub code: String,
     pub message: String,
-    /// Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970.
+    /// Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
+    /// refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
+    /// `not_managed`), the path, name or library concerned.
     pub details: Option<String>,
 }
 
@@ -20,6 +22,14 @@ impl From<AppError> for IpcError {
     fn from(error: AppError) -> Self {
         let details = match &error {
             AppError::IndexExists { modified } => Some(modified.to_string()),
+            AppError::Refused(
+                Refusal::AlreadyExists(subject)
+                | Refusal::EmptyName(subject)
+                | Refusal::ForbiddenCharacter(subject)
+                | Refusal::TrailingDotOrSpace(subject)
+                | Refusal::ReservedName(subject)
+                | Refusal::NotManaged(subject),
+            ) => Some(subject.clone()),
             _ => None,
         };
         let code = match &error {
@@ -29,6 +39,16 @@ impl From<AppError> for IpcError {
             AppError::NoSlicer => "no_slicer",
             AppError::LaunchFailed(_) => "launch_failed",
             AppError::LibraryBusy(_) => "library_busy",
+            AppError::Cancelled => "cancelled",
+            AppError::Refused(refusal) => match refusal {
+                Refusal::AlreadyExists(_) => "already_exists",
+                Refusal::EmptyName(_) => "empty_name",
+                Refusal::ForbiddenCharacter(_) => "forbidden_character",
+                Refusal::TrailingDotOrSpace(_) => "trailing_dot_or_space",
+                Refusal::ReservedName(_) => "reserved_name",
+                Refusal::SmartCollection => "smart_collection",
+                Refusal::NotManaged(_) => "not_managed",
+            },
             AppError::InvalidInput(_) | AppError::Domain(_) => "invalid_input",
             AppError::Scan(hoarddeck_application::ScanError::Offline(_)) => "offline",
             AppError::Index(_) | AppError::Search(_) | AppError::Scan(_) => "internal",

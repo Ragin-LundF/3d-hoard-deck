@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { commands, describeError, unwrap, type ModelSummaryDto_Serialize } from "../../ipc";
-import { formatCount } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import { ModelCard } from "../library/cards";
 import { NameInput } from "./name-input";
 import { useCollections } from "./queries";
+import { t, plural } from "../../shared/i18n";
 
 /** shortcut: collections show up to this many models at once; page them when collections get that big. */
 const LIMIT = 500;
@@ -32,7 +32,7 @@ export function CollectionView({ id, onOpenModel, onDeleted, onError }: Props) {
     },
     onError: fail,
   });
-  if (!collection) return <div className="empty">This collection no longer exists.</div>;
+  if (!collection) return <div className="empty">{t("This collection no longer exists.")}</div>;
   const handMade = collection.query === null;
   const list: ModelSummaryDto_Serialize[] = models.data?.models ?? [];
 
@@ -41,21 +41,21 @@ export function CollectionView({ id, onOpenModel, onDeleted, onError }: Props) {
       <div className="libhead">
         <div className="libtitle">
           {renaming ? (
-            <NameInput placeholder="Collection name" initial={collection.name} onSubmit={(name) => { setRenaming(false); rename.mutate(name); }} onCancel={() => setRenaming(false)} />
+            <NameInput placeholder={t("Collection name")} initial={collection.name} onSubmit={(name) => { setRenaming(false); rename.mutate(name); }} onCancel={() => setRenaming(false)} />
           ) : (
             <h1>{collection.name}</h1>
           )}
-          <span className="crumbs">{models.data ? formatCount(models.data.total, "model", "models") : ""}</span>
+          <span className="crumbs">{models.data ? plural(models.data.total, "{count} model", "{count} models") : ""}</span>
           <span className="spacer" />
-          <button className="btn ghost" onClick={() => setRenaming(true)}><Icon name="pen" />Rename</button>
-          <button className="btn ghost" onClick={() => remove_collection.mutate()} title="Deletes the collection; its models stay in the library">Delete collection</button>
+          <button className="btn ghost" onClick={() => setRenaming(true)}><Icon name="pen" />{t("Rename")}</button>
+          <button className="btn ghost" onClick={() => remove_collection.mutate()} title={t("Deletes the collection; its models stay in the library")}>{t("Delete collection")}</button>
         </div>
         <div className="crumbs">
-          {handMade ? "Drag cards to change the order. Add models from their page." : <>Smart collection: shows everything matching <span className="code">{collection.query}</span></>}
+          {handMade ? t("Drag cards to change the order. Add models from their page.") : <>{t("Smart collection: shows everything matching")} <span className="code">{collection.query}</span></>}
         </div>
       </div>
       {list.length === 0 ? (
-        <div className="empty">{handMade ? "No models yet. Open a model and use “Add to collection”." : "Nothing matches this search right now."}</div>
+        <div className="empty">{handMade ? t("No models yet. Open a model and use “Add to collection”.") : t("Nothing matches this search right now.")}</div>
       ) : (
         <div className="gridwrap">
           <div className="grow static">
@@ -74,7 +74,7 @@ export function CollectionView({ id, onOpenModel, onDeleted, onError }: Props) {
               >
                 <ModelCard model={model} onOpen={() => onOpenModel(model.id)} />
                 {handMade && (
-                  <button className="member-remove" onClick={() => remove.mutate(model.id)} aria-label={`Remove ${model.title} from the collection`} title="Remove from collection">
+                  <button className="member-remove" onClick={() => remove.mutate(model.id)} aria-label={t("Remove {name} from the collection", { name: model.title })} title={t("Remove from collection")}>
                     <Icon name="close" />
                   </button>
                 )}

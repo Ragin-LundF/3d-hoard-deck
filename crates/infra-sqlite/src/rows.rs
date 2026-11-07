@@ -13,7 +13,7 @@ pub(crate) const SUMMARY_FROM: &str =
 pub(crate) const TITLE: &str = "COALESCE(mm.display_name, m.title)";
 
 pub(crate) const SUMMARY_COLUMNS: &str = "m.id, m.library_id, m.path, m.folder, m.kind, COALESCE(mm.display_name, m.title), \
-     m.released, COALESCE(mm.cover, m.cover), m.formats, m.file_count, m.total_size, m.collection, m.marked_by_user, \
+     m.released, COALESCE((SELECT f.path FROM model_files f WHERE f.model_id = m.id AND f.path = mm.cover), m.cover), m.formats, m.file_count, m.total_size, m.collection, m.marked_by_user, \
      COALESCE(mm.favorite, 0), COALESCE(mm.printed, 0)";
 
 pub(crate) const FOLDER_COLUMNS: &str =

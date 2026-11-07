@@ -9,6 +9,7 @@ import { ModelFiles } from "./model-files";
 import { ModelHeader } from "./model-header";
 import { ModelStage, type StageView } from "./model-stage";
 import { useMetaSaver } from "../organize/use-save-meta";
+import { t } from "../../shared/i18n";
 
 type Props = {
   id: number;
@@ -37,9 +38,9 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
   const saveMetaFor = useMetaSaver(onMessage);
   const [picked, setPicked] = useState<StageView | null>(null);
   const [tab, setTab] = useState<"files" | "details">("files");
-  if (isPending) return <div className="empty">Loading…</div>;
+  if (isPending) return <div className="empty">{t("Loading…")}</div>;
   if (error) return <div className="empty err">{describeError(error)}</div>;
-  if (!data) return <div className="empty">This model is no longer in the library.</div>;
+  if (!data) return <div className="empty">{t("This model is no longer in the library.")}</div>;
 
   const { summary, files } = data;
   const library = libraries.find((candidate) => candidate.id === summary.library);
@@ -55,7 +56,7 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
   return (
     <>
       <div className="dhead">
-        <button className="back" onClick={onBack}><Icon name="back" />Back</button>
+        <button className="back" onClick={onBack}><Icon name="back" />{t("Back")}</button>
         <span className="crumbs">{summary.folder}</span>
       </div>
       <div className="dbody">
@@ -72,22 +73,23 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
         <div className="info">
           <ModelHeader
             model={data}
-            viewing={viewing}
+            viewing={viewing && /\.zip!\//i.test(viewing) ? null : viewing}
             canReveal={library !== undefined}
+            canMove={library?.access === "managed"}
             onReveal={() => reveal(summary.path)}
             onBack={onBack}
             onOpenFolder={onOpenFolder}
             onMessage={onMessage}
           />
           <div className="itabs" role="tablist">
-            <button role="tab" aria-selected={tab === "files"} className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>Files ({files.length})</button>
+            <button role="tab" aria-selected={tab === "files"} className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>{t("Files")} ({files.length})</button>
             <button role="tab" aria-selected={tab === "details"} className={tab === "details" ? "on" : ""} onClick={() => setTab("details")}>
-              Tags &amp; notes{data.meta.tags.length > 0 ? ` (${data.meta.tags.length})` : ""}
+              {t("Tags & notes")}{data.meta.tags.length > 0 ? ` (${data.meta.tags.length})` : ""}
             </button>
           </div>
           <div className="ipane" role="tabpanel">
             {tab === "files" ? (
-              <ModelFiles files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
+              <ModelFiles library={summary.library} files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
             ) : (
               <ModelDetails model={data} library={library} onMessage={onMessage} />
             )}

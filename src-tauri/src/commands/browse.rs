@@ -7,7 +7,8 @@ use hoarddeck_domain::ModelId;
 
 use super::AppState;
 use crate::dto::{
-    BrowseRequestDto, FolderDto, FolderPageDto, IpcError, ModelDetailDto, SearchRequestDto, SearchResultDto, rel_path,
+    ArchiveEntryDto, BrowseRequestDto, FolderDto, FolderPageDto, IpcError, ModelDetailDto, SearchRequestDto,
+    SearchResultDto, rel_path,
 };
 
 #[tauri::command]
@@ -48,4 +49,18 @@ pub async fn search_models(app: AppState<'_>, request: SearchRequestDto) -> Resu
 #[specta::specta]
 pub async fn get_model(app: AppState<'_>, id: u32) -> Result<Option<ModelDetailDto>, IpcError> {
     Ok(app.get_model.execute(ModelId(i64::from(id)))?.map(Into::into))
+}
+
+/// The files inside a ZIP archive, read without unpacking it.
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_contents(app: AppState<'_>, library: u32, path: String) -> Result<Vec<ArchiveEntryDto>, IpcError> {
+    let app = std::sync::Arc::clone(&app);
+    let path = rel_path(&path)?;
+    let entries =
+        tauri::async_runtime::spawn_blocking(move || app.list_archive.execute(LibraryId(i64::from(library)), &path))
+            .await
+            .map_err(|error| IpcError { code: "internal".to_owned(), message: error.to_string(), details: None })??;
+    #[allow(clippy::cast_precision_loss)] // sizes stay exact as JavaScript numbers up to 8 PB
+    Ok(entries.into_iter().map(|entry| ArchiveEntryDto { name: entry.name, size: entry.size as f64 }).collect())
 }

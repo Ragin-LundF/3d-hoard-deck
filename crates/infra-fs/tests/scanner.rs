@@ -105,3 +105,61 @@ fn missing_root_is_reported_offline() {
     let result = scan(Path::new("/definitely/not/mounted/3D Print"), &KnownDirs::new());
     assert!(matches!(result, Err(ScanError::Offline(_))));
 }
+
+/// A child that cannot be stat'ed (here: the folder has no search permission) must not hide the whole folder, and
+/// ignored names such as `._x` are never stat'ed at all. On SMB, macOS lists `AppleDouble` files it cannot stat.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_child_does_not_hide_its_folder() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    write(dir.path(), "Fantasy/Release/dragon.stl", &binary_stl(1));
+    write(dir.path(), "Fantasy/Release/._dragon.stl", b"apple double");
+    let release = dir.path().join("Fantasy/Release");
+    fs::set_permissions(&release, fs::Permissions::from_mode(0o444)).expect("read-only, no search");
+    let items = scan(dir.path(), &KnownDirs::new());
+    fs::set_permissions(&release, fs::Permissions::from_mode(0o755)).expect("restore for cleanup");
+    let items = items.expect("scan");
+
+    let listed: Vec<String> = items
+        .iter()
+        .filter_map(|item| match item {
+            ScanItem::Listed { dir, .. } => Some(dir.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(listed.contains(&"Fantasy/Release".to_owned()), "the folder is listed: {listed:?}");
+    let failed: Vec<String> = items
+        .iter()
+        .filter_map(|item| match item {
+            ScanItem::Failed { dir, .. } => Some(dir.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(failed, ["Fantasy/Release/dragon.stl"], "only the unreadable child is reported, `._` is ignored");
+}
+
+/// A subfolder that could not be read once is visited again by the next incremental scan, even though its parent
+/// did not change.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_subfolder_appears_once_it_can_be_read() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    write(dir.path(), "Fantasy/Release/dragon.stl", &binary_stl(1));
+    let fantasy = dir.path().join("Fantasy");
+    fs::set_permissions(&fantasy, fs::Permissions::from_mode(0o444)).expect("read-only, no search");
+    let first = scan(dir.path(), &KnownDirs::new());
+    fs::set_permissions(&fantasy, fs::Permissions::from_mode(0o755)).expect("readable again");
+    let first = first.expect("first scan");
+    assert!(first.iter().any(|item| matches!(item, ScanItem::Failed { dir, .. } if dir.as_str() == "Fantasy/Release")));
+
+    let second = scan(dir.path(), &known_from(&first)).expect("incremental scan");
+    let release = second.iter().find_map(|item| match item {
+        ScanItem::Listed { dir, children, .. } if dir.as_str() == "Fantasy/Release" => Some(children.len()),
+        _ => None,
+    });
+    assert_eq!(release, Some(1), "the release and its STL show up");
+}

@@ -5,6 +5,7 @@ export type Route =
   | { view: "library"; library: number | null; folder: string; all: boolean; q: string }
   | { view: "model"; id: number }
   | { view: "collection"; id: number }
+  | { view: "duplicates" }
   | { view: "settings" };
 
 export type LibraryRoute = Extract<Route, { view: "library" }>;
@@ -15,6 +16,7 @@ export function parseRoute(hash: string): Route {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const view = params.get("view");
   if (view === "settings") return { view: "settings" };
+  if (view === "duplicates") return { view: "duplicates" };
   const id = Number(params.get("id"));
   if (view === "model" && Number.isInteger(id) && id > 0) return { view: "model", id };
   if (view === "collection" && Number.isInteger(id) && id > 0) return { view: "collection", id };

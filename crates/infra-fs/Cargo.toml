@@ -9,8 +9,12 @@ hoarddeck-domain.workspace = true
 hoarddeck-application.workspace = true
 rayon.workspace = true
 blake3 = "1.8"
+notify = "8.2"
 serde.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+rustix = { version = "1.1", features = ["fs"] }
 
 [dev-dependencies]
 tempfile.workspace = true

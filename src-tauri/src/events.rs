@@ -13,8 +13,20 @@ pub struct ScanProgressEvent {
     pub phase: String,
     pub folders: f64,
     pub files: f64,
+    /// Folders and files that could not be read; their previous index data is kept.
+    pub unreadable: f64,
+    /// `path: reason` for the first of them.
+    pub unreadable_examples: Vec<String>,
     /// Set when `phase` is `failed`; same codes as command errors.
     pub error: Option<crate::dto::IpcError>,
+}
+
+/// Pushed while duplicates are searched: `done` of `total` groups of same-size files compared.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicatesProgressEvent {
+    pub done: u32,
+    pub total: u32,
 }
 
 pub struct TauriEvents {
@@ -29,7 +41,15 @@ impl TauriEvents {
 
 impl ScanProgressEvent {
     pub fn failed(library: u32, error: crate::dto::IpcError) -> Self {
-        Self { library, phase: "failed".to_owned(), folders: 0.0, files: 0.0, error: Some(error) }
+        Self {
+            library,
+            phase: "failed".to_owned(),
+            folders: 0.0,
+            files: 0.0,
+            unreadable: 0.0,
+            unreadable_examples: Vec::new(),
+            error: Some(error),
+        }
     }
 }
 
@@ -46,9 +66,22 @@ impl EventSink for TauriEvents {
             phase: phase.to_owned(),
             folders: progress.dirs as f64,
             files: progress.files as f64,
+            unreadable: progress.failed as f64,
+            unreadable_examples: progress.failures.clone(),
             error: None,
         };
+        if progress.phase == ScanPhase::Done {
+            // The run configuration's console is where a user can read why a folder is missing.
+            for failure in &progress.failures {
+                eprintln!("could not read {failure}");
+            }
+        }
         // A closed window cannot receive progress; nothing to recover.
         let _ = event.emit(&self.handle);
+    }
+
+    fn duplicates_progress(&self, done: usize, total: usize) {
+        let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let _ = DuplicatesProgressEvent { done: count(done), total: count(total) }.emit(&self.handle);
     }
 }

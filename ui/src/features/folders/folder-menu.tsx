@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type MouseEvent } from "react";
 import { commands, describeError, unwrap, type FolderRoleDto } from "../../ipc";
+import { t } from "../../shared/i18n";
 
 export type MenuTarget = { library: number; folder: string; isCollection: boolean; x: number; y: number };
 
@@ -37,11 +38,11 @@ export function FolderMenu({ target, onClose, onError }: { target: MenuTarget; o
   };
   return (
     <div className="menu" role="menu" style={{ left: target.x, top: target.y }} onClick={(event) => event.stopPropagation()}>
-      <button role="menuitem" onClick={choose("model")}>Treat as one model</button>
-      <button role="menuitemcheckbox" aria-checked={target.isCollection} onClick={choose("collection")}>Treat as collection</button>
+      <button role="menuitem" onClick={choose("model")}>{t("Treat as one model")}</button>
+      <button role="menuitemcheckbox" aria-checked={target.isCollection} onClick={choose("collection")}>{t("Treat as collection")}</button>
       <hr />
-      <button role="menuitem" onClick={choose(null)}>Detect automatically</button>
-      <p className="menu-hint">Rules for whole patterns (suggested collections) are listed in Settings › Libraries.</p>
+      <button role="menuitem" onClick={choose(null)}>{t("Detect automatically")}</button>
+      <p className="menu-hint">{t("Rules for whole patterns (suggested collections) are listed in Settings › Libraries.")}</p>
     </div>
   );
 }

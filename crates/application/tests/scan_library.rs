@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
 use hoarddeck_application::ports::{
-    EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex,
+    EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
 };
 use hoarddeck_application::scan::{
     CompiledRules, Generation, KnownDirs, LibraryLocks, ScanItem, ScanLibrary, ScanMode, ScanProgress, ScanRules,
@@ -44,6 +44,9 @@ impl LibraryRepository for Store {
     fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
         Ok(())
     }
+    fn last_scan_at(&self, _: LibraryId) -> Result<Option<i64>, IndexError> {
+        Ok(None)
+    }
 }
 
 impl EntryStore for Store {
@@ -60,7 +63,7 @@ impl EntryStore for Store {
     fn folders(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
         Ok(Vec::new())
     }
-    fn same_size_files(&self, _: u64) -> Result<Vec<Vec<(LibraryId, RelPath, u64)>>, IndexError> {
+    fn same_size_files(&self, _: u64) -> Result<Vec<Vec<SizedFile>>, IndexError> {
         Ok(Vec::new())
     }
     fn files(&self, _: LibraryId) -> Result<Vec<Entry>, IndexError> {

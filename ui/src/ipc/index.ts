@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { IpcError } from "./bindings";
+import { t } from "../shared/i18n";
 
 export * from "./bindings";
 
@@ -24,18 +25,34 @@ export class IpcFailure extends Error {
 }
 
 const MESSAGES: Record<string, string> = {
-  offline: "The library folder is not reachable. Is the drive or NAS connected?",
-  library_busy: "This library is being scanned right now. Try again when the scan is done.",
-  invalid_input: "That did not work: the input was not valid.",
-  library_not_found: "This library no longer exists.",
-  no_slicer: "None of your slicers opens these files. Add one or adjust its file types in Settings › Slicers.",
-  launch_failed: "The slicer could not be started. Check its program path in Settings › Slicers.",
-  unsafe_location: "Network shares and cloud-sync folders (iCloud, Dropbox, OneDrive, Google Drive) damage the index database. Choose a folder on a local disk.",
+  offline: t("The library folder is not reachable. Is the drive or NAS connected?"),
+  library_busy: t("This library is being scanned right now. Try again when the scan is done."),
+  library_not_found: t("This library no longer exists."),
+  no_slicer: t("None of your slicers opens these files. Add one or adjust its file types in Settings › Slicers."),
+  launch_failed: t("The slicer could not be started. Check its program path in Settings › Slicers."),
+  unsafe_location: t("Network shares and cloud-sync folders (iCloud, Dropbox, OneDrive, Google Drive) damage the index database. Choose a folder on a local disk."),
 };
+
+/** Refusals name what they concern in `details` (a path, name or library). */
+function refusal(code: string, subject: string): string | undefined {
+  switch (code) {
+    case "already_exists": return t("{path} already exists. Nothing was overwritten.", { path: subject });
+    case "empty_name": return t("A name cannot be empty.");
+    case "forbidden_character": return t("“{name}” contains a character Windows and network shares cannot store: \\ / : * ? \" < > |", { name: subject });
+    case "trailing_dot_or_space": return t("“{name}” ends with a dot or a space, which Windows and network shares cannot store.", { name: subject });
+    case "reserved_name": return t("“{name}” is reserved by Windows for devices. Choose another name.", { name: subject });
+    case "smart_collection": return t("A smart collection fills itself from its search; models cannot be added by hand.");
+    case "not_managed": return t("{library} does not allow renaming or moving files. Change it under Settings › Libraries.", { library: subject });
+    default: return undefined;
+  }
+}
 
 /** A message for the user, chosen by error code, never by matching message text. */
 export function describeError(error: unknown): string {
-  if (error instanceof IpcFailure) return MESSAGES[error.code] ?? error.message;
+  // Other `invalid_input` messages come from the backend in English and name the reason, so they are shown as written.
+  if (error instanceof IpcFailure) {
+    return refusal(error.code, error.details ?? "") ?? MESSAGES[error.code] ?? error.message.replace(/^invalid input: /, "");
+  }
   return error instanceof Error ? error.message : String(error);
 }
 

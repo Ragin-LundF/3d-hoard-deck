@@ -2,6 +2,8 @@
 
 mod folders;
 mod images;
+
+pub(crate) use images::model_stem;
 mod models;
 mod owners;
 #[cfg(test)]

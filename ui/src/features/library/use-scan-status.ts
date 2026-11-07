@@ -2,7 +2,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { events, IpcFailure, type IpcError } from "../../ipc";
 
-export type ScanStatus = { phase: string; folders: number; files: number; error: IpcError | null };
+/** `unreadable`: folders and files the scan could not read (their old data is kept), with the first as examples. */
+export type ScanStatus = {
+  phase: string;
+  folders: number;
+  files: number;
+  unreadable: number;
+  unreadableExamples: string[];
+  error: IpcError | null;
+};
 
 /** Latest scan progress per library; refreshes every query when a scan ends and reports each failure once. */
 export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<number, ScanStatus> {
@@ -16,6 +24,8 @@ export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<num
           phase: payload.phase,
           folders: payload.folders ?? 0,
           files: payload.files ?? 0,
+          unreadable: payload.unreadable ?? 0,
+          unreadableExamples: payload.unreadableExamples,
           error: payload.error ?? null,
         },
       }));

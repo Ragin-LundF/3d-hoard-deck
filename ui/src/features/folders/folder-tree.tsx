@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type MouseEvent } from "react";
 import { commands, unwrap, type FolderDto_Serialize } from "../../ipc";
 import { Icon } from "../../shared/icons";
+import { t, formatNumber } from "../../shared/i18n";
 
 type Props = {
   library: number;
@@ -22,7 +23,7 @@ function useChildren(library: number, folder: string, enabled: boolean) {
 export function FolderTree(props: Props) {
   const { data } = useChildren(props.library, "", true);
   return (
-    <div role="tree" aria-label="Folders">
+    <div role="tree" aria-label={t("Folders")}>
       {data?.map((folder) => <TreeItem key={folder.path} folder={folder} depth={0} {...props} />)}
     </div>
   );
@@ -44,7 +45,7 @@ function TreeItem({ folder, depth, ...props }: Props & { folder: FolderDto_Seria
         <span
           className={`chev${open ? " open" : ""}${hasChildren ? "" : " none"}`}
           role="button"
-          aria-label={open ? "Collapse" : "Expand"}
+          aria-label={open ? t("Collapse") : t("Expand")}
           onClick={(event) => {
             event.stopPropagation();
             setOpen(!open);
@@ -54,7 +55,7 @@ function TreeItem({ folder, depth, ...props }: Props & { folder: FolderDto_Seria
         </span>
         <Icon name={folder.isCollection ? "box" : "folder"} />
         <span className="lbl">{folder.name}</span>
-        <span className="n">{folder.totalModels.toLocaleString()}</span>
+        <span className="n">{formatNumber(folder.totalModels)}</span>
       </button>
       {open && data?.map((child) => <TreeItem key={child.path} folder={child} depth={depth + 1} {...props} />)}
     </div>

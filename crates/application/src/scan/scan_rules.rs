@@ -39,6 +39,25 @@ impl FolderRule {
 }
 
 impl ScanRules {
+    /// The same rules after the folder `from` was renamed or moved to `to`: rules for it or anything below follow it.
+    #[must_use]
+    pub fn moved(&self, from: &RelPath, to: &RelPath) -> Self {
+        // Escaping keeps `/`, so an escaped path is a prefix of the escaped paths below it.
+        let (old, new) = (globset::escape(from.as_str()), globset::escape(to.as_str()));
+        let folder_rules = self
+            .folder_rules
+            .iter()
+            .map(|rule| {
+                let pattern = match rule.pattern.strip_prefix(&old) {
+                    Some(rest) if rest.is_empty() || rest.starts_with('/') => format!("{new}{rest}"),
+                    _ => rule.pattern.clone(),
+                };
+                FolderRule { pattern, role: rule.role }
+            })
+            .collect();
+        Self { folder_rules, ..self.clone() }
+    }
+
     pub(super) fn with_role(&self, role: FolderRole) -> impl Iterator<Item = &String> {
         self.folder_rules.iter().filter(move |rule| rule.role == role).map(|rule| &rule.pattern)
     }
@@ -88,5 +107,33 @@ impl Default for ScanRules {
             variant_folders: variants.map(str::to_owned).to_vec(),
             folder_rules: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn path(value: &str) -> RelPath {
+        RelPath::new(value).expect("valid")
+    }
+
+    #[test]
+    fn rules_follow_a_moved_folder_and_leave_others_alone() {
+        let rules = ScanRules {
+            folder_rules: vec![
+                FolderRule::for_folder(&path("Minis/Dragon [v2]"), FolderRole::Model),
+                FolderRule::for_folder(&path("Minis/Dragon [v2]/Parts"), FolderRole::Collection),
+                FolderRule::for_folder(&path("Minis/Dragon [v2] old"), FolderRole::Model),
+                FolderRule { pattern: "**/Loot Studios/*/*".to_owned(), role: FolderRole::Collection },
+            ],
+            ..ScanRules::default()
+        };
+        let moved = rules.moved(&path("Minis/Dragon [v2]"), &path("Archive/Dragon"));
+        let patterns: Vec<&str> = moved.folder_rules.iter().map(|rule| rule.pattern.as_str()).collect();
+        assert_eq!(
+            patterns,
+            ["Archive/Dragon", "Archive/Dragon/Parts", "Minis/Dragon [[]v2[]] old", "**/Loot Studios/*/*"]
+        );
     }
 }

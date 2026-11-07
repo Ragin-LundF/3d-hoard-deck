@@ -1,3 +1,5 @@
+import { formatNumber } from "./i18n";
+
 export function formatBytes(bytes: number | null): string {
   if (bytes === null) return "";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -7,11 +9,7 @@ export function formatBytes(bytes: number | null): string {
     value /= 1024;
     unit += 1;
   }
-  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-export function formatCount(count: number, one: string, many: string): string {
-  return `${count.toLocaleString()} ${count === 1 ? one : many}`;
+  return `${formatNumber(value, value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 /** CSS class for a file type badge; `3mf` cannot start a class name. */

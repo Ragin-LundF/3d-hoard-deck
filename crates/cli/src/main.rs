@@ -173,5 +173,11 @@ impl EventSink for StderrProgress {
             eprintln!("{:?}: {} folders, {} entries", progress.phase, progress.dirs, progress.files);
             *last = Some(Instant::now());
         }
+        if progress.phase == ScanPhase::Done && progress.failed > 0 {
+            eprintln!("{} folders or files could not be read:", progress.failed);
+            for failure in &progress.failures {
+                eprintln!("  {failure}");
+            }
+        }
     }
 }

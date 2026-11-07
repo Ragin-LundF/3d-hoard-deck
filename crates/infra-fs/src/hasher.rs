@@ -32,9 +32,11 @@ fn quick(path: &Path) -> io::Result<[u8; 32]> {
     let size = file.metadata()?.len();
     let mut hasher = blake3::Hasher::new();
     hasher.update(&size.to_le_bytes());
-    let mut buffer = vec![0_u8; usize::try_from(EDGE).unwrap_or(usize::MAX)];
-    let read = file.read(&mut buffer)?;
-    hasher.update(&buffer[..read]);
+    let mut buffer = Vec::new();
+    // `take` + `read_to_end` keeps reading until EDGE bytes or the end; a single `read` may stop early on a share.
+    (&mut file).take(EDGE).read_to_end(&mut buffer)?;
+    hasher.update(&buffer);
+    buffer.resize(usize::try_from(EDGE).unwrap_or(usize::MAX), 0);
     if size > EDGE * 2 {
         file.seek(SeekFrom::End(-i64::try_from(EDGE).unwrap_or(i64::MAX)))?;
         file.read_exact(&mut buffer)?;

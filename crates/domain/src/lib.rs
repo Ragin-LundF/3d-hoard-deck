@@ -14,7 +14,7 @@ mod slicer;
 mod sniff;
 
 pub use catalog::{Catalog, Folder, Model, ModelFile, ModelKind};
-pub use collection::{Collection, CollectionId, collection_name};
+pub use collection::{Collection, CollectionId, SmartSearch, collection_name};
 pub use entry::{Entry, EntryKind};
 pub use error::DomainError;
 pub use file_kind::{FileFormat, FileKind};

@@ -4,6 +4,7 @@ import { commands, describeError, unwrap } from "../../ipc";
 import { Icon } from "../../shared/icons";
 import { NameInput } from "./name-input";
 import { useCollections, useCreateCollection } from "./queries";
+import { t } from "../../shared/i18n";
 
 /** Menu button on the model page: add the model to a hand-made collection, or to a new one. */
 export function AddToCollection({ model, onMessage }: { model: number; onMessage: (message: string) => void }) {
@@ -15,7 +16,8 @@ export function AddToCollection({ model, onMessage }: { model: number; onMessage
     mutationFn: (id: number) => unwrap(commands.addToCollection(id, [model])),
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ predicate: (query) => ["collection", "collections"].includes(String(query.queryKey[0])) });
-      onMessage(`Added to ${collections.data?.find((c) => c.id === id)?.name ?? "the collection"}`);
+      const name = collections.data?.find((c) => c.id === id)?.name;
+      onMessage(name ? t("Added to {name}", { name }) : t("Added to the collection"));
     },
     onError: (error) => onMessage(describeError(error)),
   });
@@ -31,7 +33,7 @@ export function AddToCollection({ model, onMessage }: { model: number; onMessage
   return (
     <div className="split">
       <button className="btn" aria-haspopup="menu" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpen(!open); }}>
-        <Icon name="box" />Add to collection
+        <Icon name="box" />{t("Add to collection")}
       </button>
       {open && (
         <div className="menu split-menu" role="menu" onClick={(event) => event.stopPropagation()}>
@@ -42,9 +44,9 @@ export function AddToCollection({ model, onMessage }: { model: number; onMessage
           ))}
           {handMade.length > 0 && <hr />}
           {creating ? (
-            <NameInput placeholder="New collection" onSubmit={(name) => { setCreating(false); setOpen(false); create.mutate({ name, query: null }); }} onCancel={() => setCreating(false)} />
+            <NameInput placeholder={t("New collection")} onSubmit={(name) => { setCreating(false); setOpen(false); create.mutate({ name }); }} onCancel={() => setCreating(false)} />
           ) : (
-            <button role="menuitem" onClick={() => setCreating(true)}><Icon name="plus" />New collection…</button>
+            <button role="menuitem" onClick={() => setCreating(true)}><Icon name="plus" />{t("New collection…")}</button>
           )}
         </div>
       )}

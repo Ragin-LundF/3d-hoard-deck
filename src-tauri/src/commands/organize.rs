@@ -6,7 +6,9 @@ use hoarddeck_domain::LibraryId;
 use hoarddeck_domain::ModelId;
 
 use super::AppState;
-use crate::dto::{ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, TagCountDto};
+use crate::dto::{
+    DuplicateGroupDto, ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, TagCountDto,
+};
 
 /// Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it.
 #[tauri::command]
@@ -47,4 +49,23 @@ pub async fn import_orynt3d(app: AppState<'_>, library: u32) -> Result<ImportRep
             .map_err(|error| IpcError { code: "internal".to_owned(), message: error.to_string(), details: None })??;
     let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
     Ok(ImportReportDto { updated: count(report.updated), unreadable: count(report.unreadable) })
+}
+
+/// Identical model files across all libraries. Reads files, which takes a while over a network share.
+#[tauri::command]
+#[specta::specta]
+pub async fn find_duplicates(app: AppState<'_>) -> Result<Vec<DuplicateGroupDto>, IpcError> {
+    let app = Arc::clone(&app);
+    let groups = tauri::async_runtime::spawn_blocking(move || app.find_duplicates.execute())
+        .await
+        .map_err(|error| IpcError { code: "internal".to_owned(), message: error.to_string(), details: None })??;
+    Ok(groups.into_iter().map(Into::into).collect())
+}
+
+/// Stops a running duplicate search; it then fails with `cancelled`.
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_duplicates(app: AppState<'_>) -> Result<(), IpcError> {
+    app.find_duplicates.cancel();
+    Ok(())
 }

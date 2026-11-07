@@ -1,19 +1,27 @@
 use serde::{Deserialize, Serialize};
 
-use crate::DomainError;
+use crate::{DomainError, LibraryId, RelPath};
 
 const MAX_NAME: usize = 120;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CollectionId(pub i64);
 
+/// A saved search: the text plus where it looked (one library, optionally one folder in it).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SmartSearch {
+    pub text: String,
+    pub library: Option<LibraryId>,
+    pub scope: Option<RelPath>,
+}
+
 /// A named group of models across libraries: hand-ordered, or a saved search that fills itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Collection {
     pub id: CollectionId,
     pub name: String,
-    /// Search text for a smart collection; `None` for a hand-made one.
-    pub query: Option<String>,
+    /// The saved search of a smart collection; `None` for a hand-made one.
+    pub smart: Option<SmartSearch>,
 }
 
 /// Validates a collection name.

@@ -2,6 +2,7 @@
 
 pub mod browse;
 mod error;
+pub mod files;
 pub mod library;
 pub mod organize;
 pub mod ports;
@@ -10,5 +11,5 @@ pub mod search;
 pub mod slicer;
 mod views;
 
-pub use error::{AppError, IndexError, ScanError, SearchError};
+pub use error::{AppError, IndexError, Refusal, ScanError, SearchError};
 pub use views::{ModelDetail, ModelSummary};

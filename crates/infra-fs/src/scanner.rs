@@ -1,9 +1,10 @@
 use std::fs::{self, File, Metadata};
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
-use std::time::UNIX_EPOCH;
+use std::thread;
+use std::time::{Duration, UNIX_EPOCH};
 
 use hoarddeck_application::ScanError;
 use hoarddeck_application::ports::LibraryScanner;
@@ -64,7 +65,7 @@ fn visit<'s>(scope: &rayon::Scope<'s>, walk: &'s Walk<'s>, dir: RelPath) {
         return;
     }
     let absolute = walk.absolute(&dir);
-    let mtime = match fs::metadata(&absolute) {
+    let mtime = match with_retries(|| fs::metadata(&absolute)) {
         Ok(metadata) => mtime_millis(&metadata),
         Err(error) => return walk.send(ScanItem::Failed { dir, message: error.to_string() }),
     };
@@ -79,10 +80,16 @@ fn visit<'s>(scope: &rayon::Scope<'s>, walk: &'s Walk<'s>, dir: RelPath) {
             walk.send(ScanItem::Unchanged { dir });
             subdirs
         }
-        _ => match list(&absolute, &dir, walk.rules) {
-            Ok(children) => {
+        _ => match with_retries(|| list(&absolute, &dir, walk.rules)) {
+            Ok((children, unreadable)) => {
                 let subdirs = children.iter().filter(|c| c.kind == EntryKind::Dir).map(|c| c.path.clone()).collect();
+                // With an unreadable file the folder must be listed again next time, or that file stays unknown: an
+                // mtime no folder has makes the next incremental scan list it.
+                let mtime = if unreadable.is_empty() { mtime } else { i64::MIN };
                 walk.send(ScanItem::Listed { dir, mtime, children });
+                for (path, message) in unreadable {
+                    walk.send(ScanItem::Failed { dir: path, message });
+                }
                 subdirs
             }
             Err(error) => return walk.send(ScanItem::Failed { dir, message: error.to_string() }),
@@ -107,26 +114,46 @@ impl Walk<'_> {
     }
 }
 
-/// Direct children of a folder. Ignored paths, symlinks and names that are not valid UTF-8 are skipped.
-fn list(absolute: &Path, dir: &RelPath, rules: &CompiledRules) -> std::io::Result<Vec<Entry>> {
-    let mut children = Vec::new();
+/// Children that could not be read, with the reason.
+type Unreadable = Vec<(RelPath, String)>;
+
+/// Direct children of a folder. Ignored paths, symlinks and names that are not valid UTF-8 are skipped. A child
+/// that cannot be read is reported instead of failing the whole folder.
+fn list(absolute: &Path, dir: &RelPath, rules: &CompiledRules) -> std::io::Result<(Vec<Entry>, Unreadable)> {
+    let (mut children, mut unreadable) = (Vec::new(), Vec::new());
     for item in fs::read_dir(absolute)? {
         let item = item?;
-        let metadata = item.metadata()?;
         let Some(name) = item.file_name().to_str().map(str::to_owned) else { continue };
         let Ok(path) = dir.join(&name) else { continue };
-        let kind = if metadata.is_dir() {
-            if rules.is_ignored_dir(&path) {
-                continue;
-            }
-            EntryKind::Dir
-        } else if metadata.is_file() {
-            if rules.is_ignored(&path) {
-                continue;
-            }
-            EntryKind::File(classify(&item.path(), &name, metadata.len()))
-        } else {
+        // Ignore rules by name come before any stat: macOS lists AppleDouble `._` files on SMB shares that it
+        // cannot stat.
+        if rules.is_ignored(&path) || rules.is_ignored_dir(&path) {
             continue;
+        }
+        let Ok(file_type) = item.file_type() else {
+            unreadable.push((path, "the entry type could not be read".to_owned()));
+            continue;
+        };
+        let ignored = if file_type.is_dir() { rules.is_ignored_dir(&path) } else { !file_type.is_file() };
+        if ignored {
+            continue;
+        }
+        let metadata = match item.metadata() {
+            Ok(metadata) => metadata,
+            // A folder stays a child with an mtime nothing has, so it is visited (and retried) on every scan.
+            Err(_) if file_type.is_dir() => {
+                children.push(Entry { path, kind: EntryKind::Dir, size: 0, mtime: 0 });
+                continue;
+            }
+            Err(error) => {
+                unreadable.push((path, error.to_string()));
+                continue;
+            }
+        };
+        let kind = if metadata.is_dir() {
+            EntryKind::Dir
+        } else {
+            EntryKind::File(classify(&item.path(), &name, metadata.len()))
         };
         children.push(Entry {
             path,
@@ -135,7 +162,37 @@ fn list(absolute: &Path, dir: &RelPath, rules: &CompiledRules) -> std::io::Resul
             mtime: mtime_millis(&metadata),
         });
     }
-    Ok(children)
+    Ok((children, unreadable))
+}
+
+/// Network shares sometimes fail a listing for a moment (interrupted, timed out, busy, connection dropped, I/O
+/// error); those are tried again.
+fn is_transient(error: &std::io::Error) -> bool {
+    const EIO: i32 = 5;
+    matches!(
+        error.kind(),
+        ErrorKind::Interrupted
+            | ErrorKind::TimedOut
+            | ErrorKind::WouldBlock
+            | ErrorKind::ResourceBusy
+            | ErrorKind::NotConnected
+            | ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+    ) || error.raw_os_error() == Some(EIO)
+}
+
+fn with_retries<T>(mut attempt: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut delay = Duration::from_millis(200);
+    for _ in 0..2 {
+        match attempt() {
+            Err(error) if is_transient(&error) => {
+                thread::sleep(delay);
+                delay *= 4;
+            }
+            result => return result,
+        }
+    }
+    attempt()
 }
 
 /// Extension first; disguised meshes (`.stl.xxx`, `.txt`) are confirmed by reading the first bytes, read-only.

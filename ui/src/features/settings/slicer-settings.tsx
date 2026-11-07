@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { commands, describeError, unwrap, type SlicerDto } from "../../ipc";
 import { Icon } from "../../shared/icons";
 import { useSaveSlicers, useSlicers } from "../slicers/queries";
+import { t } from "../../shared/i18n";
 
 const DEFAULT_EXTENSIONS = ["stl", "3mf", "obj"];
 
@@ -20,7 +21,7 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
   const update = (next: SlicerDto[]) => save.mutate(next);
 
   const add = async () => {
-    const program = await open({ directory: false, title: "Choose the slicer program" });
+    const program = await open({ directory: false, title: t("Choose the slicer program") });
     if (typeof program !== "string") return;
     const name = (program.split(/[\\/]/).pop() ?? program).replace(/\.(app|exe)$/i, "");
     update([...list, { name, program, args: ["{files}"], extensions: DEFAULT_EXTENSIONS }]);
@@ -30,19 +31,19 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
     <>
       <div className="panel">
         {list.length === 0 && (
-          <div className="prow2"><div className="t"><b>No slicers yet</b><span>Find installed ones or add a program yourself.</span></div></div>
+          <div className="prow2"><div className="t"><b>{t("No slicers yet")}</b><span>{t("Find installed ones or add a program yourself.")}</span></div></div>
         )}
         {list.map((slicer, index) => (
           <div className="prow2" key={slicer.program}>
             <div className="t">
-              <b>{slicer.name} {index === 0 && <span className="pill ok-pill">Default</span>}</b>
+              <b>{slicer.name} {index === 0 && <span className="pill ok-pill">{t("Default")}</span>}</b>
               <span className="mono">{slicer.program}</span>
               <label className="ext">
-                File types
+                {t("File types")}
                 <input
                   type="text"
                   defaultValue={slicer.extensions.join(", ")}
-                  aria-label={`File types for ${slicer.name}`}
+                  aria-label={t("File types for {name}", { name: slicer.name })}
                   onBlur={(event) => {
                     const extensions = event.target.value.split(",").map((value) => value.trim()).filter(Boolean);
                     if (extensions.join() !== slicer.extensions.join()) update(list.map((s, i) => (i === index ? { ...s, extensions } : s)));
@@ -50,14 +51,14 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
                 />
               </label>
             </div>
-            {index > 0 && <button className="btn" onClick={() => update([slicer, ...list.filter((_, i) => i !== index)])}>Make default</button>}
-            <button className="btn ghost" onClick={() => update(list.filter((_, i) => i !== index))} aria-label={`Remove ${slicer.name}`}>Remove</button>
+            {index > 0 && <button className="btn" onClick={() => update([slicer, ...list.filter((_, i) => i !== index)])}>{t("Make default")}</button>}
+            <button className="btn ghost" onClick={() => update(list.filter((_, i) => i !== index))} aria-label={t("Remove {name}", { name: slicer.name })}>{t("Remove")}</button>
           </div>
         ))}
       </div>
       <div className="actions">
-        <button className="btn" onClick={() => void add()} disabled={save.isPending}><Icon name="plus" />Add slicer…</button>
-        <button className="btn ghost" onClick={() => detect.mutate()} disabled={detect.isPending}><Icon name="search" />Find installed slicers</button>
+        <button className="btn" onClick={() => void add()} disabled={save.isPending}><Icon name="plus" />{t("Add slicer…")}</button>
+        <button className="btn ghost" onClick={() => detect.mutate()} disabled={detect.isPending}><Icon name="search" />{t("Find installed slicers")}</button>
       </div>
     </>
   );

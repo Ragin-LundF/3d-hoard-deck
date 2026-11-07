@@ -1,12 +1,14 @@
 //! `hoard://` serves library files to the webview, read-only. Routes (after `hoard://localhost/`):
 //! - `<library id>/<path>`: an image or mesh as it is on disk,
 //! - `thumb/<library id>/<path>`: a cached 512 px cover thumbnail of an image,
-//! - `plates/<library id>/<path>`: a 3MF's build plates, flattened for the viewer.
+//! - `plates/<library id>/<path>`: a 3MF's build plates, flattened for the viewer,
+//! - `<library id>/<path>.zip!/<entry>`: an image, STL or OBJ from inside a ZIP archive.
 //!
 //! The UI builds these URLs with `convertFileSrc(path, "hoard")`, which picks the right form per platform.
 
 mod files;
 mod pool;
+mod simplified;
 
 use std::fs;
 use std::path::Path;
@@ -32,9 +34,14 @@ pub fn handle<R: Runtime>(context: UriSchemeContext<'_, R>, request: Request<Vec
         lane(&path),
         Box::new(move |dropped| {
             // A request dropped from a full queue still gets an answer, so the webview never waits forever.
-            let response =
-                if dropped { status(StatusCode::SERVICE_UNAVAILABLE) } else { route(&app, &thumbnails, &path) };
-            responder.respond(response);
+            if dropped {
+                return responder.respond(status(StatusCode::SERVICE_UNAVAILABLE));
+            }
+            match route(&app, &thumbnails, &path) {
+                Routed::Now(response) => responder.respond(response),
+                // Simplifying takes long; it runs on its own thread, so this reader is free again.
+                Routed::Later(job) => simplified::queue(job, responder),
+            }
         }),
     );
 }
@@ -46,25 +53,40 @@ fn lane(uri_path: &str) -> pool::Lane {
     if mesh { pool::Lane::Viewer } else { pool::Lane::Covers }
 }
 
-fn route(app: &App, thumbnails: &ThumbnailCache, uri_path: &str) -> Response<Vec<u8>> {
+/// An answer now, or a simplification job that answers when it is done.
+enum Routed {
+    Now(Response<Vec<u8>>),
+    Later(simplified::Job),
+}
+
+fn route(app: &App, thumbnails: &ThumbnailCache, uri_path: &str) -> Routed {
     let Some(decoded) = percent_decode_str(uri_path.trim_start_matches('/')).decode_utf8().ok() else {
-        return status(StatusCode::BAD_REQUEST);
+        return Routed::Now(status(StatusCode::BAD_REQUEST));
     };
     if let Some(rest) = decoded.strip_prefix("thumb/") {
-        return serve_thumbnail(app, thumbnails, rest);
+        return Routed::Now(serve_thumbnail(app, thumbnails, rest));
     }
     if let Some(rest) = decoded.strip_prefix("plates/") {
-        return serve_plates(app, rest);
+        return Routed::Now(serve_plates(app, rest));
+    }
+    if let Some((archive, entry)) = split_archive(&decoded) {
+        return Routed::Now(serve_archive_entry(app, archive, entry));
     }
     serve_file(app, &decoded)
 }
 
-fn serve_file(app: &App, path: &str) -> Response<Vec<u8>> {
-    let Some(file) = resolve(app, path) else { return status(StatusCode::NOT_FOUND) };
-    if fs::metadata(&file.path).map_or(true, |metadata| metadata.len() > file.kind.max_bytes()) {
-        return status(StatusCode::PAYLOAD_TOO_LARGE);
+fn serve_file(app: &App, path: &str) -> Routed {
+    let Some(file) = resolve(app, path).filter(|file| file.kind != Kind::Zip) else {
+        return Routed::Now(status(StatusCode::NOT_FOUND));
+    };
+    let Ok(metadata) = fs::metadata(&file.path) else { return Routed::Now(status(StatusCode::NOT_FOUND)) };
+    if metadata.len() <= file.kind.max_bytes() {
+        return Routed::Now(read(&file.path, content_type(&file.path), "max-age=3600"));
     }
-    read(&file.path, content_type(&file.path), "max-age=3600")
+    if file.kind == Kind::Stl {
+        return simplified::serve(app, &file, &metadata);
+    }
+    Routed::Now(status(StatusCode::PAYLOAD_TOO_LARGE))
 }
 
 /// Covers in the grid: decoded and scaled once, then served from the cache folder.
@@ -75,6 +97,26 @@ fn serve_thumbnail(app: &App, thumbnails: &ThumbnailCache, path: &str) -> Respon
     match thumbnails.get_or_create(&file.path) {
         // The URL names only the source, not its version: keep browser caching short so a replaced cover shows up.
         Ok(thumbnail) => read(&thumbnail, "image/jpeg", "max-age=60"),
+        Err(_) => status(StatusCode::UNPROCESSABLE_ENTITY),
+    }
+}
+
+/// `pack.zip!/dragon.stl` → (`pack.zip`, `dragon.stl`). Only after `.zip`, so a folder like `Halloween!/` stays a folder.
+fn split_archive(decoded: &str) -> Option<(&str, &str)> {
+    let at = decoded.to_ascii_lowercase().find(".zip!/")?;
+    Some((&decoded[..at + 4], &decoded[at + 6..]))
+}
+
+/// 3MF inside a ZIP is not served: the plate reader needs the file on disk.
+fn serve_archive_entry(app: &App, archive: &str, entry: &str) -> Response<Vec<u8>> {
+    let Some(file) = resolve(app, archive).filter(|file| file.kind == Kind::Zip) else {
+        return status(StatusCode::NOT_FOUND);
+    };
+    let Some(kind) = Kind::of(entry).filter(|kind| matches!(kind, Kind::Image | Kind::Stl | Kind::Obj)) else {
+        return status(StatusCode::NOT_FOUND);
+    };
+    match hoarddeck_infra_mesh::read_archive_entry(&file.path, entry, kind.max_bytes()) {
+        Ok(bytes) => ok(bytes, content_type(Path::new(entry)), "max-age=3600"),
         Err(_) => status(StatusCode::UNPROCESSABLE_ENTITY),
     }
 }
@@ -96,7 +138,7 @@ fn read(file: &Path, content_type: &str, cache: &str) -> Response<Vec<u8>> {
     fs::read(file).map_or_else(|_| status(StatusCode::NOT_FOUND), |bytes| ok(bytes, content_type, cache))
 }
 
-fn ok(body: Vec<u8>, content_type: &str, cache: &str) -> Response<Vec<u8>> {
+pub(super) fn ok(body: Vec<u8>, content_type: &str, cache: &str) -> Response<Vec<u8>> {
     Response::builder()
         .header(header::CONTENT_TYPE, content_type)
         .header(header::CACHE_CONTROL, cache)
@@ -106,10 +148,21 @@ fn ok(body: Vec<u8>, content_type: &str, cache: &str) -> Response<Vec<u8>> {
         .unwrap_or_else(|_| status(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-fn status(code: StatusCode) -> Response<Vec<u8>> {
+pub(super) fn status(code: StatusCode) -> Response<Vec<u8>> {
     let mut response = Response::new(Vec::new());
     *response.status_mut() = code;
     // Without it the viewer sees a CORS failure instead of the status (e.g. 413 "too large").
     response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, header::HeaderValue::from_static("*"));
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_archive;
+
+    #[test]
+    fn only_zip_paths_are_split() {
+        assert_eq!(split_archive("1/Packs/Pack.ZIP!/a/dragon.stl"), Some(("1/Packs/Pack.ZIP", "a/dragon.stl")));
+        assert_eq!(split_archive("1/Halloween Special!/dragon.stl"), None);
+    }
 }

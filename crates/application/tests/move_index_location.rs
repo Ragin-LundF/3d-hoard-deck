@@ -43,6 +43,9 @@ impl LibraryRepository for Fakes {
     fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
         unreachable!()
     }
+    fn last_scan_at(&self, _: LibraryId) -> Result<Option<i64>, IndexError> {
+        Ok(None)
+    }
 }
 
 impl IndexExport for Fakes {

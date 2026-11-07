@@ -3,12 +3,14 @@
 mod browse_folder;
 mod get_folder_children;
 mod get_model;
+mod list_archive;
 
 use hoarddeck_domain::{LibraryId, ModelId, RelPath};
 
 pub use browse_folder::{BrowseFolder, FolderPage};
 pub use get_folder_children::GetFolderChildren;
 pub use get_model::GetModel;
+pub use list_archive::ListArchive;
 
 use crate::ModelSummary;
 

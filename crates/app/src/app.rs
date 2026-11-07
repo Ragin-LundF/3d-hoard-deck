@@ -2,20 +2,23 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use hoarddeck_application::AppError;
-use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel};
+use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
+use hoarddeck_application::files::{MoveModel, ReconcileJournal, UndoFileOperation};
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
     FindDuplicates, ImportOrynt3d, ListTags, ManageCollections, RebuildFromSidecars, UpdateModelMeta,
 };
-use hoarddeck_application::ports::{EventSink, LibraryRepository};
+use hoarddeck_application::ports::{EventSink, FileJournal, LibraryRepository};
 use hoarddeck_application::scan::{
-    CollectionPresets, FolderRules, LibraryLocks, RuleEditor, ScanLibrary, SetFolderRole,
+    AutoRescan, CollectionPresets, FolderRules, LibraryLocks, RuleEditor, ScanLibrary, SetFolderRole,
 };
 use hoarddeck_application::search::{RebuildSearchIndex, SearchModels};
 use hoarddeck_application::slicer::{ManageSlicers, OpenInSlicer};
 use hoarddeck_infra_fs::{
-    Blake3Hasher, BootstrapFile, FsLibraryScanner, Orynt3dFiles, SidecarFileStore, SystemStorage,
+    Blake3Hasher, BootstrapFile, FsFileOperations, FsLibraryScanner, NotifyWatcher, Orynt3dFiles, SidecarFileStore,
+    SystemStorage,
 };
+use hoarddeck_infra_mesh::ZipArchives;
 use hoarddeck_infra_platform::{InstalledSlicers, SystemLauncher};
 use hoarddeck_infra_sqlite::SqliteIndex;
 use hoarddeck_infra_tantivy::{SearchFolder, TantivySearchIndex};
@@ -28,13 +31,20 @@ pub struct App {
     pub add_library: AddLibrary,
     pub update_library_settings: UpdateLibrarySettings,
     pub move_index_location: MoveIndexLocation,
-    pub scan_library: ScanLibrary,
+    pub scan_library: Arc<ScanLibrary>,
+    /// Rescans changed or due libraries; the shell calls `tick` from a background thread.
+    pub auto_rescan: Arc<AutoRescan>,
+    pub move_model: MoveModel,
+    pub undo_file_operation: UndoFileOperation,
+    /// Recent renames and moves, for the undo list.
+    pub file_journal: Arc<dyn FileJournal>,
     pub set_folder_role: SetFolderRole,
     pub folder_rules: FolderRules,
     pub collection_presets: CollectionPresets,
     pub browse_folder: BrowseFolder,
     pub get_folder_children: GetFolderChildren,
     pub get_model: GetModel,
+    pub list_archive: ListArchive,
     pub search_models: Arc<SearchModels>,
     pub collections: ManageCollections,
     pub find_duplicates: FindDuplicates,
@@ -61,6 +71,15 @@ impl App {
             RebuildSearchIndex { libraries: index.clone(), models: index.clone(), search: search.clone() }.execute()?;
         }
         let locks = Arc::new(LibraryLocks::default());
+        let scan_library = Arc::new(ScanLibrary::new(
+            index.clone(),
+            index.clone(),
+            index.clone(),
+            search.clone(),
+            Arc::new(FsLibraryScanner::new(scan_threads)),
+            events.clone(),
+            locks.clone(),
+        ));
         let editor = Arc::new(RuleEditor {
             libraries: index.clone(),
             entries: index.clone(),
@@ -78,6 +97,7 @@ impl App {
             locks: locks.clone(),
         });
         let slicers = Arc::new(ManageSlicers { store: index.clone(), detector: Arc::new(InstalledSlicers) });
+        let (move_model, undo_file_operation) = file_operations(&index, &locks, &scan_library);
         Ok(Self {
             index_dir: index_dir.clone(),
             libraries: index.clone(),
@@ -96,20 +116,17 @@ impl App {
                 locks: locks.clone(),
             },
             add_library: AddLibrary { libraries: index.clone(), index_dir: index_dir.clone() },
-            scan_library: ScanLibrary::new(
-                index.clone(),
-                index.clone(),
-                index.clone(),
-                search.clone(),
-                Arc::new(FsLibraryScanner::new(scan_threads)),
-                events,
-                locks.clone(),
-            ),
+            move_model,
+            undo_file_operation,
+            file_journal: index.clone(),
+            auto_rescan: auto_rescan(&index, &scan_library),
+            scan_library,
             set_folder_role: SetFolderRole { editor: editor.clone() },
             folder_rules: FolderRules { editor: editor.clone() },
             collection_presets: CollectionPresets { entries: index.clone(), editor },
             browse_folder: BrowseFolder { models: index.clone() },
             get_folder_children: GetFolderChildren { models: index.clone() },
+            list_archive: ListArchive { libraries: index.clone(), archives: Arc::new(ZipArchives) },
             get_model: GetModel { models: index.clone() },
             open_in_slicer: OpenInSlicer {
                 libraries: index.clone(),
@@ -140,13 +157,54 @@ impl App {
                 models: index.clone(),
                 search: search_models.clone(),
             },
-            find_duplicates: FindDuplicates {
-                libraries: index.clone(),
-                entries: index.clone(),
-                models: index.clone(),
-                hasher: Arc::new(Blake3Hasher),
-            },
+            find_duplicates: find_duplicates(&index, events),
             search_models,
         })
     }
+}
+
+/// Rename, move and undo share the journal, the locks and the rescan afterwards. Settles changes a crash interrupted.
+fn file_operations(
+    index: &Arc<SqliteIndex>,
+    locks: &Arc<LibraryLocks>,
+    scan: &Arc<ScanLibrary>,
+) -> (MoveModel, UndoFileOperation) {
+    // An interrupted rename must not block opening; it is tried again on the next start.
+    let reconcile =
+        ReconcileJournal { libraries: index.clone(), files: Arc::new(FsFileOperations), journal: index.clone() };
+    if let Err(error) = reconcile.execute() {
+        eprintln!("unfinished file changes could not be settled: {error}");
+    }
+    let move_model = MoveModel {
+        libraries: index.clone(),
+        models: index.clone(),
+        files: Arc::new(FsFileOperations),
+        journal: index.clone(),
+        locks: locks.clone(),
+        scan: scan.clone(),
+    };
+    let undo = UndoFileOperation {
+        libraries: index.clone(),
+        files: Arc::new(FsFileOperations),
+        journal: index.clone(),
+        locks: locks.clone(),
+        scan: scan.clone(),
+    };
+    (move_model, undo)
+}
+
+fn find_duplicates(index: &Arc<SqliteIndex>, events: Arc<dyn EventSink>) -> FindDuplicates {
+    FindDuplicates {
+        libraries: index.clone(),
+        entries: index.clone(),
+        models: index.clone(),
+        hasher: Arc::new(Blake3Hasher),
+        cache: index.clone(),
+        events,
+        cancelled: Arc::default(),
+    }
+}
+
+fn auto_rescan(index: &Arc<SqliteIndex>, scan: &Arc<ScanLibrary>) -> Arc<AutoRescan> {
+    Arc::new(AutoRescan::new(index.clone(), Arc::new(SystemStorage), Arc::new(NotifyWatcher::new()), scan.clone()))
 }

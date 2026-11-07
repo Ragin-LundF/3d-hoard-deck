@@ -24,7 +24,7 @@ pub enum ScanItem {
     Listed { dir: RelPath, mtime: i64, children: Vec<Entry> },
     /// The folder mtime matched the last scan; its stored files are still valid.
     Unchanged { dir: RelPath },
-    /// The folder could not be read; keep whatever is stored below it.
+    /// The folder (or a single entry in it) could not be read; keep whatever is stored at and below it.
     Failed { dir: RelPath, message: String },
 }
 
@@ -41,4 +41,8 @@ pub struct ScanProgress {
     pub phase: ScanPhase,
     pub dirs: u64,
     pub files: u64,
+    /// Folders and files that could not be read; their previous index data is kept.
+    pub failed: u64,
+    /// `path: reason` for the first of them.
+    pub failures: Vec<String>,
 }

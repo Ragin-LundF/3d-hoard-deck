@@ -28,9 +28,12 @@ allow it.
   printed, and keep notes. Favorites, Printed and your most used tags are one click away in the sidebar.
 - **Collections that set themselves up.** After a scan the app recognizes common pack layouts (Loot Studios
   releases, STLFlix, monthly creator releases and others) and suggests turning them into collections.
+- **Look inside ZIP files.** Click a ZIP in the file list to see its contents; STL and OBJ files inside open in
+  the 3D viewer without unpacking.
 - **Disguised files are no problem.** Binary STLs named `.stl.xxx` and ASCII STLs named `.stl.txt` are
   recognized by their content.
-- **Light and dark theme.**
+- **Light and dark theme, English and German.** The language follows your system; change it under **Settings ›
+  Language**.
 
 | Model page with 3D preview | 3MF project with two build plates |
 |---|---|
@@ -84,7 +87,10 @@ Changing a role regroups the library within seconds; the folders are not read ag
 
 - **Nothing is written into your library by default.** Every library starts as "Never change files in this
   library"; names, tags, marks and notes then live only in the app's index. Model files are only ever opened
-  for reading. Renaming and moving files on disk is planned for a later version.
+  for reading.
+- **Rename and move on disk, with undo.** If you set a library to **Metadata files, rename and move**, the model
+  page offers **Rename on disk…** and **Move to folder…**. Names, tags, notes and collections move along, an
+  existing file or folder is never overwritten, and **Settings › Recent file changes** undoes any change.
 - **Optional metadata files.** Under **Settings › Libraries** you can allow metadata files. Then names, tags,
   marks and notes are also stored in a small `.3dhoarddeck` file beside each model, and **Rebuild from metadata
   files** restores everything from the folders, for example on a new computer.
@@ -115,6 +121,10 @@ takes over the names, notes and tags you entered there; it only reads the files 
 
 **My NAS is slow. Will scanning hurt it?** The first scan reads every folder once with a few parallel reads.
 Later scans only look at folders whose modification time changed, which takes seconds instead of minutes.
+
+**Do I have to rescan after adding files?** No. Shortly after the app starts it picks up what changed while it
+was closed, and libraries on a local disk are updated a few seconds after files change. Network shares do not report changes, so the app looks for new folders every 30 minutes; press **Rescan**
+under **Settings › Libraries** to see new files right away.
 
 **A model shows up twice or is split in pieces.** Right-click its folder and choose **Treat as one model**.
 

@@ -8,7 +8,7 @@ use hoarddeck_app::App;
 use hoarddeck_application::ports::EventSink;
 use hoarddeck_application::scan::{ScanMode, ScanProgress};
 use hoarddeck_application::search::SearchRequest;
-use hoarddeck_domain::{AccessMode, MetadataStorage, ModelMeta, TagName};
+use hoarddeck_domain::{AccessMode, MetadataStorage, ModelMeta, SmartSearch, TagName};
 
 struct Silent;
 
@@ -101,7 +101,13 @@ fn hand_made_collections_keep_their_order_and_smart_ones_follow_their_search() {
     assert_eq!(titles(chess.id), vec!["Bravo", "Alpha"]);
     assert_eq!(app.collections.list().expect("list")[0].1, Some(2));
 
-    let smart = app.collections.create("Starting with C", Some("charlie")).expect("smart");
+    let smart = app
+        .collections
+        .create(
+            "Starting with C",
+            Some(SmartSearch { text: "charlie".to_owned(), library: Some(library.id), scope: None }),
+        )
+        .expect("smart");
     assert_eq!(titles(smart.id), vec!["Charlie"]);
     assert!(app.collections.add(smart.id, &[alpha]).is_err(), "smart collections fill themselves");
     app.collections.delete(chess.id).expect("delete");
@@ -133,4 +139,51 @@ fn identical_files_are_found_across_models_but_lookalikes_are_not() {
     let paths: Vec<_> = groups[0].files.iter().map(|file| file.path.as_str().to_owned()).collect();
     assert_eq!(paths, vec!["Minis/Dragon/dragon.stl", "Packs/Vol 1/Dragon/dragon.stl"]);
     assert!(groups[0].files.iter().all(|file| file.model.is_some()), "each file links to its model");
+}
+
+#[test]
+fn members_that_vanish_for_a_while_come_back_and_a_lost_cover_falls_back() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    for name in ["Alpha", "Bravo", "Charlie"] {
+        write_stl(library_dir.path(), &format!("Minis/{name}/model.stl"));
+    }
+    fs::write(library_dir.path().join("Minis/Alpha/a.png"), b"png").expect("image a");
+    fs::write(library_dir.path().join("Minis/Alpha/b.png"), b"png").expect("image b");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", library_dir.path().to_str().expect("utf-8")).expect("add");
+    let scan = || app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    scan();
+    let id = |name: &str| {
+        let request =
+            SearchRequest { text: name.to_owned(), library: Some(library.id), scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models.first().map(|model| model.id)
+    };
+    let (alpha, bravo, charlie) = (id("alpha").expect("a"), id("bravo").expect("b"), id("charlie").expect("c"));
+    let set = app.collections.create("Set", None).expect("create");
+    app.collections.add(set.id, &[alpha, bravo, charlie]).expect("add");
+
+    let hidden = library_dir.path().join("Minis/Bravo");
+    fs::rename(&hidden, library_dir.path().join("Bravo-away")).expect("hide bravo");
+    scan();
+    app.collections.move_to(set.id, charlie, 0).expect("reorder while Bravo is missing");
+    fs::rename(library_dir.path().join("Bravo-away"), &hidden).expect("bring bravo back");
+    scan();
+    let titles: Vec<String> =
+        app.collections.models(set.id, 0, 10).expect("models").0.into_iter().map(|m| m.title).collect();
+    assert_eq!(titles, vec!["Charlie", "Alpha", "Bravo"], "Bravo kept its slot after Alpha");
+
+    let picked = hoarddeck_domain::RelPath::new("Minis/Alpha/b.png").expect("valid");
+    let meta = ModelMeta { cover: Some(picked.clone()), ..ModelMeta::default() };
+    let detail = app.update_model_meta.execute(alpha, meta).expect("pick cover");
+    assert_eq!(detail.summary.cover, Some(picked));
+    fs::remove_file(library_dir.path().join("Minis/Alpha/b.png")).expect("lose the picked image");
+    scan();
+    let alpha_now = id("alpha").expect("alpha");
+    let summary = app.get_model.execute(alpha_now).expect("get").expect("exists").summary;
+    assert_eq!(
+        summary.cover.map(String::from),
+        Some("Minis/Alpha/a.png".to_owned()),
+        "falls back to the detected cover"
+    );
 }

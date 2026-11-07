@@ -6,6 +6,7 @@ import { FolderTree } from "./features/folders/folder-tree";
 import { LibraryNav } from "./features/organize/library-nav";
 import { CollectionsNav } from "./features/collections/collections-nav";
 import { CollectionView } from "./features/collections/collection-view";
+import { DuplicatesView } from "./features/duplicates/duplicates-view";
 import { LibraryView } from "./features/library/library-view";
 import { useLibraries } from "./features/library/queries";
 import { isScanning, useScanStatus, type ScanStatus } from "./features/library/use-scan-status";
@@ -15,6 +16,7 @@ import { SettingsView, useAddLibrary } from "./features/settings/settings-view";
 import { Icon, Logo } from "./shared/icons";
 import { HOME, useRoute } from "./shared/route";
 import { useTheme } from "./shared/use-theme";
+import { t, plural } from "./shared/i18n";
 
 export function App() {
   const [route, navigate] = useRoute();
@@ -48,19 +50,19 @@ export function App() {
         <div className="brand"><Logo /><span><b>3D</b> Hoard Deck</span></div>
         <SearchBox value={libraryRoute?.q ?? ""} onSearch={onSearch} />
         <div className="title-actions">
-          <button className="tbtn" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title="Light / dark theme">
+          <button className="tbtn" onClick={toggleTheme} aria-label={theme === "dark" ? t("Switch to light theme") : t("Switch to dark theme")} title={t("Light / dark theme")}>
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
-          <button className="tbtn" onClick={() => library && void rescan(library)} disabled={!library || isScanning(scans[library.id])} aria-label="Scan for changes" title="Scan for changes">
+          <button className="tbtn" onClick={() => library && void rescan(library)} disabled={!library || isScanning(scans[library.id])} aria-label={t("Scan for changes")} title={t("Scan for changes")}>
             <Icon name="refresh" />
           </button>
-          <button className="tbtn" onClick={() => navigate({ view: "settings" })} aria-label="Settings" title="Settings">
+          <button className="tbtn" onClick={() => navigate({ view: "settings" })} aria-label={t("Settings")} title={t("Settings")}>
             <Icon name="settings" />
           </button>
         </div>
       </header>
 
-      <aside className="side" aria-label="Sidebar">
+      <aside className="side" aria-label={t("Sidebar")}>
         <div className="side-scroll">
           {list.map((item) => (
             <div className="sec" key={item.id}>
@@ -70,7 +72,7 @@ export function App() {
                 route={libraryRoute && item.id === library?.id ? libraryRoute : null}
                 onNavigate={(patch) => navigate({ ...HOME, library: item.id, ...patch })}
               />
-              <h4 className="subhead">Folders</h4>
+              <h4 className="subhead">{t("Folders")}</h4>
               <FolderTree
                 library={item.id}
                 current={libraryRoute && item.id === library?.id ? libraryRoute.folder : null}
@@ -80,6 +82,11 @@ export function App() {
             </div>
           ))}
           <CollectionsNav current={route.view === "collection" ? route.id : null} onOpen={(id) => navigate({ view: "collection", id })} onError={setToast} />
+          <div className="sec">
+            <button className={`nav${route.view === "duplicates" ? " on" : ""}`} onClick={() => navigate({ view: "duplicates" })}>
+              <Icon name="layers" />{t("Duplicates")}
+            </button>
+          </div>
         </div>
         {library && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate({ view: "settings" })} />}
       </aside>
@@ -89,6 +96,8 @@ export function App() {
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
           <SettingsView libraries={list} scans={scans} onError={setToast} />
+        ) : route.view === "duplicates" ? (
+          <DuplicatesView libraries={list} onOpenModel={(id) => navigate({ view: "model", id })} />
         ) : route.view === "collection" ? (
           <CollectionView id={route.id} onOpenModel={(id) => navigate({ view: "model", id })} onDeleted={() => navigate(HOME)} onError={setToast} />
         ) : route.view === "model" ? (
@@ -105,18 +114,18 @@ export function App() {
           />
         ) : (
           <div className="empty">
-            <h2>Add your first library</h2>
-            <span>Pick the folder with your STL and 3MF files. The files stay where they are.</span>
+            <h2>{t("Add your first library")}</h2>
+            <span>{t("Pick the folder with your STL and 3MF files. The files stay where they are.")}</span>
             <button className="btn primary" onClick={() => addLibrary.mutate()} disabled={addLibrary.isPending}>
-              <Icon name="plus" />Add library folder
+              <Icon name="plus" />{t("Add library folder")}
             </button>
           </div>
         )}
       </main>
 
       <footer className="status">
-        {route.view === "library" && <span><b>{shown.toLocaleString()}</b> shown</span>}
-        <span>{list.length === 1 ? "1 library" : `${list.length} libraries`}</span>
+        {route.view === "library" && <span>{t("{count} shown", { count: shown })}</span>}
+        <span>{plural(list.length, "{count} library", "{count} libraries")}</span>
       </footer>
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
@@ -129,7 +138,7 @@ function SourceCard({ library, scan, onSettings }: { library: LibraryDto; scan: 
   const scanning = isScanning(scan);
   const proposals = useQuery({ queryKey: ["presets", library.id], queryFn: () => unwrap(commands.proposePresets(library.id)) });
   const suggestions = proposals.data?.length ?? 0;
-  const label = scan?.phase === "failed" ? "Scan failed" : scanning ? (scan?.phase === "grouping" ? "Grouping models…" : "Scanning…") : "Up to date";
+  const label = scan?.phase === "failed" ? t("Scan failed") : scanning ? (scan?.phase === "grouping" ? t("Grouping models…") : t("Scanning…")) : t("Up to date");
   return (
     <div className="source">
       <div className="row">
@@ -140,11 +149,16 @@ function SourceCard({ library, scan, onSettings }: { library: LibraryDto; scan: 
       {scanning && <div className="bar"><i /></div>}
       <div className="scanline">
         <span className={scan?.phase === "failed" ? "err" : undefined}>{label}</span>
-        {scanning && scan && <span className="mono">{scan.files.toLocaleString()} files</span>}
+        {scanning && scan && <span className="mono">{plural(scan.files, "{count} file", "{count} files")}</span>}
       </div>
+      {!scanning && (scan?.unreadable ?? 0) > 0 && (
+        <span className="err" title={scan?.unreadableExamples.join("\n")}>
+          {plural(scan?.unreadable ?? 0, "{count} folder or file could not be read", "{count} folders or files could not be read")}
+        </span>
+      )}
       {suggestions > 0 && !scanning && (
         <button className="linkish" onClick={onSettings}>
-          {suggestions === 1 ? "1 collection suggestion" : `${suggestions} collection suggestions`} ›
+          {plural(suggestions, "{count} collection suggestion", "{count} collection suggestions")} ›
         </button>
       )}
     </div>

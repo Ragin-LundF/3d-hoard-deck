@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use hoarddeck_domain::{LibraryId, ModelId, RelPath};
 
 use crate::AppError;
-use crate::ports::{EntryStore, FileHasher, LibraryRepository, ModelRepository};
+use crate::ports::{EntryStore, EventSink, FileHasher, HashCache, LibraryRepository, ModelRepository, SizedFile};
 
 /// Files smaller than this are not compared; tiny files repeat by accident.
 const MIN_SIZE: u64 = 1024;
@@ -24,29 +25,42 @@ pub struct DuplicateGroup {
 }
 
 /// Finds identical model files across all libraries: same size, then a quick fingerprint, then the full content.
-/// Only reads files; offline libraries are skipped.
+/// Only reads files; offline libraries are skipped. Fingerprints are cached until a scan sees the file change.
 pub struct FindDuplicates {
     pub libraries: Arc<dyn LibraryRepository>,
     pub entries: Arc<dyn EntryStore>,
     pub models: Arc<dyn ModelRepository>,
     pub hasher: Arc<dyn FileHasher>,
+    pub cache: Arc<dyn HashCache>,
+    pub events: Arc<dyn EventSink>,
+    pub cancelled: Arc<AtomicBool>,
 }
 
 impl FindDuplicates {
+    /// Stops a running search after the group it is comparing.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
     /// # Errors
-    /// Fails when the index cannot be read. Unreadable files are skipped.
+    /// Fails when the index cannot be read, or with [`AppError::Cancelled`]. Unreadable files are skipped.
     pub fn execute(&self) -> Result<Vec<DuplicateGroup>, AppError> {
+        self.cancelled.store(false, Ordering::Relaxed);
         let roots: HashMap<LibraryId, String> =
             self.libraries.list()?.into_iter().map(|library| (library.id, library.root)).collect();
+        let candidates = self.entries.same_size_files(MIN_SIZE)?;
         let mut groups = Vec::new();
-        for candidates in self.entries.same_size_files(MIN_SIZE)? {
-            let size = candidates.first().map_or(0, |(_, _, size)| *size);
-            let quick = self.split(&candidates, &roots, |root, path| self.hasher.quick(root, path));
-            for same_start in quick {
-                for same in self.split(&same_start, &roots, |root, path| self.hasher.full(root, path)) {
+        for (done, same_size) in candidates.iter().enumerate() {
+            if self.cancelled.load(Ordering::Relaxed) {
+                return Err(AppError::Cancelled);
+            }
+            self.events.duplicates_progress(done, candidates.len());
+            let size = same_size.first().map_or(0, |file| file.2);
+            for same_start in split(same_size, |file| self.fingerprint(&roots, file, false)) {
+                for same in split(&same_start, |file| self.fingerprint(&roots, file, true)) {
                     let files = same
                         .into_iter()
-                        .map(|(library, path, _)| {
+                        .map(|(library, path, _, _)| {
                             let model = self.models.model_of_file(library, &path)?;
                             Ok(DuplicateFile { library, path, model })
                         })
@@ -55,23 +69,29 @@ impl FindDuplicates {
                 }
             }
         }
+        self.events.duplicates_progress(candidates.len(), candidates.len());
         Ok(groups)
     }
 
-    /// Groups files by a fingerprint and keeps groups with more than one file.
-    fn split(
-        &self,
-        files: &[(LibraryId, RelPath, u64)],
-        roots: &HashMap<LibraryId, String>,
-        fingerprint: impl Fn(&str, &RelPath) -> Result<[u8; 32], String>,
-    ) -> Vec<Vec<(LibraryId, RelPath, u64)>> {
-        let mut by_print: HashMap<[u8; 32], Vec<(LibraryId, RelPath, u64)>> = HashMap::new();
-        for file in files {
-            let Some(root) = roots.get(&file.0) else { continue };
-            if let Ok(print) = fingerprint(root, &file.1) {
-                by_print.entry(print).or_default().push(file.clone());
-            }
+    fn fingerprint(&self, roots: &HashMap<LibraryId, String>, file: &SizedFile, full: bool) -> Option<[u8; 32]> {
+        if let Ok(Some(hash)) = self.cache.cached(file, full) {
+            return Some(hash);
         }
-        by_print.into_values().filter(|group| group.len() > 1).collect()
+        let root = roots.get(&file.0)?;
+        let hash = if full { self.hasher.full(root, &file.1) } else { self.hasher.quick(root, &file.1) }.ok()?;
+        // A cache that cannot be written only means reading the file again next time.
+        let _ = self.cache.store(file, full, hash);
+        Some(hash)
     }
+}
+
+/// Groups files by a fingerprint and keeps groups with more than one file.
+fn split(files: &[SizedFile], fingerprint: impl Fn(&SizedFile) -> Option<[u8; 32]>) -> Vec<Vec<SizedFile>> {
+    let mut by_print: HashMap<[u8; 32], Vec<SizedFile>> = HashMap::new();
+    for file in files {
+        if let Some(print) = fingerprint(file) {
+            by_print.entry(print).or_default().push(file.clone());
+        }
+    }
+    by_print.into_values().filter(|group| group.len() > 1).collect()
 }

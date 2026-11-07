@@ -8,6 +8,7 @@ rust-version.workspace = true
 hoarddeck-domain.workspace = true
 hoarddeck-application.workspace = true
 hoarddeck-infra-fs.workspace = true
+hoarddeck-infra-mesh.workspace = true
 hoarddeck-infra-sqlite.workspace = true
 hoarddeck-infra-tantivy.workspace = true
 hoarddeck-infra-platform.workspace = true

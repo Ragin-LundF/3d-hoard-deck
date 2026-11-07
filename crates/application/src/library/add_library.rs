@@ -16,7 +16,8 @@ pub struct AddLibrary {
 
 impl AddLibrary {
     /// # Errors
-    /// Fails for an empty name or root, a root that contains the index folder, or a root that is already registered.
+    /// Fails for an empty name or root, a root that contains the index folder, or a root that is already registered,
+    /// inside a registered library or contains one (files would be indexed twice).
     pub fn execute(&self, name: &str, root: &str) -> Result<Library, AppError> {
         let name = name.trim();
         let root = normalize_root(root);
@@ -25,6 +26,16 @@ impl AddLibrary {
         }
         if self.index_dir.starts_with(Path::new(root)) {
             return Err(AppError::InvalidInput(format!("{root} contains the index folder; choose another folder")));
+        }
+        let new_root = Path::new(root);
+        if let Some(other) = self.libraries.list()?.into_iter().find(|library| {
+            let existing = Path::new(&library.root);
+            new_root.starts_with(existing) || existing.starts_with(new_root)
+        }) {
+            return Err(AppError::InvalidInput(format!(
+                "{root} overlaps the library \"{}\" ({})",
+                other.name, other.root
+            )));
         }
         Ok(self.libraries.add(name, root, &ScanRules::default())?)
     }

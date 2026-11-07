@@ -8,8 +8,8 @@ use hoarddeck_domain::{LibraryId, RelPath};
 
 /// Full-size images (gallery, model page) up to this size.
 const MAX_IMAGE_BYTES: u64 = 40 * 1024 * 1024;
-/// shortcut: meshes go to the viewer unchanged up to this size; larger ones need a simplified preview mesh from Rust.
-const MAX_MESH_BYTES: u64 = 256 * 1024 * 1024;
+/// Meshes go to the viewer unchanged up to this size; larger STL files get a simplified preview (see `simplified`).
+const MAX_MESH_BYTES: u64 = 128 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -17,11 +17,13 @@ pub(super) enum Kind {
     Stl,
     ThreeMf,
     Obj,
+    /// Only opened to serve a file from inside it.
+    Zip,
 }
 
 impl Kind {
     /// Images for covers and galleries; STL (also disguised as `.stl.xxx` / `.stl.txt`), 3MF and OBJ for the viewer.
-    fn of(name: &str) -> Option<Self> {
+    pub(super) fn of(name: &str) -> Option<Self> {
         let lower = name.to_ascii_lowercase();
         let extension = Path::new(&lower).extension()?.to_str()?;
         match extension {
@@ -29,6 +31,7 @@ impl Kind {
             "stl" => Some(Self::Stl),
             "3mf" => Some(Self::ThreeMf),
             "obj" => Some(Self::Obj),
+            "zip" => Some(Self::Zip),
             _ if lower.contains(".stl.") => Some(Self::Stl),
             _ => None,
         }
@@ -55,6 +58,8 @@ pub(super) fn content_type(path: &Path) -> &'static str {
 pub(super) struct LibraryFile {
     pub path: PathBuf,
     pub kind: Kind,
+    /// The library's real root folder.
+    pub root: PathBuf,
 }
 
 /// `<library id>/<relative path>` to a file inside that library's root. Rejects other file types, traversal and
@@ -68,7 +73,7 @@ pub(super) fn resolve(app: &App, decoded: &str) -> Option<LibraryFile> {
     let mut file = root.clone();
     file.extend(relative.segments());
     let path = fs::canonicalize(file).ok()?;
-    (path.starts_with(&root) && path.is_file()).then_some(LibraryFile { path, kind })
+    (path.starts_with(&root) && path.is_file()).then_some(LibraryFile { path, kind, root })
 }
 
 #[cfg(test)]
@@ -82,7 +87,8 @@ mod tests {
         assert_eq!(Kind::of("head.STL.txt"), Some(Kind::Stl));
         assert_eq!(Kind::of("plate.3mf"), Some(Kind::ThreeMf));
         assert_eq!(Kind::of("bust.obj"), Some(Kind::Obj));
-        for name in ["notes.txt", "project.lys", ".3dhoarddeck", "archive.zip", "noextension"] {
+        assert_eq!(Kind::of("pack.ZIP"), Some(Kind::Zip), "only opened to serve a file from inside");
+        for name in ["notes.txt", "project.lys", ".3dhoarddeck", "pack.rar", "noextension"] {
             assert_eq!(Kind::of(name), None, "{name}");
         }
     }

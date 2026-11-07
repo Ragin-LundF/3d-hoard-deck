@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../shared/icons";
+import { t } from "../../shared/i18n";
 
 const DEBOUNCE_MS = 150;
 const isMac = navigator.userAgent.includes("Mac");
@@ -32,8 +33,8 @@ export function SearchBox({ value, onSearch }: { value: string; onSearch: (text:
         ref={input}
         type="search"
         value={text}
-        placeholder="Search models… try  dragon type:3mf  tag:resin  is:favorite"
-        aria-label="Search library"
+        placeholder={t("Search models… try  dragon type:3mf  tag:resin  is:favorite")}
+        aria-label={t("Search library")}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setText(event.target.value)}

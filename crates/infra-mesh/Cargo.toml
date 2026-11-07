@@ -6,7 +6,10 @@ rust-version.workspace = true
 
 [dependencies]
 thiserror.workspace = true
-zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+# Packs made with 7-Zip and others use more than deflate.
+zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs", "deflate64", "lzma", "xz", "bzip2", "zstd"] }
 quick-xml = "0.42"
 
 [dev-dependencies]

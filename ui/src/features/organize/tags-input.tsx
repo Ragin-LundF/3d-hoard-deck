@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { commands, unwrap } from "../../ipc";
 import { Icon } from "../../shared/icons";
+import { t } from "../../shared/i18n";
 
 type Props = { library: number; tags: string[]; onChange: (tags: string[]) => void };
 
@@ -21,15 +22,15 @@ export function TagsInput({ library, tags, onChange }: Props) {
       {tags.map((tag) => (
         <span className="tag" key={tag}>
           {tag}
-          <button aria-label={`Remove tag ${tag}`} onClick={() => onChange(tags.filter((t) => t !== tag))}><Icon name="close" /></button>
+          <button aria-label={t("Remove tag {tag}", { tag })} onClick={() => onChange(tags.filter((other) => other !== tag))}><Icon name="close" /></button>
         </span>
       ))}
       <input
         className="tagin"
         value={text}
         list={listId}
-        placeholder="Add tag"
-        aria-label="Add tag"
+        placeholder={t("Add tag")}
+        aria-label={t("Add tag")}
         onChange={(event) => (event.target.value.endsWith(",") ? add(event.target.value.slice(0, -1)) : setText(event.target.value))}
         onKeyDown={(event) => event.key === "Enter" && add(text)}
         onBlur={() => text && add(text)}

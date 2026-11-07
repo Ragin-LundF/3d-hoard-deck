@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "../../shared/icons";
 import { NameInput } from "./name-input";
 import { useCollections, useCreateCollection } from "./queries";
+import { t, formatNumber } from "../../shared/i18n";
 
 type Props = { current: number | null; onOpen: (id: number) => void; onError: (message: string) => void };
 
@@ -13,27 +14,27 @@ export function CollectionsNav({ current, onOpen, onError }: Props) {
   return (
     <div className="sec">
       <h3 className="with-action">
-        Collections
-        <button className="tiny" onClick={() => setCreating(true)} aria-label="New collection" title="New collection"><Icon name="plus" /></button>
+        {t("Collections")}
+        <button className="tiny" onClick={() => setCreating(true)} aria-label={t("New collection")} title={t("New collection")}><Icon name="plus" /></button>
       </h3>
       {collections.data?.map((collection) => (
         <button key={collection.id} className={`nav${current === collection.id ? " on" : ""}`} onClick={() => onOpen(collection.id)}>
           <Icon name={collection.query ? "search" : "box"} />
           <span className="lbl">{collection.name}</span>
-          {collection.count !== null && <span className="n">{collection.count.toLocaleString()}</span>}
+          {collection.count !== null && <span className="n">{formatNumber(collection.count)}</span>}
         </button>
       ))}
       {creating && (
         <NameInput
-          placeholder="Collection name"
+          placeholder={t("Collection name")}
           onSubmit={(name) => {
             setCreating(false);
-            create.mutate({ name, query: null });
+            create.mutate({ name });
           }}
           onCancel={() => setCreating(false)}
         />
       )}
-      {!creating && collections.data?.length === 0 && <p className="hint">Group models you want to print together.</p>}
+      {!creating && collections.data?.length === 0 && <p className="hint">{t("Group models you want to print together.")}</p>}
     </div>
   );
 }

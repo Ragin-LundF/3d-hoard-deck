@@ -9,7 +9,8 @@ export function useCollections() {
 export function useCreateCollection(onError: (message: string) => void, onCreated?: (id: number) => void) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, query }: { name: string; query: string | null }) => unwrap(commands.createCollection(name, query)),
+    mutationFn: ({ name, query = null, library = null, scope = null }: { name: string; query?: string | null; library?: number | null; scope?: string | null }) =>
+      unwrap(commands.createCollection(name, query, library, scope)),
     onSuccess: (collection) => {
       void queryClient.invalidateQueries({ queryKey: ["collections"] });
       onCreated?.(collection.id);
