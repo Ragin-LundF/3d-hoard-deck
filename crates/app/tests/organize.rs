@@ -293,3 +293,48 @@ fn scanning_one_folder_updates_it_and_leaves_the_rest_alone() {
     assert_eq!(titles("later"), 0, "B was not scanned");
     assert_eq!(titles("kept"), 1, "B keeps what it had");
 }
+
+#[test]
+fn a_chosen_folder_cover_works_read_only_and_is_copied_where_writing_is_allowed() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Creator/Dragon/dragon.stl", "Creator/Orc/orc.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    fs::write(root.join("Creator/Dragon/dragon.jpg"), b"detected").expect("image");
+    fs::write(root.join("Creator/Orc/orc_render.png"), b"chosen").expect("image");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let creator = RelPath::new("Creator").expect("valid");
+    let chosen = RelPath::new("Creator/Orc/orc_render.png").expect("valid");
+    let cover = || {
+        let folders = app.get_folder_children.execute(library.id, &RelPath::root()).expect("folders");
+        folders.into_iter().find(|folder| folder.path == creator).expect("Creator").cover
+    };
+    assert_eq!(cover(), Some(RelPath::new("Creator/Dragon/dragon.jpg").expect("valid")), "detected");
+
+    assert_eq!(app.set_folder_cover.execute(library.id, &creator, Some(&chosen)).expect("choose"), None);
+    assert_eq!(cover(), Some(chosen.clone()), "read-only: kept in the index");
+    assert!(!root.join("Creator/folder.png").exists(), "nothing written into a read-only library");
+    assert!(
+        app.set_folder_cover
+            .execute(library.id, &creator, Some(&RelPath::new("Creator/Orc/orc.stl").expect("valid")))
+            .is_err()
+    );
+
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexOnly)
+        .expect("write");
+    let copy = app.set_folder_cover.execute(library.id, &creator, Some(&chosen)).expect("choose again");
+    assert_eq!(copy, Some(RelPath::new("Creator/folder.png").expect("valid")));
+    assert_eq!(fs::read(root.join("Creator/folder.png")).expect("copied"), b"chosen");
+    assert_eq!(cover(), copy, "the copy is the cover");
+
+    app.set_folder_cover.execute(library.id, &creator, None).expect("back to automatic");
+    assert_eq!(cover(), copy, "folder.png is now the folder's own picture, so it stays the detected cover");
+}

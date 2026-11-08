@@ -7,7 +7,7 @@ use hoarddeck_domain::ModelId;
 
 use super::AppState;
 use crate::dto::{
-    DuplicateGroupDto, ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, TagCountDto,
+    DuplicateGroupDto, ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, TagCountDto, rel_path,
 };
 
 /// Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it.
@@ -72,4 +72,25 @@ pub async fn find_duplicates(app: AppState<'_>) -> Result<Vec<DuplicateGroupDto>
 pub async fn cancel_duplicates(app: AppState<'_>) -> Result<(), IpcError> {
     app.find_duplicates.cancel();
     Ok(())
+}
+
+/// Uses `image` as the picture of `folder`'s card (`None`: back to the detected one). Returns the copy's path when
+/// the library allows writing and the picture was copied into the folder as `folder.<ext>`.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_folder_cover(
+    app: AppState<'_>,
+    library: u32,
+    folder: String,
+    image: Option<String>,
+) -> Result<Option<String>, IpcError> {
+    let folder = rel_path(&folder)?;
+    let image = image.as_deref().map(rel_path).transpose()?;
+    let app = Arc::clone(&app);
+    let copy = tauri::async_runtime::spawn_blocking(move || {
+        app.set_folder_cover.execute(LibraryId(i64::from(library)), &folder, image.as_ref())
+    })
+    .await
+    .map_err(|error| IpcError { code: "internal".to_owned(), message: error.to_string(), details: None })??;
+    Ok(copy.map(|path| path.to_string()))
 }

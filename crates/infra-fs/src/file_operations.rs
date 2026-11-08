@@ -62,6 +62,15 @@ impl FileOperations for FsFileOperations {
         })
     }
 
+    fn copy_file(&self, root: &str, from: &RelPath, to: &RelPath) -> Result<u64, FileError> {
+        let canonical = fs::canonicalize(root).map_err(|error| FileError::Failed(format!("{root}: {error}")))?;
+        let source = absolute(&canonical, from);
+        inside(&canonical, &source).map_err(FileError::Failed)?;
+        let bytes = fs::read(&source).map_err(|error| FileError::Failed(format!("{from}: {error}")))?;
+        self.create_file(root, to, &bytes)?;
+        Ok(bytes.len() as u64)
+    }
+
     fn remove_empty_dir(&self, root: &str, dir: &RelPath) -> Result<(), String> {
         // `remove_dir` refuses folders that are not empty.
         fs::remove_dir(absolute(Path::new(root), dir)).map_err(|error| format!("{dir}: {error}"))

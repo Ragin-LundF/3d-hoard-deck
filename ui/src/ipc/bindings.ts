@@ -58,6 +58,11 @@ export const commands = {
 	importOrynt3d: (library: number) => typedError<ImportReportDto, IpcError_Serialize>(__TAURI_INVOKE("import_orynt3d", { library })),
 	/**  Identical model files across all libraries. Reads files, which takes a while over a network share. */
 	findDuplicates: () => typedError<DuplicateGroupDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("find_duplicates")),
+	/**
+	 *  Uses `image` as the picture of `folder`'s card (`None`: back to the detected one). Returns the copy's path when
+	 *  the library allows writing and the picture was copied into the folder as `folder.<ext>`.
+	 */
+	setFolderCover: (library: number, folder: string, image: string | null) => typedError<string | null, IpcError_Serialize>(__TAURI_INVOKE("set_folder_cover", { library, folder, image })),
 	/**  Stops a running duplicate search; it then fails with `cancelled`. */
 	cancelDuplicates: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_duplicates")),
 	/**

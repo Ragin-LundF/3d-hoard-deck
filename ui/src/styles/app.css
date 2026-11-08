@@ -286,7 +286,8 @@ body[data-ui="light"] .btn.primary { color: #fff; }
 .member-remove { position: absolute; left: 8px; top: 8px; width: 26px; height: 26px; border-radius: 7px; border: 0; background: rgba(8, 9, 12, .72); color: #D6DAE2; display: none; place-items: center; }
 .member:hover .member-remove { display: grid; }
 .member-remove svg { width: 13px; height: 13px; }
-.stage .cover-action { position: absolute; bottom: 12px; right: 12px; z-index: 2; }
+.stage .cover-actions { position: absolute; bottom: 12px; right: 12px; z-index: 2; display: flex; gap: 8px; }
+.folder-cover-menu { position: absolute; bottom: calc(100% + 6px); top: auto; right: 0; left: auto; min-width: 200px; }
 
 .folder-pictures { display: flex; gap: 8px; padding: 12px 22px 0; overflow-x: auto; flex-shrink: 0; }
 .folder-pictures button { flex: none; width: 112px; height: 84px; padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); cursor: zoom-in; }

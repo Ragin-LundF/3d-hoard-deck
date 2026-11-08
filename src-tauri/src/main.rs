@@ -76,6 +76,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::organize::rebuild_from_sidecars,
             commands::organize::import_orynt3d,
             commands::organize::find_duplicates,
+            commands::organize::set_folder_cover,
             commands::organize::cancel_duplicates,
             commands::files::move_model,
             commands::files::undo_file_operation,

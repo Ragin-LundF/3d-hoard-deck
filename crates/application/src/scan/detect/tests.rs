@@ -196,3 +196,17 @@ fn a_folder_shows_its_own_picture_before_the_covers_of_its_models() {
     let pack = catalog.folders.iter().find(|folder| folder.path == path("Pack")).expect("folder");
     assert_eq!(pack.cover, Some(path("Pack/overview.jpg")));
 }
+
+#[test]
+fn a_folder_without_any_cover_borrows_a_picture_from_below() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Creator/Dragon/dragon.stl", 100),
+            file("Creator/Orc/orc.stl", 100),
+            file("Creator/Orc/Renders/Final/orc_front.jpg", 10),
+        ],
+    );
+    let creator = catalog.folders.iter().find(|folder| folder.path == path("Creator")).expect("folder");
+    assert_eq!(creator.cover, Some(path("Creator/Orc/Renders/Final/orc_front.jpg")));
+}

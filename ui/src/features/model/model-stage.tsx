@@ -1,6 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { fileUrl, thumbUrl, type ModelFileDto_Serialize } from "../../ipc";
-import { fileName } from "../../shared/format";
+import { fileName, folderName } from "../../shared/format";
 import type { MeshFormat } from "../viewer/formats";
 import { t } from "../../shared/i18n";
 import { ZoomImage } from "./zoom-image";
@@ -22,11 +22,15 @@ type Props = {
   onUseCover: (path: string) => void;
   /** Saves a PNG of the 3D view into the model's folder; `null` when the library may not get files written. */
   onScreenshot: ((png: Blob) => Promise<void>) | null;
+  /** Folders the shown image can be the card picture of, nearest first. */
+  folders: string[];
+  onUseForFolder: (folder: string, image: string) => void;
 };
 
 /** Left column of the model page: an image, or the interactive 3D preview of one mesh file. */
-export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover, onScreenshot }: Props) {
+export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover, onScreenshot, folders, onUseForFolder }: Props) {
   const firstImage = images[0]?.path ?? null;
+  const [folderMenu, setFolderMenu] = useState(false);
   return (
     <div className="stagecol">
       <div className="stage">
@@ -39,8 +43,34 @@ export function ModelStage({ library, title, view, images, firstMesh, onView, co
         ) : (
           <span className="crumbs">{t("No preview image in this folder")}</span>
         )}
-        {view.kind === "image" && view.path && view.path !== cover && (
-          <button className="btn cover-action" onClick={() => onUseCover(view.path ?? "")}>{t("Use as cover")}</button>
+        {view.kind === "image" && view.path && (
+          <div className="cover-actions">
+            {view.path !== cover && <button className="btn" onClick={() => onUseCover(view.path ?? "")}>{t("Use as cover")}</button>}
+            {folders.length > 0 && (
+              <div className="split">
+                <button className="btn" aria-haspopup="menu" aria-expanded={folderMenu} onClick={() => setFolderMenu(!folderMenu)}>
+                  {t("Use for folder…")}
+                </button>
+                {folderMenu && (
+                  <div className="menu folder-cover-menu" role="menu">
+                    {folders.map((folder) => (
+                      <button
+                        key={folder}
+                        role="menuitem"
+                        title={folder}
+                        onClick={() => {
+                          setFolderMenu(false);
+                          onUseForFolder(folder, view.path ?? "");
+                        }}
+                      >
+                        {folderName(folder)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
         {firstMesh && (firstImage || view.kind === "image") && (
           <div className="vgroup stage-switch" role="group" aria-label={t("Preview")}>

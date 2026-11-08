@@ -359,4 +359,8 @@ export const de: Record<string, string> = {
   "Scan this folder": "Diesen Ordner scannen",
   "Reads only this folder and its subfolders again, much faster than the whole library":
     "Liest nur diesen Ordner und seine Unterordner neu, viel schneller als die ganze Bibliothek",
+  "Use for folder…": "Für Ordner verwenden…",
+  "Cover of {folder}, copied as {path}": "Titelbild von {folder}, kopiert als {path}",
+  "Cover of {folder}": "Titelbild von {folder}",
+  "Automatic cover": "Automatisches Titelbild",
 };

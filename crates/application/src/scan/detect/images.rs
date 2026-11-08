@@ -17,6 +17,11 @@ impl<'a> ImagesByDir<'a> {
         Self(by_dir)
     }
 
+    /// Every folder that holds pictures, with the best of them.
+    pub(super) fn best_per_dir(&self) -> impl Iterator<Item = (&RelPath, RelPath)> {
+        self.0.iter().filter_map(|(dir, images)| best_image(images).map(|best| (dir, best)))
+    }
+
     /// The best of the pictures lying directly in `dir`.
     pub(super) fn best_in(&self, dir: &RelPath) -> Option<RelPath> {
         best_image(self.0.get(dir)?)
@@ -36,7 +41,8 @@ impl<'a> ImagesByDir<'a> {
 }
 
 /// Image names that mark the picture meant as the cover.
-const COVER_WORDS: [&str; 4] = ["cover", "preview", "main", "render"];
+/// `folder` and `poster` are what movie libraries use, and what a copied folder cover is named.
+const COVER_WORDS: [&str; 6] = ["cover", "preview", "main", "render", "folder", "poster"];
 
 /// An image named like cover/preview/render wins, else the largest image.
 pub(super) fn best_image(images: &[&Entry]) -> Option<RelPath> {

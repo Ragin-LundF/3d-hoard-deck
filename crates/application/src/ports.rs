@@ -256,6 +256,11 @@ pub trait FileOperations: Send + Sync {
     /// # Errors
     /// Fails when the file exists, the folder leads outside the library, or the file system refuses.
     fn create_file(&self, root: &str, path: &RelPath, bytes: &[u8]) -> Result<(), FileError>;
+    /// Copies a file inside the library; fails with [`FileError::AlreadyExists`] instead of replacing one. Returns
+    /// the size of the copy.
+    /// # Errors
+    /// Fails when the target exists, a path leads outside the library, or the file system refuses.
+    fn copy_file(&self, root: &str, from: &RelPath, to: &RelPath) -> Result<u64, FileError>;
     /// Removes `dir` only when it is empty.
     /// # Errors
     /// Fails when it is not empty or cannot be removed.
@@ -413,6 +418,15 @@ pub trait ArchiveReader: Send + Sync {
     /// # Errors
     /// Fails when the archive cannot be read or a symlink leads outside the library.
     fn list(&self, root: &str, archive: &RelPath) -> Result<Vec<ArchiveEntry>, String>;
+}
+
+/// Folder covers the user picked, kept in the index so they work in read-only libraries too.
+pub trait FolderCoverStore: Send + Sync {
+    /// `None` goes back to the detected cover.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_folder_cover(&self, library: LibraryId, folder: &RelPath, cover: Option<&RelPath>)
+    -> Result<(), IndexError>;
 }
 
 /// Changes below one watched root.

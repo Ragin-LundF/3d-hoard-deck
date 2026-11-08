@@ -16,9 +16,6 @@ pub(crate) const SUMMARY_COLUMNS: &str = "m.id, m.library_id, m.path, m.folder, 
      m.released, COALESCE((SELECT f.path FROM model_files f WHERE f.model_id = m.id AND f.path = mm.cover), m.cover), m.formats, m.file_count, m.total_size, m.collection, m.marked_by_user, \
      COALESCE(mm.favorite, 0), COALESCE(mm.printed, 0)";
 
-pub(crate) const FOLDER_COLUMNS: &str =
-    "path, display_name, released, direct_models, total_models, cover, is_collection";
-
 pub(crate) fn summary(row: &Row<'_>) -> rusqlite::Result<ModelSummary> {
     Ok(ModelSummary {
         id: ModelId(row.get(0)?),
@@ -39,6 +36,7 @@ pub(crate) fn summary(row: &Row<'_>) -> rusqlite::Result<ModelSummary> {
     })
 }
 
+/// Columns: path, display name, released, direct and total models, cover, collection flag.
 pub(crate) fn folder(row: &Row<'_>) -> rusqlite::Result<Folder> {
     Ok(Folder {
         path: rel_path(row, 0)?,

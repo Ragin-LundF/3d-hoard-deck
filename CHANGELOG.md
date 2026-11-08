@@ -6,6 +6,11 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Folder covers like a movie library:** a folder without pictures of its own borrows the nearest picture from its
+  subfolders. On a model page, **Use for folder…** makes the shown image the card picture of its folder or any
+  folder above. In libraries that allow writing it is also copied into that folder as `folder.<ext>` (never
+  overwriting); in read-only libraries the choice is kept in the index. **Automatic cover** in the folder's
+  right-click menu goes back.
 - **Scan this folder:** a button in the folder header and an entry in the folder's right-click menu read just that
   folder and its subfolders again. Much faster than a full scan in big libraries; the rest of the library stays as
   it is, and the full scan is still there.

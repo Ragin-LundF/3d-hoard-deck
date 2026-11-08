@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
-use hoarddeck_application::ports::ModelRepository;
+use hoarddeck_application::ports::{FolderCoverStore, ModelRepository};
 use hoarddeck_application::search::SearchDocument;
 use hoarddeck_application::{IndexError, ModelDetail, ModelSummary};
 use hoarddeck_domain::{Catalog, Folder, LibraryId, Model, ModelId, RelPath};
@@ -138,4 +138,28 @@ fn insert_folder(transaction: &Transaction<'_>, library: LibraryId, folder: &Fol
             folder.is_collection,
         ])?;
     Ok(())
+}
+
+impl FolderCoverStore for SqliteIndex {
+    fn set_folder_cover(
+        &self,
+        library: LibraryId,
+        folder: &RelPath,
+        cover: Option<&RelPath>,
+    ) -> Result<(), IndexError> {
+        self.write(|connection| {
+            match cover {
+                Some(cover) => connection.execute(
+                    "INSERT INTO folder_covers (library_id, path, cover) VALUES (?1, ?2, ?3)
+                     ON CONFLICT (library_id, path) DO UPDATE SET cover = excluded.cover",
+                    params![library.0, folder.as_str(), cover.as_str()],
+                ),
+                None => connection.execute(
+                    "DELETE FROM folder_covers WHERE library_id = ?1 AND path = ?2",
+                    params![library.0, folder.as_str()],
+                ),
+            }
+            .map(|_| ())
+        })
+    }
 }

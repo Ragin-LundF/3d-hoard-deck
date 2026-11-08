@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import { commands, describeError, unwrap, type LibraryDto, type ModelFileDto_Serialize } from "../../ipc";
+import { folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import { viewerFormat, type MeshFormat } from "../viewer/formats";
 import { ModelDetails } from "./model-details";
@@ -23,6 +24,12 @@ type Props = {
 function absolutePath(root: string, path: string): string {
   const separator = root.includes("\\") ? "\\" : "/";
   return `${root.replace(/[\\/]+$/, "")}${separator}${path.split("/").join(separator)}`;
+}
+
+/** `a/b/c` → `["a/b/c", "a/b", "a"]`: the folders a picture of this model can stand for. */
+function parentFolders(folder: string): string[] {
+  const parts = folder.split("/").filter(Boolean);
+  return parts.map((_, index) => parts.slice(0, parts.length - index).join("/"));
 }
 
 function firstViewable(files: ModelFileDto_Serialize[]): { path: string; format: MeshFormat } | null {
@@ -53,6 +60,15 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
   const reveal = (path: string) => library && void revealItemInDir(absolutePath(library.root, path));
   const viewing = view.kind === "mesh" ? view.path : null;
   const saveMeta = (change: Partial<typeof data.meta>) => saveMetaFor(data, change);
+  const useForFolder = async (folder: string, image: string) => {
+    try {
+      const copy = await unwrap(commands.setFolderCover(summary.library, folder, image));
+      await queryClient.invalidateQueries();
+      onMessage(copy ? t("Cover of {folder}, copied as {path}", { folder: folderName(folder), path: copy }) : t("Cover of {folder}", { folder: folderName(folder) }));
+    } catch (error) {
+      onMessage(describeError(error));
+    }
+  };
   // Saved next to the shown mesh as `preview_<name>.png`; only that folder is updated, and it becomes the cover by name.
   const saveScreenshot = async (png: Blob) => {
     if (view.kind !== "mesh") return;
@@ -83,6 +99,8 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
           cover={summary.cover}
           onUseCover={(path) => saveMeta({ cover: path })}
           onScreenshot={library && library.access !== "readOnly" ? saveScreenshot : null}
+          folders={parentFolders(summary.folder)}
+          onUseForFolder={(folder, image) => void useForFolder(folder, image)}
         />
         <div className="info">
           <ModelHeader
