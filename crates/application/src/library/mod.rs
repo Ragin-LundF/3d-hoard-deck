@@ -7,3 +7,4 @@ mod update_library_settings;
 pub use add_library::AddLibrary;
 pub use move_index_location::{ExistingIndex, MoveIndexLocation};
 pub use update_library_settings::UpdateLibrarySettings;
+pub(crate) use update_library_settings::writes_sidecars;

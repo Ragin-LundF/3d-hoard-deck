@@ -97,6 +97,9 @@ impl ModelRepository for Store {
     fn child_folders(&self, _: LibraryId, _: &RelPath) -> Result<Vec<Folder>, IndexError> {
         Ok(Vec::new())
     }
+    fn loose_images(&self, _: LibraryId, _: &RelPath) -> Result<Vec<RelPath>, IndexError> {
+        Ok(Vec::new())
+    }
 }
 
 struct NoSearch;

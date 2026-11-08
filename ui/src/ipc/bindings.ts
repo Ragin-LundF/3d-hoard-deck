@@ -230,12 +230,16 @@ export type FolderPageDto = FolderPageDto_Serialize | FolderPageDto_Deserialize;
 
 export type FolderPageDto_Deserialize = {
 	folders: FolderDto_Deserialize[],
+	/**  Pictures in the folder that belong to no model, relative to the library. */
+	images: string[],
 	models: ModelSummaryDto_Deserialize[],
 	next?: CursorDto | null,
 };
 
 export type FolderPageDto_Serialize = {
 	folders: FolderDto_Serialize[],
+	/**  Pictures in the folder that belong to no model, relative to the library. */
+	images: string[],
 	models: ModelSummaryDto_Serialize[],
 	next: CursorDto | null,
 };
@@ -421,6 +425,8 @@ export type PresetProposalDto = {
 export type RebuildReportDto = {
 	restored: number,
 	unreadable: number,
+	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
+	rulesRestored: number,
 };
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */

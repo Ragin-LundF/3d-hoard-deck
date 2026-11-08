@@ -19,13 +19,32 @@ pub(super) fn build_models(
     rules: &CompiledRules,
 ) -> Vec<Model> {
     let has_nested_models: HashSet<RelPath> = groups.keys().flat_map(RelPath::ancestors).collect();
+    // Names of the model folders inside each folder: `Release.jpg` belongs to `Release/`, not to a loose file.
+    let mut model_folders: HashMap<RelPath, HashSet<String>> = HashMap::new();
+    for path in groups.keys() {
+        if let Some(parent) = path.parent() {
+            model_folders.entry(parent).or_default().insert(path.name().to_lowercase());
+        }
+    }
     let mut models = Vec::with_capacity(groups.len());
     for (path, group) in groups {
         let splits = path.is_root() || has_nested_models.contains(&path) || rules.is_collection(&path);
         if splits && !group.marked {
-            models.extend(
-                group.files.iter().filter(|file| file.kind.is_model_file()).map(|file| file_model(file, images)),
-            );
+            let loose: Vec<&Owned<'_>> = group.files.iter().filter(|file| file.kind.is_model_file()).collect();
+            // A single loose model file next to model folders gets the folder's other pictures, so they are not lost.
+            let pictures: Vec<&Owned<'_>> = match loose[..] {
+                [_] => group
+                    .files
+                    .iter()
+                    .filter(|file| file.kind == FileKind::Image)
+                    .filter(|file| {
+                        let taken = model_folders.get(&path);
+                        !taken.is_some_and(|names| names.contains(&stem(file.entry.path.name()).to_lowercase()))
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            models.extend(loose.into_iter().map(|file| file_model(file, &pictures, images)));
         } else {
             models.push(folder_model(path, group.marked, group.files, images));
         }
@@ -81,14 +100,29 @@ fn folder_model(path: RelPath, marked_by_user: bool, owned: Vec<Owned<'_>>, imag
     }
 }
 
-fn file_model(file: &Owned<'_>, images: &ImagesByDir<'_>) -> Model {
+/// One loose model file; `pictures` are further images that belong to it.
+fn file_model(file: &Owned<'_>, pictures: &[&Owned<'_>], images: &ImagesByDir<'_>) -> Model {
     let path = file.entry.path.clone();
     let folder = path.parent().unwrap_or_default();
+    let named = images.with_stem(&folder, model_stem(path.name()));
+    let mut files: Vec<ModelFile> = once(file)
+        .chain(pictures.iter().copied())
+        .map(|owned| ModelFile {
+            path: owned.entry.path.clone(),
+            kind: owned.kind,
+            size: owned.entry.size,
+            variant: None,
+        })
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    files.dedup_by(|a, b| a.path == b.path);
+    let owned_pictures: Vec<Owned<'_>> =
+        pictures.iter().map(|owned| Owned { entry: owned.entry, kind: owned.kind, variant: None }).collect();
     Model {
         title: file_title(path.name()),
         released: released_at(&folder),
-        cover: images.with_stem(&folder, model_stem(path.name())),
-        files: vec![ModelFile { path: path.clone(), kind: file.kind, size: file.entry.size, variant: None }],
+        cover: named.or_else(|| cover_from(&owned_pictures)),
+        files,
         collection: None,
         marked_by_user: false,
         kind: ModelKind::File,

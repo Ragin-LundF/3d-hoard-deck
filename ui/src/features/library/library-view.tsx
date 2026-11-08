@@ -7,6 +7,7 @@ import { Breadcrumbs } from "../folders/breadcrumbs";
 import { NameInput } from "../collections/name-input";
 import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
+import { FolderPictures } from "./folder-pictures";
 import { useFolderPage, useSearch } from "./queries";
 import { VirtualGrid } from "./virtual-grid";
 import { t, plural } from "../../shared/i18n";
@@ -103,6 +104,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
           </label>
         </div>
       </div>
+      {!searching && !route.all && <FolderPictures library={library.id} images={browse.data?.pages[0]?.images ?? []} />}
       {active.isError ? (
         <div className="empty err">{describeError(active.error)}</div>
       ) : active.isPending && (searching || browse.fetchStatus !== "idle") ? (

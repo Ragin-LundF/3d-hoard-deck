@@ -10,7 +10,7 @@ use hoarddeck_domain::{
 };
 
 use crate::browse::{BrowsePage, BrowseRequest};
-use crate::scan::{CompiledRules, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
+use crate::scan::{CompiledRules, FolderRule, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
 use crate::search::{SearchDocument, SearchHits, SearchQuery};
 use crate::{IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
 
@@ -100,6 +100,10 @@ pub trait ModelRepository: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be read.
     fn child_folders(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<Folder>, IndexError>;
+    /// Images directly in `folder` that belong to no model, sorted by path.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn loose_images(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<RelPath>, IndexError>;
 }
 
 pub trait SearchIndex: Send + Sync {
@@ -337,6 +341,14 @@ pub trait SidecarFiles: Send + Sync {
     /// # Errors
     /// Fails when the file exists but cannot be read or parsed.
     fn read(&self, root: &str, file: &RelPath) -> Result<Option<(ModelMeta, i64)>, String>;
+    /// The library's folder rules (one model, collection, accepted suggestions), in the `.3dhoarddeck` at its root.
+    /// # Errors
+    /// Fails when the file cannot be written.
+    fn write_folder_rules(&self, root: &str, rules: &[FolderRule]) -> Result<(), String>;
+    /// `None` when the root has no file or the file holds no rules.
+    /// # Errors
+    /// Fails when the file exists but cannot be read or parsed.
+    fn read_folder_rules(&self, root: &str) -> Result<Option<Vec<FolderRule>>, String>;
 }
 
 /// What `Orynt3D` stored for a model folder.

@@ -87,6 +87,7 @@ impl App {
             models: index.clone(),
             search: search.clone(),
             locks: locks.clone(),
+            sidecars: Arc::new(SidecarFileStore),
         });
         let search_models = Arc::new(SearchModels { search: search.clone(), models: index.clone() });
         let update_model_meta = Arc::new(UpdateModelMeta {
@@ -125,7 +126,7 @@ impl App {
             scan_library,
             set_folder_role: SetFolderRole { editor: editor.clone() },
             folder_rules: FolderRules { editor: editor.clone() },
-            collection_presets: CollectionPresets { entries: index.clone(), editor },
+            collection_presets: CollectionPresets { entries: index.clone(), editor: editor.clone() },
             browse_folder: BrowseFolder { models: index.clone() },
             get_folder_children: GetFolderChildren { models: index.clone() },
             list_archive: ListArchive { libraries: index.clone(), archives: Arc::new(ZipArchives) },
@@ -152,6 +153,7 @@ impl App {
                 sidecars: Arc::new(SidecarFileStore),
                 search: search.clone(),
                 locks: locks.clone(),
+                editor: editor.clone(),
             },
             list_tags: ListTags { meta: index.clone() },
             collections: ManageCollections {
@@ -184,6 +186,7 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
+        sidecars: Arc::new(SidecarFileStore),
     };
     let undo = UndoFileOperation {
         libraries: index.clone(),
@@ -191,6 +194,7 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
+        sidecars: Arc::new(SidecarFileStore),
     };
     let screenshot = SaveScreenshot {
         libraries: index.clone(),

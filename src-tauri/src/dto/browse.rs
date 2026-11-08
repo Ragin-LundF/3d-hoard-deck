@@ -78,6 +78,8 @@ pub struct BrowseRequestDto {
 #[serde(rename_all = "camelCase")]
 pub struct FolderPageDto {
     pub folders: Vec<FolderDto>,
+    /// Pictures in the folder that belong to no model, relative to the library.
+    pub images: Vec<String>,
     pub models: Vec<ModelSummaryDto>,
     pub next: Option<CursorDto>,
 }
@@ -86,6 +88,7 @@ impl From<FolderPage> for FolderPageDto {
     fn from(page: FolderPage) -> Self {
         Self {
             folders: page.folders.into_iter().map(Into::into).collect(),
+            images: page.images.iter().map(ToString::to_string).collect(),
             models: page.page.models.into_iter().map(Into::into).collect(),
             next: page.page.next.map(Into::into),
         }

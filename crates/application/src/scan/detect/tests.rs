@@ -161,3 +161,23 @@ fn a_saved_screenshot_is_the_cover_of_its_single_file_model() {
     let gear = catalog.models.iter().find(|model| model.title == "gear").expect("gear");
     assert_eq!(gear.cover, Some(path("Makerworld/preview_gear.png")));
 }
+
+#[test]
+fn a_single_loose_file_next_to_model_folders_keeps_the_folders_pictures() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Hex3D/Helmet/helmet_uncut.stl", 100),
+            file("Hex3D/Helmet/battlestar1.png", 10),
+            file("Hex3D/Helmet/cr10_cut.png", 10),
+            file("Hex3D/Helmet/cr10_cut/part1.stl", 50),
+            file("Hex3D/Helmet/ender3_cuts/part1.stl", 50),
+        ],
+    );
+    let helmet = catalog.models.iter().find(|model| model.path == path("Hex3D/Helmet/helmet_uncut.stl")).expect("file");
+    let names: Vec<&str> = helmet.files.iter().map(|file| file.path.name()).collect();
+    assert_eq!(names, ["battlestar1.png", "helmet_uncut.stl"], "the cut folder's own picture stays with it");
+    assert_eq!(helmet.cover, Some(path("Hex3D/Helmet/battlestar1.png")));
+    let cut = catalog.models.iter().find(|model| model.path == path("Hex3D/Helmet/cr10_cut")).expect("folder");
+    assert_eq!(cut.cover, Some(path("Hex3D/Helmet/cr10_cut.png")));
+}

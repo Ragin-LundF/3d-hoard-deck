@@ -225,8 +225,8 @@ export const de: Record<string, string> = {
   "Metadata files need write access: choose “Write metadata files only” above first.":
     "Metadaten-Dateien brauchen Schreibzugriff: wähle oben zuerst „Nur Metadaten-Dateien schreiben“.",
   "Rebuild from metadata files": "Aus Metadaten-Dateien wiederherstellen",
-  "Reads the .3dhoarddeck files in this library. Where a file is newer than the values in the index, it replaces them: names, tags, marks and notes. Useful after moving to a new computer. Only reads the folders.":
-    "Liest die .3dhoarddeck-Dateien dieser Bibliothek. Ist eine Datei neuer als die Werte im Index, ersetzt sie diese: Namen, Tags, Markierungen und Notizen. Praktisch nach dem Umzug auf einen neuen Computer. Liest die Ordner nur.",
+  "Reads the .3dhoarddeck files in this library. Where a file is newer than the values in the index, it replaces them: names, tags, marks and notes, plus the folder rules (one model, collection). Useful after moving to a new computer. Only reads the folders.":
+    "Liest die .3dhoarddeck-Dateien dieser Bibliothek. Ist eine Datei neuer als die Werte im Index, ersetzt sie diese: Namen, Tags, Markierungen und Notizen sowie die Ordnerregeln (ein Modell, Sammlung). Praktisch nach dem Umzug auf einen neuen Computer. Liest die Ordner nur.",
   "Rebuild": "Wiederherstellen",
   "Import from Orynt3D": "Aus Orynt3D importieren",
   "Takes names, notes and tags from Orynt3D's config.orynt3d files. Only reads them; your own entries here are kept, and running it again adds nothing twice.":
@@ -350,4 +350,10 @@ export const de: Record<string, string> = {
   "Front": "Vorne",
   "Side": "Seite",
   "Top": "Oben",
+  "Restored {count} folder rule.": "{count} Ordnerregel wiederhergestellt.",
+  "Restored {count} folder rules.": "{count} Ordnerregeln wiederhergestellt.",
+  "Pictures in this folder": "Bilder in diesem Ordner",
+  "Previous picture": "Vorheriges Bild",
+  "Next picture": "Nächstes Bild",
+  "Close": "Schließen",
 };

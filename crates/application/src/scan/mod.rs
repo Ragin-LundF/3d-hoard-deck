@@ -23,6 +23,7 @@ pub use library_locks::{LibraryLock, LibraryLocks};
 pub use presets::{CollectionPresets, PRESETS, Preset, PresetProposal};
 use regroup::regroup;
 pub use rule_editor::RuleEditor;
+pub(crate) use rule_editor::save_rules_file;
 pub use scan_library::{ScanLibrary, ScanMode, ScanReport};
 pub use scan_rules::{FolderRole, FolderRule, ScanRules};
 pub use set_folder_role::SetFolderRole;

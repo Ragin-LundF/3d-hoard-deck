@@ -92,8 +92,9 @@ Changing a role regroups the library within seconds; the folders are not read ag
   page offers **Rename on disk…** and **Move to folder…**. Names, tags, notes and collections move along, an
   existing file or folder is never overwritten, and **Settings › Recent file changes** undoes any change.
 - **Optional metadata files.** Under **Settings › Libraries** you can allow metadata files. Then names, tags,
-  marks and notes are also stored in a small `.3dhoarddeck` file beside each model, and **Rebuild from metadata
-  files** restores everything from the folders, for example on a new computer.
+  marks and notes are also stored in a small `.3dhoarddeck` file beside each model, the folder roles in one at the
+  library root, and **Rebuild from metadata files** restores everything from the folders, for example on a new
+  computer.
 - **All app data lives in one folder**, by default `~/.3dhoarddeck` (`%USERPROFILE%\.3dhoarddeck` on Windows):
   the database, the search index and the cover thumbnails. Delete it to start fresh; your library is not
   affected. Move it under **Settings › Index**. It must be on a local disk: network shares and cloud-sync

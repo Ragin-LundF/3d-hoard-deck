@@ -69,4 +69,6 @@ pub struct ImportReportDto {
 pub struct RebuildReportDto {
     pub restored: u32,
     pub unreadable: u32,
+    /// Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`.
+    pub rules_restored: u32,
 }

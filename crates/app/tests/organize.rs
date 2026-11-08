@@ -187,3 +187,72 @@ fn members_that_vanish_for_a_while_come_back_and_a_lost_cover_falls_back() {
         "falls back to the detected cover"
     );
 }
+
+#[test]
+fn folder_rules_survive_a_lost_index_through_the_metadata_files() {
+    use hoarddeck_application::scan::FolderRole;
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let root = library_dir.path();
+    fs::create_dir_all(root.join("Minis/Dragon/Base")).expect("dirs");
+    fs::write(root.join("Minis/Dragon/dragon.stl"), vec![0_u8; 134]).expect("stl");
+    fs::write(root.join("Minis/Dragon/Base/base.stl"), vec![0_u8; 134]).expect("stl");
+    let dragon = RelPath::new("Minis/Dragon").expect("valid");
+    {
+        let index_dir = tempfile::tempdir().expect("index");
+        let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+        let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+        app.update_library_settings
+            .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexAndSidecar)
+            .expect("metadata files");
+        app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+        app.set_folder_role.execute(library.id, &dragon, Some(FolderRole::Model)).expect("mark");
+        assert!(root.join(".3dhoarddeck").exists(), "the rules file is written at the library root");
+    }
+    // A new computer: a fresh index over the same folders.
+    let index_dir = tempfile::tempdir().expect("new index");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
+    assert_eq!(report.rules_restored, 1);
+    let rules = app.folder_rules.list(library.id).expect("rules");
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    let request = SearchRequest { text: "dragon".to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+    let found = app.search_models.execute(&request).expect("search").models;
+    assert_eq!(found.len(), 1, "the dragon and its base are one model again");
+    assert_eq!(found[0].path, dragon);
+}
+
+#[test]
+fn pictures_of_a_folder_without_its_own_model_files_are_shown_on_its_page() {
+    use hoarddeck_application::browse::{BrowseRequest, Sort};
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Pack/A/a.stl", "Pack/B/b.stl", "Pack/Solo/solo.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    fs::write(root.join("Pack/overview.jpg"), b"jpg").expect("loose picture");
+    fs::write(root.join("Pack/A.png"), b"png").expect("cover of A");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    let page = app
+        .browse_folder
+        .execute(&BrowseRequest {
+            library: library.id,
+            folder: RelPath::new("Pack").expect("valid"),
+            recursive: false,
+            sort: Sort::Name,
+            cursor: None,
+            limit: 50,
+        })
+        .expect("browse");
+    assert_eq!(page.images, [RelPath::new("Pack/overview.jpg").expect("valid")], "A.png is A's cover, not loose");
+}

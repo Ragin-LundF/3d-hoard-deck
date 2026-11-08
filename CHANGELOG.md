@@ -12,6 +12,14 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
   do not allow it.
 - **Turn buttons** in the 3D preview: ▲ ◀ ▶ ▼ turn the view in 15° steps, and Front, Side and Top look at the model
   straight on. The mouse works as before.
+- Folder rules (one model, collection, accepted suggestions) are saved in the `.3dhoarddeck` at the library root
+  when metadata files are on, and **Rebuild from metadata files** restores them on a new computer.
+- A folder's own pictures that belong to no model (for example an overview next to model subfolders) are shown
+  above its cards and open in a viewer with zoom, without having to mark the folder as one model.
+
+### Fixed
+- Pictures lying next to a single model file in a folder that also holds model subfolders were not shown anywhere;
+  they now belong to that file's model (for example `battlestar1.png` next to `Hex3d_CylonHelmet_Uncut.stl`).
 
 ## [0.1.0] - 2026-11-07
 

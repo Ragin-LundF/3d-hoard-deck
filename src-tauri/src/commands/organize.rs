@@ -35,7 +35,11 @@ pub async fn rebuild_from_sidecars(app: AppState<'_>, library: u32) -> Result<Re
             .await
             .map_err(|error| IpcError { code: "internal".to_owned(), message: error.to_string(), details: None })??;
     let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
-    Ok(RebuildReportDto { restored: count(report.restored), unreadable: count(report.unreadable) })
+    Ok(RebuildReportDto {
+        restored: count(report.restored),
+        unreadable: count(report.unreadable),
+        rules_restored: count(report.rules_restored),
+    })
 }
 
 /// Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again).

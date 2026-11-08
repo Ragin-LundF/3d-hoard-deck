@@ -7,7 +7,8 @@ use crate::organize::sidecar_path;
 use crate::ports::{LibraryRepository, MetaStore, ModelRepository, SidecarFiles};
 
 /// Changes what the app may write into a library: nothing, metadata files only, or also renames and moves.
-/// Switching metadata files on writes them for every model that already has names, tags, marks or notes.
+/// Switching metadata files on writes them for every model that already has names, tags, marks or notes, and the
+/// folder rules into the `.3dhoarddeck` at the library root.
 pub struct UpdateLibrarySettings {
     pub libraries: Arc<dyn LibraryRepository>,
     pub models: Arc<dyn ModelRepository>,
@@ -35,6 +36,12 @@ impl UpdateLibrarySettings {
     }
 
     fn backfill(&self, library: &Library) -> Result<usize, AppError> {
+        let rules = self.libraries.scan_rules(library.id)?.folder_rules;
+        if !rules.is_empty() {
+            self.sidecars
+                .write_folder_rules(&library.root, &rules)
+                .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
+        }
         let mut written = 0;
         for document in self.models.search_documents(library.id)? {
             let meta = self.meta.meta(library.id, &document.path)?;
@@ -52,6 +59,7 @@ impl UpdateLibrarySettings {
     }
 }
 
-fn writes_sidecars(settings: LibrarySettings) -> bool {
+/// Whether the library keeps `.3dhoarddeck` files beside its models (and its folder rules at its root).
+pub(crate) fn writes_sidecars(settings: LibrarySettings) -> bool {
     settings.metadata() == MetadataStorage::IndexAndSidecar && settings.access() != AccessMode::ReadOnly
 }

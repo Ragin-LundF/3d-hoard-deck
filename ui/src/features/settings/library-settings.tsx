@@ -32,9 +32,10 @@ export function LibrarySettings({ library, scan, onError }: Props) {
     mutationFn: () => unwrap(commands.rebuildFromSidecars(library.id)),
     onSuccess: (report) => {
       void queryClient.invalidateQueries();
-      onError(report.restored === 0 && report.unreadable === 0
+      const rules = report.rulesRestored > 0 ? " " + plural(report.rulesRestored, "Restored {count} folder rule.", "Restored {count} folder rules.") : "";
+      onError(report.restored === 0 && report.unreadable === 0 && report.rulesRestored === 0
         ? t("No metadata files were found in this library.")
-        : t("Restored {count} models.", { count: report.restored }) + unreadable(report.unreadable));
+        : t("Restored {count} models.", { count: report.restored }) + rules + unreadable(report.unreadable));
     },
     onError: (error) => onError(describeError(error)),
   });
@@ -131,7 +132,7 @@ export function LibrarySettings({ library, scan, onError }: Props) {
       <div className="prow2">
         <div className="t">
           <b>{t("Rebuild from metadata files")}</b>
-          <span>{t("Reads the .3dhoarddeck files in this library. Where a file is newer than the values in the index, it replaces them: names, tags, marks and notes. Useful after moving to a new computer. Only reads the folders.")}</span>
+          <span>{t("Reads the .3dhoarddeck files in this library. Where a file is newer than the values in the index, it replaces them: names, tags, marks and notes, plus the folder rules (one model, collection). Useful after moving to a new computer. Only reads the folders.")}</span>
         </div>
         <button className="btn" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>{t("Rebuild")}</button>
       </div>
