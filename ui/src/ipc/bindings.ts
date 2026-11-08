@@ -66,6 +66,11 @@ export const commands = {
 	undoFileOperation: (id: number) => typedError<FileChangeDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("undo_file_operation", { id })),
 	/**  The latest renames and moves across all libraries, newest first. */
 	fileJournal: (limit: number) => typedError<JournalEntryDto[], IpcError_Serialize>(__TAURI_INVOKE("file_journal", { limit })),
+	/**
+	 *  Writes a PNG of the 3D preview of `file` next to it as `preview_<name>.png` (libraries that may write files). The bytes travel as a
+	 *  JSON number array, fine for a screenshot of a few MB.
+	 */
+	saveScreenshot: (id: number, file: string, png: number[]) => typedError<ScreenshotDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("save_screenshot", { id, file, png })),
 	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
 	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
 	/**  Collection presets that match this library's folders and are not in use yet. */
@@ -260,7 +265,7 @@ export type IpcError_Deserialize = {
 	/**
 	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
 	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
-	 *  `not_managed`), the path, name or library concerned.
+	 *  `not_managed`, `read_only`), the path, name or library concerned.
 	 */
 	details?: string | null,
 };
@@ -275,7 +280,7 @@ export type IpcError_Serialize = {
 	/**
 	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
 	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
-	 *  `not_managed`), the path, name or library concerned.
+	 *  `not_managed`, `read_only`), the path, name or library concerned.
 	 */
 	details: string | null,
 };
@@ -447,6 +452,21 @@ export type ScanProgressEvent_Serialize = {
 	unreadableExamples: string[],
 	/**  Set when `phase` is `failed`; same codes as command errors. */
 	error: IpcError_Serialize | null,
+};
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto = ScreenshotDto_Serialize | ScreenshotDto_Deserialize;
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto_Deserialize = {
+	path: string,
+	warning?: string | null,
+};
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto_Serialize = {
+	path: string,
+	warning: string | null,
 };
 
 export type SearchRequestDto = SearchRequestDto_Serialize | SearchRequestDto_Deserialize;

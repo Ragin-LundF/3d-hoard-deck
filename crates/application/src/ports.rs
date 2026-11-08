@@ -236,6 +236,10 @@ pub trait FileOperations: Send + Sync {
     /// # Errors
     /// Fails when the check cannot be made.
     fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String>;
+    /// Writes a new file; fails with [`FileError::AlreadyExists`] instead of replacing one.
+    /// # Errors
+    /// Fails when the file exists, the folder leads outside the library, or the file system refuses.
+    fn create_file(&self, root: &str, path: &RelPath, bytes: &[u8]) -> Result<(), FileError>;
     /// Removes `dir` only when it is empty.
     /// # Errors
     /// Fails when it is not empty or cannot be removed.

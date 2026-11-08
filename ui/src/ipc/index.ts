@@ -42,6 +42,7 @@ function refusal(code: string, subject: string): string | undefined {
     case "trailing_dot_or_space": return t("“{name}” ends with a dot or a space, which Windows and network shares cannot store.", { name: subject });
     case "reserved_name": return t("“{name}” is reserved by Windows for devices. Choose another name.", { name: subject });
     case "smart_collection": return t("A smart collection fills itself from its search; models cannot be added by hand.");
+    case "read_only": return t("{library} does not allow writing files. Change it under Settings › Libraries.", { library: subject });
     case "not_managed": return t("{library} does not allow renaming or moving files. Change it under Settings › Libraries.", { library: subject });
     default: return undefined;
   }

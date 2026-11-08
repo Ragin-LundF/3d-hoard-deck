@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use hoarddeck_application::AppError;
 use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
-use hoarddeck_application::files::{MoveModel, ReconcileJournal, UndoFileOperation};
+use hoarddeck_application::files::{MoveModel, ReconcileJournal, SaveScreenshot, UndoFileOperation};
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
     FindDuplicates, ImportOrynt3d, ListTags, ManageCollections, RebuildFromSidecars, UpdateModelMeta,
@@ -36,6 +36,7 @@ pub struct App {
     pub auto_rescan: Arc<AutoRescan>,
     pub move_model: MoveModel,
     pub undo_file_operation: UndoFileOperation,
+    pub save_screenshot: SaveScreenshot,
     /// Recent renames and moves, for the undo list.
     pub file_journal: Arc<dyn FileJournal>,
     pub set_folder_role: SetFolderRole,
@@ -97,7 +98,7 @@ impl App {
             locks: locks.clone(),
         });
         let slicers = Arc::new(ManageSlicers { store: index.clone(), detector: Arc::new(InstalledSlicers) });
-        let (move_model, undo_file_operation) = file_operations(&index, &locks, &scan_library);
+        let (move_model, undo_file_operation, save_screenshot) = file_operations(&index, &locks, &scan_library);
         Ok(Self {
             index_dir: index_dir.clone(),
             libraries: index.clone(),
@@ -118,6 +119,7 @@ impl App {
             add_library: AddLibrary { libraries: index.clone(), index_dir: index_dir.clone() },
             move_model,
             undo_file_operation,
+            save_screenshot,
             file_journal: index.clone(),
             auto_rescan: auto_rescan(&index, &scan_library),
             scan_library,
@@ -163,12 +165,12 @@ impl App {
     }
 }
 
-/// Rename, move and undo share the journal, the locks and the rescan afterwards. Settles changes a crash interrupted.
+/// Rename, move, undo and screenshots share the locks and the rescan afterwards. Settles changes a crash interrupted.
 fn file_operations(
     index: &Arc<SqliteIndex>,
     locks: &Arc<LibraryLocks>,
     scan: &Arc<ScanLibrary>,
-) -> (MoveModel, UndoFileOperation) {
+) -> (MoveModel, UndoFileOperation, SaveScreenshot) {
     // An interrupted rename must not block opening; it is tried again on the next start.
     let reconcile =
         ReconcileJournal { libraries: index.clone(), files: Arc::new(FsFileOperations), journal: index.clone() };
@@ -190,7 +192,14 @@ fn file_operations(
         locks: locks.clone(),
         scan: scan.clone(),
     };
-    (move_model, undo)
+    let screenshot = SaveScreenshot {
+        libraries: index.clone(),
+        models: index.clone(),
+        files: Arc::new(FsFileOperations),
+        locks: locks.clone(),
+        scan: scan.clone(),
+    };
+    (move_model, undo, screenshot)
 }
 
 fn find_duplicates(index: &Arc<SqliteIndex>, events: Arc<dyn EventSink>) -> FindDuplicates {

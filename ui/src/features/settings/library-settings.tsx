@@ -8,7 +8,7 @@ import { t, plural } from "../../shared/i18n";
 
 const ACCESS: { value: AccessModeDto; title: string; text: string }[] = [
   { value: "readOnly", title: t("Never change files in this library"), text: t("Names, order, tags and folder roles live in the index only.") },
-  { value: "metadataWrite", title: t("Write metadata files only"), text: t("Allows a .3dhoarddeck file in each model folder. Model files are never touched.") },
+  { value: "metadataWrite", title: t("Write metadata files only"), text: t("Allows a .3dhoarddeck file and screenshots of the 3D preview in each model folder. Model files are never touched.") },
   { value: "managed", title: t("Metadata files, rename and move"), text: t("Also allows renaming models and moving them to other folders on disk. Every change can be undone.") },
 ];
 

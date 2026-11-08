@@ -194,8 +194,8 @@ export const de: Record<string, string> = {
   "Never change files in this library": "Dateien in dieser Bibliothek nie ändern",
   "Names, order, tags and folder roles live in the index only.": "Namen, Reihenfolge, Tags und Ordnerrollen liegen nur im Index.",
   "Write metadata files only": "Nur Metadaten-Dateien schreiben",
-  "Allows a .3dhoarddeck file in each model folder. Model files are never touched.":
-    "Erlaubt eine .3dhoarddeck-Datei in jedem Modellordner. Modelldateien werden nie angefasst.",
+  "Allows a .3dhoarddeck file and screenshots of the 3D preview in each model folder. Model files are never touched.":
+    "Erlaubt eine .3dhoarddeck-Datei und Bildschirmfotos der 3D-Vorschau in jedem Modellordner. Modelldateien werden nie angefasst.",
   "Metadata files, rename and move": "Metadaten-Dateien, umbenennen und verschieben",
   "Also allows renaming models and moving them to other folders on disk. Every change can be undone.":
     "Erlaubt außerdem, Modelle auf der Festplatte umzubenennen und in andere Ordner zu verschieben. Jede Änderung lässt sich rückgängig machen.",
@@ -334,4 +334,20 @@ export const de: Record<string, string> = {
   "Fit to the box": "An die Fläche anpassen",
   "Fit": "Einpassen",
   "Copied": "Kopiert",
+  "Screenshot": "Bildschirmfoto",
+  "Saves this view as preview_<name>.png next to the file; in a folder without images it becomes the cover":
+    "Speichert diese Ansicht als preview_<Name>.png neben der Datei; in einem Ordner ohne Bilder wird sie zum Titelbild",
+  "This library does not allow writing files; change it under Settings › Libraries":
+    "Diese Bibliothek erlaubt kein Schreiben von Dateien; das lässt sich unter Einstellungen › Bibliotheken ändern",
+  "Saved as {path}": "Gespeichert als {path}",
+  "{library} does not allow writing files. Change it under Settings › Libraries.":
+    "{library} erlaubt kein Schreiben von Dateien. Das lässt sich unter Einstellungen › Bibliotheken ändern.",
+  "Turn the view": "Ansicht drehen",
+  "Turn up": "Nach oben drehen",
+  "Turn down": "Nach unten drehen",
+  "Turn left": "Nach links drehen",
+  "Turn right": "Nach rechts drehen",
+  "Front": "Vorne",
+  "Side": "Seite",
+  "Top": "Oben",
 };

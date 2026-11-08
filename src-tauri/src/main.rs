@@ -79,6 +79,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::files::move_model,
             commands::files::undo_file_operation,
             commands::files::file_journal,
+            commands::files::save_screenshot,
             commands::rules::folder_rules,
             commands::rules::remove_folder_rule,
             commands::rules::propose_presets,

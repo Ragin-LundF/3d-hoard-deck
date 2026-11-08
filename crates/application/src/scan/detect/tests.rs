@@ -147,3 +147,17 @@ fn files_in_the_root_and_in_top_level_variant_folders_are_kept() {
     let summary: Vec<_> = catalog.models.iter().map(|m| (m.kind, m.path.as_str())).collect();
     assert_eq!(summary, vec![(ModelKind::Folder, "Resin"), (ModelKind::File, "x.stl")]);
 }
+
+#[test]
+fn a_saved_screenshot_is_the_cover_of_its_single_file_model() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Makerworld/gear.stl", 100),
+            file("Makerworld/preview_gear.png", 10),
+            file("Makerworld/Busts/bust.stl", 100),
+        ],
+    );
+    let gear = catalog.models.iter().find(|model| model.title == "gear").expect("gear");
+    assert_eq!(gear.cover, Some(path("Makerworld/preview_gear.png")));
+}

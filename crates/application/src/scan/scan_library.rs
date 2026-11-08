@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc::sync_channel;
 use std::thread;
 
-use hoarddeck_domain::{Library, LibraryId, RelPath};
+use hoarddeck_domain::{Entry, Library, LibraryId, RelPath};
 
 use super::{CompiledRules, KnownDirs, LibraryLocks, ScanItem, ScanPhase, ScanProgress, regroup};
 use crate::ports::{EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex};
@@ -85,6 +85,22 @@ impl ScanLibrary {
             regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
         self.progress(id, ScanPhase::Done, &report);
         Ok(report)
+    }
+
+    /// Puts files the app itself just wrote into the index and regroups, without walking the library (a network share
+    /// takes seconds for that). The folder is marked so the next scan lists it properly.
+    /// # Errors
+    /// Fails when the library is busy or the index cannot be written.
+    pub fn add_files(&self, id: LibraryId, dir: &RelPath, files: Vec<Entry>) -> Result<(), AppError> {
+        let _busy = self.locks.lock(id)?;
+        let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
+        // A fresh generation without `finish_scan` deletes nothing; the next full scan settles everything again.
+        let (generation, _) = self.entries.begin_scan(id)?;
+        let folder = ScanItem::Listed { dir: dir.clone(), mtime: i64::MIN, children: files };
+        self.entries.apply(id, generation, &[folder])?;
+        // No progress events: a "done" would replace the last real scan's report (unreadable folders) in the UI.
+        regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
+        Ok(())
     }
 
     fn walk(

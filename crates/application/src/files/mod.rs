@@ -1,12 +1,15 @@
-//! Renaming and moving models on disk. Only for libraries in Managed mode; every change is journaled and undoable.
+//! Changes on disk: renaming and moving models (Managed libraries only, journaled and undoable) and screenshots of
+//! the 3D preview (any library that may write files).
 
 mod disk;
 mod move_model;
 mod reconcile;
+mod save_screenshot;
 mod undo;
 
 pub use move_model::{MoveModel, Target};
 pub use reconcile::ReconcileJournal;
+pub use save_screenshot::{SaveScreenshot, Screenshot};
 pub use undo::UndoFileOperation;
 
 /// A finished rename, move or undo.

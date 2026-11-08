@@ -20,17 +20,19 @@ type Props = {
   /** The cover shown in the grid; offered as an action when another image is shown. */
   cover: string | null;
   onUseCover: (path: string) => void;
+  /** Saves a PNG of the 3D view into the model's folder; `null` when the library may not get files written. */
+  onScreenshot: ((png: Blob) => Promise<void>) | null;
 };
 
 /** Left column of the model page: an image, or the interactive 3D preview of one mesh file. */
-export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover }: Props) {
+export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover, onScreenshot }: Props) {
   const firstImage = images[0]?.path ?? null;
   return (
     <div className="stagecol">
       <div className="stage">
         {view.kind === "mesh" ? (
           <Suspense fallback={<span className="crumbs">{t("Loading viewer…")}</span>}>
-            <MeshViewer library={library} path={view.path} format={view.format} />
+            <MeshViewer library={library} path={view.path} format={view.format} onScreenshot={onScreenshot} />
           </Suspense>
         ) : view.path ? (
           <ZoomImage src={fileUrl(library, view.path)} alt={title} />

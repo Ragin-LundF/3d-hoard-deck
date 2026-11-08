@@ -6,10 +6,14 @@ import { loadMesh, type LoadedPlate } from "./load-mesh";
 import { ViewerScene, type SceneInfo } from "./scene";
 import { t, plural, formatNumber } from "../../shared/i18n";
 
-type Props = { library: number; path: string; format: MeshFormat };
+/** Degrees one click on the turn buttons rotates the view. */
+const STEP = 15;
+
+/** `onScreenshot` receives a PNG of the current view; `null` when the library may not get files written. */
+type Props = { library: number; path: string; format: MeshFormat; onScreenshot: ((png: Blob) => Promise<void>) | null };
 
 /** Interactive preview: drag to rotate, right-drag or two fingers to pan, scroll to zoom. */
-export default function MeshViewer({ library, path, format }: Props) {
+export default function MeshViewer({ library, path, format, onScreenshot }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const scene = useRef<ViewerScene | null>(null);
   const [state, setState] = useState<{ loading: boolean; error: string | null; info: SceneInfo | null; simplifiedFrom: number | null }>({ loading: true, error: null, info: null, simplifiedFrom: null });
@@ -17,6 +21,16 @@ export default function MeshViewer({ library, path, format }: Props) {
   const [plate, setPlate] = useState(true);
   const [plates, setPlates] = useState<LoadedPlate[]>([]);
   const [shownPlate, setShownPlate] = useState<number | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const capture = async () => {
+    if (!scene.current || !onScreenshot) return;
+    setCapturing(true);
+    try {
+      await onScreenshot(await scene.current.snapshot());
+    } finally {
+      setCapturing(false);
+    }
+  };
 
   useEffect(() => {
     if (!stage.current) return;
@@ -65,6 +79,17 @@ export default function MeshViewer({ library, path, format }: Props) {
           <button className={plate ? "on" : ""} aria-pressed={plate} onClick={() => setPlate(!plate)} title={t("Build plate 256 × 256 mm")}>{t("Plate")}</button>
           <button onClick={() => scene.current?.resetView()} aria-label={t("Reset view")} title={t("Reset view")}><Icon name="refresh" /></button>
         </div>
+        <div className="vgroup" role="group" aria-label={t("Screenshot")}>
+          <button
+            onClick={() => void capture()}
+            disabled={!onScreenshot || capturing || state.loading || state.error !== null}
+            title={onScreenshot
+              ? t("Saves this view as preview_<name>.png next to the file; in a folder without images it becomes the cover")
+              : t("This library does not allow writing files; change it under Settings › Libraries")}
+          >
+            <Icon name="camera" />{t("Screenshot")}
+          </button>
+        </div>
         {plates.length > 1 && (
           <div className="vgroup" role="group" aria-label={t("Plates")}>
             <button className={shownPlate === null ? "on" : ""} aria-pressed={shownPlate === null} onClick={() => showPlate(null)}>{t("All plates")}</button>
@@ -75,6 +100,17 @@ export default function MeshViewer({ library, path, format }: Props) {
             ))}
           </div>
         )}
+      </div>
+      <div className="vnav" role="group" aria-label={t("Turn the view")}>
+        <button className="up" onClick={() => scene.current?.orbit(0, STEP)} aria-label={t("Turn up")} title={t("Turn up")}>▲</button>
+        <button className="left" onClick={() => scene.current?.orbit(-STEP, 0)} aria-label={t("Turn left")} title={t("Turn left")}>◀</button>
+        <button className="right" onClick={() => scene.current?.orbit(STEP, 0)} aria-label={t("Turn right")} title={t("Turn right")}>▶</button>
+        <button className="down" onClick={() => scene.current?.orbit(0, -STEP)} aria-label={t("Turn down")} title={t("Turn down")}>▼</button>
+        <div className="vgroup views">
+          <button onClick={() => scene.current?.look("front")}>{t("Front")}</button>
+          <button onClick={() => scene.current?.look("side")}>{t("Side")}</button>
+          <button onClick={() => scene.current?.look("top")}>{t("Top")}</button>
+        </div>
       </div>
       {state.loading && <div className="vstatus">{t("Loading {file}…", { file: fileName(path) })}</div>}
       {state.error && <div className="vstatus err">{state.error}</div>}

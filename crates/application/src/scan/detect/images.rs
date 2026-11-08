@@ -22,12 +22,11 @@ impl<'a> ImagesByDir<'a> {
         self.with_stem(&folder.parent()?, folder.name())
     }
 
+    /// `dragon.png` for `dragon.stl`, else a screenshot the app saved as `preview_dragon.png`.
     pub(super) fn with_stem(&self, dir: &RelPath, wanted: &str) -> Option<RelPath> {
-        self.0
-            .get(dir)?
-            .iter()
-            .find(|image| stem(image.path.name()).eq_ignore_ascii_case(wanted))
-            .map(|image| image.path.clone())
+        let images = self.0.get(dir)?;
+        let named = |name: &str| images.iter().find(|image| stem(image.path.name()).eq_ignore_ascii_case(name));
+        named(wanted).or_else(|| named(&format!("preview_{wanted}"))).map(|image| image.path.clone())
     }
 }
 

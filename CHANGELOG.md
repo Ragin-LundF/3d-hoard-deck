@@ -3,6 +3,16 @@
 All notable changes to 3D Hoard Deck are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Screenshot** button in the 3D preview: turn and zoom the model, then save that view as `preview_<name>.png` next
+  to the mesh file. In a folder without images it becomes the cover right away; only that folder is updated, so
+  there is no wait for a library scan. Existing files are never replaced, and libraries set to "never change files"
+  do not allow it.
+- **Turn buttons** in the 3D preview: ▲ ◀ ▶ ▼ turn the view in 15° steps, and Front, Side and Top look at the model
+  straight on. The mouse works as before.
+
 ## [0.1.0] - 2026-11-07
 
 The first release: your 3D printing library, searchable and good-looking, right where your files already are.

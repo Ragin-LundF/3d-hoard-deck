@@ -8,6 +8,7 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
+  Spherical,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -110,6 +111,33 @@ export class ViewerScene {
     this.camera.far = distance * 100;
     this.camera.updateProjectionMatrix();
     this.controls.update();
+  }
+
+  /** Turns the camera around the model: `left` degrees around the vertical axis, `up` degrees towards the top. */
+  orbit(left: number, up: number): void {
+    const spherical = new Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
+    spherical.theta -= (left * Math.PI) / 180;
+    // Not exactly over the poles, where the orbit controls lose their sense of up.
+    spherical.phi = Math.min(Math.PI - 0.01, Math.max(0.01, spherical.phi - (up * Math.PI) / 180));
+    this.camera.position.copy(this.controls.target).add(new Vector3().setFromSpherical(spherical));
+    this.controls.update();
+  }
+
+  /** Looks at the model straight from the front, the right side or the top, keeping the distance. */
+  look(from: "front" | "side" | "top"): void {
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    // The printing files' front (looking towards +Y) is three.js's +Z after the Z-up turn.
+    const direction = { front: new Vector3(0, 0, 1), side: new Vector3(1, 0, 0), top: new Vector3(0, 1, 0.0001) }[from];
+    this.camera.position.copy(this.controls.target).add(direction.normalize().multiplyScalar(distance));
+    this.controls.update();
+  }
+
+  /** A PNG of exactly what is shown now. Rendered right before reading, so the drawing buffer is still filled. */
+  snapshot(): Promise<Blob> {
+    this.renderer.render(this.scene, this.camera);
+    return new Promise((resolve, reject) =>
+      this.canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The preview could not be captured."))), "image/png"),
+    );
   }
 
   dispose(): void {
