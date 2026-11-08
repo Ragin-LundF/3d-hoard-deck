@@ -10,7 +10,7 @@ use hoarddeck_domain::{
 };
 
 use crate::browse::{BrowsePage, BrowseRequest};
-use crate::scan::{CompiledRules, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
+use crate::scan::{CompiledRules, FolderRule, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
 use crate::search::{SearchDocument, SearchHits, SearchQuery};
 use crate::{IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
 
@@ -56,6 +56,16 @@ pub trait EntryStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn finish_scan(&self, library: LibraryId, generation: Generation) -> Result<u64, IndexError>;
+    /// Like [`Self::finish_scan`] after scanning only `folder` and what is below it: removes unseen entries there and
+    /// leaves the rest of the library alone.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn finish_folder_scan(
+        &self,
+        library: LibraryId,
+        generation: Generation,
+        folder: &RelPath,
+    ) -> Result<u64, IndexError>;
     /// All stored folder paths of a library (the root excluded).
     /// # Errors
     /// Fails when the index cannot be read.
@@ -100,6 +110,10 @@ pub trait ModelRepository: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be read.
     fn child_folders(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<Folder>, IndexError>;
+    /// Images directly in `folder` that belong to no model, sorted by path.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn loose_images(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<RelPath>, IndexError>;
 }
 
 pub trait SearchIndex: Send + Sync {
@@ -118,7 +132,8 @@ pub trait SearchIndex: Send + Sync {
 
 /// Walks a library folder. Implementations must only read, never write into the library.
 pub trait LibraryScanner: Send + Sync {
-    /// Sends one item per folder. Folders whose mtime matches `known` are reported as unchanged without listing them.
+    /// Sends one item per folder at and below `from` (the root for a whole library). Folders whose mtime matches
+    /// `known` are reported as unchanged without listing them.
     /// Files and folders matching the ignore rules are neither reported nor descended into.
     /// Stops early when the receiver is gone.
     /// # Errors
@@ -126,6 +141,7 @@ pub trait LibraryScanner: Send + Sync {
     fn scan(
         &self,
         root: &str,
+        from: &RelPath,
         known: &KnownDirs,
         rules: &CompiledRules,
         out: &SyncSender<ScanItem>,
@@ -236,6 +252,15 @@ pub trait FileOperations: Send + Sync {
     /// # Errors
     /// Fails when the check cannot be made.
     fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String>;
+    /// Writes a new file; fails with [`FileError::AlreadyExists`] instead of replacing one.
+    /// # Errors
+    /// Fails when the file exists, the folder leads outside the library, or the file system refuses.
+    fn create_file(&self, root: &str, path: &RelPath, bytes: &[u8]) -> Result<(), FileError>;
+    /// Copies a file inside the library; fails with [`FileError::AlreadyExists`] instead of replacing one. Returns
+    /// the size of the copy.
+    /// # Errors
+    /// Fails when the target exists, a path leads outside the library, or the file system refuses.
+    fn copy_file(&self, root: &str, from: &RelPath, to: &RelPath) -> Result<u64, FileError>;
     /// Removes `dir` only when it is empty.
     /// # Errors
     /// Fails when it is not empty or cannot be removed.
@@ -333,6 +358,14 @@ pub trait SidecarFiles: Send + Sync {
     /// # Errors
     /// Fails when the file exists but cannot be read or parsed.
     fn read(&self, root: &str, file: &RelPath) -> Result<Option<(ModelMeta, i64)>, String>;
+    /// The library's folder rules (one model, collection, accepted suggestions), in the `.3dhoarddeck` at its root.
+    /// # Errors
+    /// Fails when the file cannot be written.
+    fn write_folder_rules(&self, root: &str, rules: &[FolderRule]) -> Result<(), String>;
+    /// `None` when the root has no file or the file holds no rules.
+    /// # Errors
+    /// Fails when the file exists but cannot be read or parsed.
+    fn read_folder_rules(&self, root: &str) -> Result<Option<Vec<FolderRule>>, String>;
 }
 
 /// What `Orynt3D` stored for a model folder.
@@ -385,6 +418,15 @@ pub trait ArchiveReader: Send + Sync {
     /// # Errors
     /// Fails when the archive cannot be read or a symlink leads outside the library.
     fn list(&self, root: &str, archive: &RelPath) -> Result<Vec<ArchiveEntry>, String>;
+}
+
+/// Folder covers the user picked, kept in the index so they work in read-only libraries too.
+pub trait FolderCoverStore: Send + Sync {
+    /// `None` goes back to the detected cover.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_folder_cover(&self, library: LibraryId, folder: &RelPath, cover: Option<&RelPath>)
+    -> Result<(), IndexError>;
 }
 
 /// Changes below one watched root.

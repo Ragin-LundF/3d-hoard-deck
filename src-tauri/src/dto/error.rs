@@ -14,7 +14,7 @@ pub struct IpcError {
     pub message: String,
     /// Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
     /// refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
-    /// `not_managed`), the path, name or library concerned.
+    /// `not_managed`, `read_only`), the path, name or library concerned.
     pub details: Option<String>,
 }
 
@@ -28,7 +28,8 @@ impl From<AppError> for IpcError {
                 | Refusal::ForbiddenCharacter(subject)
                 | Refusal::TrailingDotOrSpace(subject)
                 | Refusal::ReservedName(subject)
-                | Refusal::NotManaged(subject),
+                | Refusal::NotManaged(subject)
+                | Refusal::ReadOnly(subject),
             ) => Some(subject.clone()),
             _ => None,
         };
@@ -48,6 +49,7 @@ impl From<AppError> for IpcError {
                 Refusal::ReservedName(_) => "reserved_name",
                 Refusal::SmartCollection => "smart_collection",
                 Refusal::NotManaged(_) => "not_managed",
+                Refusal::ReadOnly(_) => "read_only",
             },
             AppError::InvalidInput(_) | AppError::Domain(_) => "invalid_input",
             AppError::Scan(hoarddeck_application::ScanError::Offline(_)) => "offline",

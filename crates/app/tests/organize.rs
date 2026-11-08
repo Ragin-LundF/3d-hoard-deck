@@ -187,3 +187,183 @@ fn members_that_vanish_for_a_while_come_back_and_a_lost_cover_falls_back() {
         "falls back to the detected cover"
     );
 }
+
+#[test]
+fn folder_rules_survive_a_lost_index_through_the_metadata_files() {
+    use hoarddeck_application::scan::FolderRole;
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let root = library_dir.path();
+    fs::create_dir_all(root.join("Minis/Dragon/Base")).expect("dirs");
+    fs::write(root.join("Minis/Dragon/dragon.stl"), vec![0_u8; 134]).expect("stl");
+    fs::write(root.join("Minis/Dragon/Base/base.stl"), vec![0_u8; 134]).expect("stl");
+    let dragon = RelPath::new("Minis/Dragon").expect("valid");
+    {
+        let index_dir = tempfile::tempdir().expect("index");
+        let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+        let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+        app.update_library_settings
+            .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexAndSidecar)
+            .expect("metadata files");
+        app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+        app.set_folder_role.execute(library.id, &dragon, Some(FolderRole::Model)).expect("mark");
+        assert!(root.join(".3dhoarddeck").exists(), "the rules file is written at the library root");
+    }
+    // A new computer: a fresh index over the same folders.
+    let index_dir = tempfile::tempdir().expect("new index");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
+    assert_eq!(report.rules_restored, 1);
+    let rules = app.folder_rules.list(library.id).expect("rules");
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    let request = SearchRequest { text: "dragon".to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+    let found = app.search_models.execute(&request).expect("search").models;
+    assert_eq!(found.len(), 1, "the dragon and its base are one model again");
+    assert_eq!(found[0].path, dragon);
+}
+
+#[test]
+fn pictures_of_a_folder_without_its_own_model_files_are_shown_on_its_page() {
+    use hoarddeck_application::browse::{BrowseRequest, Sort};
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Pack/A/a.stl", "Pack/B/b.stl", "Pack/Solo/solo.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    fs::write(root.join("Pack/overview.jpg"), b"jpg").expect("loose picture");
+    fs::write(root.join("Pack/A.png"), b"png").expect("cover of A");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    let page = app
+        .browse_folder
+        .execute(&BrowseRequest {
+            library: library.id,
+            folder: RelPath::new("Pack").expect("valid"),
+            recursive: false,
+            sort: Sort::Name,
+            cursor: None,
+            limit: 50,
+        })
+        .expect("browse");
+    assert_eq!(page.images, [RelPath::new("Pack/overview.jpg").expect("valid")], "A.png is A's cover, not loose");
+}
+
+#[test]
+fn scanning_one_folder_updates_it_and_leaves_the_rest_alone() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["A/old/old.stl", "B/kept/kept.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    fs::remove_dir_all(root.join("A/old")).expect("remove in A");
+    fs::create_dir_all(root.join("A/new")).expect("dir");
+    fs::write(root.join("A/new/new.stl"), vec![0_u8; 134]).expect("new in A");
+    fs::create_dir_all(root.join("B/later")).expect("dir");
+    fs::write(root.join("B/later/later.stl"), vec![0_u8; 134]).expect("new in B");
+    fs::remove_dir_all(root.join("B/kept")).expect("remove in B");
+
+    let report = app
+        .scan_library
+        .scan_folder(library.id, &RelPath::new("A").expect("valid"), ScanMode::Incremental)
+        .expect("folder scan");
+    assert!(report.partial);
+    let titles = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models.len()
+    };
+    assert_eq!(titles("new"), 1, "the new model in A is found");
+    assert_eq!(titles("old"), 0, "the removed model in A is gone");
+    assert_eq!(titles("later"), 0, "B was not scanned");
+    assert_eq!(titles("kept"), 1, "B keeps what it had");
+}
+
+#[test]
+fn a_chosen_folder_cover_works_read_only_and_is_copied_where_writing_is_allowed() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Creator/Dragon/dragon.stl", "Creator/Orc/orc.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    fs::write(root.join("Creator/Dragon/dragon.jpg"), b"detected").expect("image");
+    fs::write(root.join("Creator/Orc/orc_render.png"), b"chosen").expect("image");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let creator = RelPath::new("Creator").expect("valid");
+    let chosen = RelPath::new("Creator/Orc/orc_render.png").expect("valid");
+    let cover = || {
+        let folders = app.get_folder_children.execute(library.id, &RelPath::root()).expect("folders");
+        folders.into_iter().find(|folder| folder.path == creator).expect("Creator").cover
+    };
+    assert_eq!(cover(), Some(RelPath::new("Creator/Dragon/dragon.jpg").expect("valid")), "detected");
+
+    assert_eq!(app.set_folder_cover.execute(library.id, &creator, Some(&chosen)).expect("choose"), None);
+    assert_eq!(cover(), Some(chosen.clone()), "read-only: kept in the index");
+    assert!(!root.join("Creator/folder.png").exists(), "nothing written into a read-only library");
+    assert!(
+        app.set_folder_cover
+            .execute(library.id, &creator, Some(&RelPath::new("Creator/Orc/orc.stl").expect("valid")))
+            .is_err()
+    );
+
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexOnly)
+        .expect("write");
+    let copy = app.set_folder_cover.execute(library.id, &creator, Some(&chosen)).expect("choose again");
+    assert_eq!(copy, Some(RelPath::new("Creator/folder.png").expect("valid")));
+    assert_eq!(fs::read(root.join("Creator/folder.png")).expect("copied"), b"chosen");
+    assert_eq!(cover(), copy, "the copy is the cover");
+
+    app.set_folder_cover.execute(library.id, &creator, None).expect("back to automatic");
+    assert_eq!(cover(), copy, "folder.png is now the folder's own picture, so it stays the detected cover");
+}
+
+#[test]
+fn scanning_a_folder_that_was_deleted_outside_the_app_removes_it() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Gone/dragon.stl", "Kept/orc.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    fs::remove_dir_all(root.join("Gone")).expect("deleted outside the app");
+
+    let report = app
+        .scan_library
+        .scan_folder(library.id, &RelPath::new("Gone").expect("valid"), ScanMode::Incremental)
+        .expect("folder scan");
+    assert_eq!(report.dirs_failed, 0, "a deleted folder is not unreadable");
+    let found = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models.len()
+    };
+    assert_eq!(found("gone"), 0, "the deleted folder's model is removed");
+    assert_eq!(found("kept"), 1, "the rest of the library stays");
+}

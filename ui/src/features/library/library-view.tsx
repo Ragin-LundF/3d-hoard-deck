@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { describeError, type FolderDto_Serialize, type LibraryDto, type ModelSummaryDto_Serialize, type SortDto } from "../../ipc";
+import { commands, describeError, unwrap, type FolderDto_Serialize, type LibraryDto, type ModelSummaryDto_Serialize, type SortDto } from "../../ipc";
 import { folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import type { LibraryRoute, Route } from "../../shared/route";
@@ -7,6 +7,7 @@ import { Breadcrumbs } from "../folders/breadcrumbs";
 import { NameInput } from "../collections/name-input";
 import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
+import { FolderPictures } from "./folder-pictures";
 import { useFolderPage, useSearch } from "./queries";
 import { VirtualGrid } from "./virtual-grid";
 import { t, plural } from "../../shared/i18n";
@@ -67,6 +68,15 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
             {searching && total !== undefined ? plural(total, "{count} match", "{count} matches") : null}
           </span>
           <span className="spacer" />
+          {!searching && route.folder && (
+            <button
+              className="btn ghost"
+              title={t("Reads only this folder and its subfolders again, much faster than the whole library")}
+              onClick={() => unwrap(commands.scanFolder(library.id, route.folder)).catch((error) => onError(describeError(error)))}
+            >
+              <Icon name="refresh" />{t("Scan this folder")}
+            </button>
+          )}
           {!searching && (
             <div className="seg" role="group" aria-label={t("Folder display")}>
               <button className={route.all ? "" : "on"} aria-pressed={!route.all} onClick={() => navigate({ ...route, all: false })}>
@@ -103,6 +113,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
           </label>
         </div>
       </div>
+      {!searching && !route.all && <FolderPictures library={library.id} images={browse.data?.pages[0]?.images ?? []} />}
       {active.isError ? (
         <div className="empty err">{describeError(active.error)}</div>
       ) : active.isPending && (searching || browse.fetchStatus !== "idle") ? (

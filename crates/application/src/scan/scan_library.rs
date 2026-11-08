@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc::sync_channel;
 use std::thread;
 
-use hoarddeck_domain::{Library, LibraryId, RelPath};
+use hoarddeck_domain::{Entry, Library, LibraryId, RelPath};
 
 use super::{CompiledRules, KnownDirs, LibraryLocks, ScanItem, ScanPhase, ScanProgress, regroup};
 use crate::ports::{EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex};
@@ -31,6 +31,8 @@ pub struct ScanReport {
     pub dirs_failed: u64,
     /// `path: reason` of the first unreadable folders and files.
     pub failures: Vec<String>,
+    /// Only one folder and what is below it was scanned.
+    pub partial: bool,
     pub entries_seen: u64,
     pub entries_removed: u64,
     pub models: usize,
@@ -76,10 +78,22 @@ impl ScanLibrary {
     /// # Errors
     /// As [`Self::execute`].
     pub fn execute_with(&self, id: LibraryId, mode: ScanMode, changed: &[RelPath]) -> Result<ScanReport, AppError> {
+        self.run(id, &RelPath::root(), mode, changed)
+    }
+
+    /// Scans only `folder` and what is below it, much faster than the whole library on a big share. Entries elsewhere
+    /// stay as they are.
+    /// # Errors
+    /// As [`Self::execute`].
+    pub fn scan_folder(&self, id: LibraryId, folder: &RelPath, mode: ScanMode) -> Result<ScanReport, AppError> {
+        self.run(id, folder, mode, &[])
+    }
+
+    fn run(&self, id: LibraryId, from: &RelPath, mode: ScanMode, changed: &[RelPath]) -> Result<ScanReport, AppError> {
         let _busy = self.locks.lock(id)?;
         let library = self.libraries.get(id)?.ok_or(AppError::LibraryNotFound(id))?;
         let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
-        let mut report = self.walk(&library, &rules, mode, changed)?;
+        let mut report = self.walk(&library, &rules, from, mode, changed)?;
         self.progress(id, ScanPhase::Grouping, &report);
         (report.models, report.folders) =
             regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
@@ -87,10 +101,27 @@ impl ScanLibrary {
         Ok(report)
     }
 
+    /// Puts files the app itself just wrote into the index and regroups, without walking the library (a network share
+    /// takes seconds for that). The folder is marked so the next scan lists it properly.
+    /// # Errors
+    /// Fails when the library is busy or the index cannot be written.
+    pub fn add_files(&self, id: LibraryId, dir: &RelPath, files: Vec<Entry>) -> Result<(), AppError> {
+        let _busy = self.locks.lock(id)?;
+        let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
+        // A fresh generation without `finish_scan` deletes nothing; the next full scan settles everything again.
+        let (generation, _) = self.entries.begin_scan(id)?;
+        let folder = ScanItem::Listed { dir: dir.clone(), mtime: i64::MIN, children: files };
+        self.entries.apply(id, generation, &[folder])?;
+        // No progress events: a "done" would replace the last real scan's report (unreadable folders) in the UI.
+        regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
+        Ok(())
+    }
+
     fn walk(
         &self,
         library: &Library,
         rules: &CompiledRules,
+        from: &RelPath,
         mode: ScanMode,
         changed: &[RelPath],
     ) -> Result<ScanReport, AppError> {
@@ -103,10 +134,10 @@ impl ScanLibrary {
             known.remove(dir);
         }
         let (sender, receiver) = sync_channel::<ScanItem>(CHANNEL_CAPACITY);
-        let mut report = ScanReport::default();
+        let mut report = ScanReport { partial: !from.is_root(), ..ScanReport::default() };
         thread::scope(|scope| -> Result<(), AppError> {
             let (scanner, known, root) = (&self.scanner, &known, library.root.as_str());
-            let walker = scope.spawn(move || scanner.scan(root, known, rules, &sender));
+            let walker = scope.spawn(move || scanner.scan(root, from, known, rules, &sender));
             let mut batch = Vec::new();
             let mut batch_entries = 0;
             for item in receiver {
@@ -123,7 +154,7 @@ impl ScanLibrary {
             walker.join().map_err(|_| ScanError::Aborted("walker thread panicked".to_owned()))??;
             Ok(())
         })?;
-        report.entries_removed = self.entries.finish_scan(library.id, generation)?;
+        report.entries_removed = self.entries.finish_folder_scan(library.id, generation, from)?;
         Ok(report)
     }
 
@@ -136,6 +167,7 @@ impl ScanLibrary {
             files: report.entries_seen,
             failed: report.dirs_failed,
             failures: report.failures.clone(),
+            partial: report.partial,
         });
     }
 }

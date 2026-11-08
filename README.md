@@ -19,9 +19,13 @@ allow it.
 - **Find anything in milliseconds.** Search forgives typos and partial words (`wolverin` finds Wolverine) and
   can stay inside the current folder.
 - **Covers without effort.** Images from the model folder (or an image next to it with the same name) become
-  the cover, resized once and cached so the grid stays fast, even over a network share.
+  the cover, resized once and cached so the grid stays fast, even over a network share. Folders without a picture
+  borrow one from their subfolders, like a movie library, and you can pick a folder's picture yourself.
+- **Make your own cover.** Turn a model in the 3D preview until it looks right and press **Screenshot**; the image
+  is saved next to the file and becomes the cover of a folder without pictures.
 - **Look at the model in 3D.** Rotate, zoom and pan STL, 3MF and OBJ files, with size in millimetres and the
-  triangle count. 3MF projects from Bambu Studio and OrcaSlicer show every build plate side by side.
+  triangle count. 3MF projects from Bambu Studio and OrcaSlicer show every build plate side by side. Arrow
+  buttons and Front, Side and Top views help to turn the model precisely.
 - **Open in your slicer.** One click opens the model in Bambu Studio, OrcaSlicer, PrusaSlicer, Lychee or any
   other slicer you add. 3MF projects are preferred, so plates and settings come along.
 - **Organize without moving files.** Rename models inside the app, add tags, mark favorites and what you have
@@ -47,9 +51,12 @@ allow it.
 
 ## Getting started
 
-1. **Install the app.** There are no prebuilt downloads yet; build it once from source as described in
-   [docs/developer.md](docs/developer.md#build-an-installer). The result is a normal installer for your system
-   (`.dmg`, `.msi` or `.AppImage`/`.deb`).
+1. **Install the app.** Download the installer for your system from the
+   [Releases page](https://github.com/Ragin-LundF/3d-hoard-deck/releases): `.dmg` for macOS (Apple Silicon or
+   Intel), `.exe` or `.msi` for Windows, `.AppImage`, `.deb` or `.rpm` for Linux. The builds are not signed with a
+   developer certificate yet, so the system asks once: on macOS allow the app under System Settings › Privacy &
+   Security › **Open Anyway**; on Windows choose **More info** › **Run anyway**. You can also build it yourself as
+   described in [docs/developer.md](docs/developer.md#build-an-installer).
 2. **Add your library.** On first start choose **Add library folder** and pick the folder with your models,
    for example a folder on your NAS. The first scan starts right away; large libraries on a network share take
    a few minutes, and you can keep browsing meanwhile.
@@ -92,8 +99,9 @@ Changing a role regroups the library within seconds; the folders are not read ag
   page offers **Rename on disk…** and **Move to folder…**. Names, tags, notes and collections move along, an
   existing file or folder is never overwritten, and **Settings › Recent file changes** undoes any change.
 - **Optional metadata files.** Under **Settings › Libraries** you can allow metadata files. Then names, tags,
-  marks and notes are also stored in a small `.3dhoarddeck` file beside each model, and **Rebuild from metadata
-  files** restores everything from the folders, for example on a new computer.
+  marks and notes are also stored in a small `.3dhoarddeck` file beside each model, the folder roles in one at the
+  library root, and **Rebuild from metadata files** restores everything from the folders, for example on a new
+  computer.
 - **All app data lives in one folder**, by default `~/.3dhoarddeck` (`%USERPROFILE%\.3dhoarddeck` on Windows):
   the database, the search index and the cover thumbnails. Delete it to start fresh; your library is not
   affected. Move it under **Settings › Index**. It must be on a local disk: network shares and cloud-sync
@@ -123,8 +131,9 @@ takes over the names, notes and tags you entered there; it only reads the files 
 Later scans only look at folders whose modification time changed, which takes seconds instead of minutes.
 
 **Do I have to rescan after adding files?** No. Shortly after the app starts it picks up what changed while it
-was closed, and libraries on a local disk are updated a few seconds after files change. Network shares do not report changes, so the app looks for new folders every 30 minutes; press **Rescan**
-under **Settings › Libraries** to see new files right away.
+was closed, and libraries on a local disk are updated a few seconds after files change. Network shares do not
+report changes, so the app looks for new folders every 30 minutes. To see new files right away, open the folder
+and press **Scan this folder**: only that folder is read again, which takes seconds even in a big library.
 
 **A model shows up twice or is split in pieces.** Right-click its folder and choose **Treat as one model**.
 

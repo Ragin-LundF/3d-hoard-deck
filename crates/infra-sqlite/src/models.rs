@@ -1,14 +1,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
-use hoarddeck_application::ports::ModelRepository;
+use hoarddeck_application::ports::{FolderCoverStore, ModelRepository};
 use hoarddeck_application::search::SearchDocument;
 use hoarddeck_application::{IndexError, ModelDetail, ModelSummary};
 use hoarddeck_domain::{Catalog, Folder, LibraryId, Model, ModelId, RelPath};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::SqliteIndex;
-use crate::rows::{formats_to_text, to_i64};
+use crate::rows::{formats_to_text, rel_path, to_i64};
 
 impl ModelRepository for SqliteIndex {
     fn replace_catalog(&self, library: LibraryId, catalog: &Catalog) -> Result<(), IndexError> {
@@ -67,6 +67,20 @@ impl ModelRepository for SqliteIndex {
     fn child_folders(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<Folder>, IndexError> {
         self.read(|connection| crate::queries::child_folders(connection, library, folder))
     }
+
+    fn loose_images(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<RelPath>, IndexError> {
+        self.read(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT e.path FROM entries e INDEXED BY entries_parent
+                 WHERE e.library_id = ?1 AND e.parent = ?2 AND e.is_dir = 0 AND e.kind = 'image'
+                   AND NOT EXISTS (SELECT 1 FROM model_files mf JOIN models m ON m.id = mf.model_id
+                                   WHERE m.library_id = ?1 AND mf.path = e.path)
+                   AND NOT EXISTS (SELECT 1 FROM models m WHERE m.library_id = ?1 AND m.cover = e.path)
+                 ORDER BY e.path",
+            )?;
+            statement.query_map(params![library.0, folder.as_str()], |row| rel_path(row, 0))?.collect()
+        })
+    }
 }
 
 /// Keeps the id (and `added_at`) of a model whose path is unchanged, so later tags and collections stay attached.
@@ -124,4 +138,28 @@ fn insert_folder(transaction: &Transaction<'_>, library: LibraryId, folder: &Fol
             folder.is_collection,
         ])?;
     Ok(())
+}
+
+impl FolderCoverStore for SqliteIndex {
+    fn set_folder_cover(
+        &self,
+        library: LibraryId,
+        folder: &RelPath,
+        cover: Option<&RelPath>,
+    ) -> Result<(), IndexError> {
+        self.write(|connection| {
+            match cover {
+                Some(cover) => connection.execute(
+                    "INSERT INTO folder_covers (library_id, path, cover) VALUES (?1, ?2, ?3)
+                     ON CONFLICT (library_id, path) DO UPDATE SET cover = excluded.cover",
+                    params![library.0, folder.as_str(), cover.as_str()],
+                ),
+                None => connection.execute(
+                    "DELETE FROM folder_covers WHERE library_id = ?1 AND path = ?2",
+                    params![library.0, folder.as_str()],
+                ),
+            }
+            .map(|_| ())
+        })
+    }
 }

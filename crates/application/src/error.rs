@@ -37,6 +37,8 @@ pub enum Refusal {
     SmartCollection,
     #[error("{0} does not allow renaming or moving files; change it under Settings › Libraries")]
     NotManaged(String),
+    #[error("{0} does not allow writing files; change it under Settings › Libraries")]
+    ReadOnly(String),
 }
 
 #[derive(Debug, Error)]

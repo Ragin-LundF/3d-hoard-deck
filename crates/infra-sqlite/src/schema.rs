@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 8] = [
+const MIGRATIONS: [&str; 9] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -144,6 +144,15 @@ CREATE TABLE file_hashes (
 -- 8: journal entries go pending → done or failed, and undoing → undone, so a crash mid-change can be settled.
 ALTER TABLE file_journal ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
 UPDATE file_journal SET status = 'undone' WHERE undone_at IS NOT NULL;
+",
+    r"
+-- 9: folder covers the user picked; they win over the detected ones and survive regrouping.
+CREATE TABLE folder_covers (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    cover      TEXT NOT NULL,
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
 ",
 ];
 

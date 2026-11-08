@@ -27,7 +27,7 @@ fn scan(root: &Path, known: &KnownDirs) -> Result<Vec<ScanItem>, ScanError> {
     let known = known.clone();
     let walker = std::thread::spawn(move || {
         let rules = CompiledRules::compile(&ScanRules::default()).expect("default rules");
-        scanner.scan(&root, &known, &rules, &sender)
+        scanner.scan(&root, &hoarddeck_domain::RelPath::root(), &known, &rules, &sender)
     });
     let items: Vec<ScanItem> = receiver.into_iter().collect();
     walker.join().expect("walker thread")?;

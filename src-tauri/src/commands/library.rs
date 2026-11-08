@@ -9,7 +9,7 @@ use tauri::AppHandle;
 use tauri_specta::Event;
 
 use super::AppState;
-use crate::dto::{AccessModeDto, IpcError, LibraryDto, MetadataStorageDto};
+use crate::dto::{AccessModeDto, IpcError, LibraryDto, MetadataStorageDto, rel_path};
 use crate::events::ScanProgressEvent;
 
 #[tauri::command]
@@ -59,6 +59,23 @@ pub async fn scan_library(app: AppState<'_>, handle: AppHandle, library: u32, fu
             Ok(_) | Err(AppError::LibraryBusy(_)) => {}
             Err(error) => {
                 // A closed window cannot be told; nothing else to do.
+                let _ = ScanProgressEvent::failed(library, error.into()).emit(&handle);
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Like `scan_library`, but only `folder` and what is below it: much faster in a big library on a network share.
+#[tauri::command]
+#[specta::specta]
+pub async fn scan_folder(app: AppState<'_>, handle: AppHandle, library: u32, folder: String) -> Result<(), IpcError> {
+    let app = Arc::clone(&app);
+    let folder = rel_path(&folder)?;
+    std::thread::spawn(move || {
+        match app.scan_library.scan_folder(LibraryId(i64::from(library)), &folder, ScanMode::Incremental) {
+            Ok(_) | Err(AppError::LibraryBusy(_)) => {}
+            Err(error) => {
                 let _ = ScanProgressEvent::failed(library, error.into()).emit(&handle);
             }
         }

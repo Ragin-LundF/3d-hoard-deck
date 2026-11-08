@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::FileChange;
 use super::disk::{apply, require_managed, rescan};
 use crate::AppError;
-use crate::ports::{FileJournal, FileOperations, JournalStatus, LibraryRepository};
-use crate::scan::{LibraryLocks, ScanLibrary};
+use crate::ports::{FileJournal, FileOperations, JournalStatus, LibraryRepository, SidecarFiles};
+use crate::scan::{LibraryLocks, ScanLibrary, save_rules_file};
 
 /// Reverses a finished rename or move, when nothing took the old place meanwhile.
 pub struct UndoFileOperation {
@@ -13,6 +13,7 @@ pub struct UndoFileOperation {
     pub journal: Arc<dyn FileJournal>,
     pub locks: Arc<LibraryLocks>,
     pub scan: Arc<ScanLibrary>,
+    pub sidecars: Arc<dyn SidecarFiles>,
 }
 
 impl UndoFileOperation {
@@ -32,6 +33,7 @@ impl UndoFileOperation {
             let rules = self.libraries.scan_rules(library.id)?;
             self.journal.set_status(id, JournalStatus::Undoing)?;
             apply(self.files.as_ref(), self.journal.as_ref(), &library.root, &entry, &rules, false)?;
+            save_rules_file(self.sidecars.as_ref(), &library, &self.libraries.scan_rules(library.id)?);
         }
         Ok(FileChange { journal: id, warning: rescan(&self.scan, library.id) })
     }

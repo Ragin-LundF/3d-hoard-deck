@@ -45,12 +45,13 @@ export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<num
           phase: payload.phase,
           folders: payload.folders ?? 0,
           files: payload.files ?? 0,
-          unreadable: payload.unreadable ?? 0,
-          unreadableExamples: payload.unreadableExamples,
+          // A folder scan only knows its own part; the last full scan's list stays.
+          unreadable: payload.partial ? (current[payload.library]?.unreadable ?? 0) : (payload.unreadable ?? 0),
+          unreadableExamples: payload.partial ? (current[payload.library]?.unreadableExamples ?? []) : payload.unreadableExamples,
           error: payload.error ?? null,
         },
       }));
-      if (payload.phase === "done") remember(payload.library, payload.unreadable ?? 0, payload.unreadableExamples);
+      if (payload.phase === "done" && !payload.partial) remember(payload.library, payload.unreadable ?? 0, payload.unreadableExamples);
       if (payload.phase === "done" || payload.phase === "failed") void queryClient.invalidateQueries();
       if (payload.error) onFailed(new IpcFailure(payload.error));
     });

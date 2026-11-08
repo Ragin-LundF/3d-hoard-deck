@@ -221,6 +221,12 @@ mod tests {
             paths.insert(to.to_string());
             Ok(())
         }
+        fn create_file(&self, _: &str, _: &RelPath, _: &[u8]) -> Result<(), FileError> {
+            Err(FileError::Failed("not used here".to_owned()))
+        }
+        fn copy_file(&self, _: &str, _: &RelPath, _: &RelPath) -> Result<u64, FileError> {
+            Err(FileError::Failed("not used here".to_owned()))
+        }
         fn exists(&self, _: &str, path: &RelPath) -> Result<bool, String> {
             Ok(self.paths.lock().expect("lock").contains(path.as_str()))
         }

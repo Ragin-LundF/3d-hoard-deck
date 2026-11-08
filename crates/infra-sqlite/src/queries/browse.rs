@@ -6,16 +6,20 @@ use hoarddeck_domain::{Folder, LibraryId, RelPath};
 use rusqlite::types::Value;
 use rusqlite::{Connection, params, params_from_iter};
 
-use crate::rows::{FOLDER_COLUMNS, SUMMARY_COLUMNS, SUMMARY_FROM, TITLE, folder, subtree_bounds, summary};
+use crate::rows::{SUMMARY_COLUMNS, SUMMARY_FROM, TITLE, folder, subtree_bounds, summary};
 
 pub(crate) fn child_folders(
     connection: &Connection,
     library: LibraryId,
     parent: &RelPath,
 ) -> rusqlite::Result<Vec<Folder>> {
-    let mut statement = connection.prepare_cached(&format!(
-        "SELECT {FOLDER_COLUMNS} FROM folders WHERE library_id = ?1 AND parent = ?2 ORDER BY display_name, path"
-    ))?;
+    // A cover the user picked wins over the detected one.
+    let mut statement = connection.prepare_cached(
+        "SELECT f.path, f.display_name, f.released, f.direct_models, f.total_models, coalesce(c.cover, f.cover),
+                f.is_collection
+         FROM folders f LEFT JOIN folder_covers c ON c.library_id = f.library_id AND c.path = f.path
+         WHERE f.library_id = ?1 AND f.parent = ?2 ORDER BY f.display_name, f.path",
+    )?;
     statement.query_map(params![library.0, parent.as_str()], folder)?.collect()
 }
 

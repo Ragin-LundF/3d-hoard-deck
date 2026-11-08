@@ -46,3 +46,11 @@ impl From<FileChange> for FileChangeDto {
         Self { journal: id32(change.journal), warning: change.warning }
     }
 }
+
+/// Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenshotDto {
+    pub path: String,
+    pub warning: Option<String>,
+}

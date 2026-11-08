@@ -7,7 +7,7 @@ use hoarddeck_application::files::Target;
 use hoarddeck_domain::ModelId;
 
 use super::AppState;
-use crate::dto::{FileChangeDto, IpcError, JournalEntryDto, rel_path};
+use crate::dto::{FileChangeDto, IpcError, JournalEntryDto, ScreenshotDto, rel_path};
 
 /// Renames the model on disk (`rename`) or moves it into `folder`; exactly one must be given.
 /// Returns the journal id for undo, and a warning when the files moved but the rescan did not work.
@@ -39,6 +39,25 @@ pub async fn undo_file_operation(app: AppState<'_>, id: u32) -> Result<FileChang
         .await
         .map_err(|error| internal(&error))??;
     Ok(change.into())
+}
+
+/// Writes a PNG of the 3D preview of `file` next to it as `preview_<name>.png` (libraries that may write files). The bytes travel as a
+/// JSON number array, fine for a screenshot of a few MB.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_screenshot(
+    app: AppState<'_>,
+    id: u32,
+    file: String,
+    png: Vec<u8>,
+) -> Result<ScreenshotDto, IpcError> {
+    let app = Arc::clone(&app);
+    let file = rel_path(&file)?;
+    let shot =
+        tauri::async_runtime::spawn_blocking(move || app.save_screenshot.execute(ModelId(i64::from(id)), &file, &png))
+            .await
+            .map_err(|error| internal(&error))??;
+    Ok(ScreenshotDto { path: shot.path.to_string(), warning: shot.warning })
 }
 
 /// The latest renames and moves across all libraries, newest first.

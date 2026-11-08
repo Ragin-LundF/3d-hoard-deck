@@ -24,6 +24,8 @@ export const commands = {
 	 *  `full` also lists folders whose mtime did not change, to catch files overwritten in place.
 	 */
 	scanLibrary: (library: number, full: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("scan_library", { library, full })),
+	/**  Like `scan_library`, but only `folder` and what is below it: much faster in a big library on a network share. */
+	scanFolder: (library: number, folder: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("scan_folder", { library, folder })),
 	browseFolder: (request: BrowseRequestDto_Deserialize) => typedError<FolderPageDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("browse_folder", { request })),
 	folderChildren: (library: number, folder: string) => typedError<FolderDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folder_children", { library, folder })),
 	searchModels: (request: SearchRequestDto_Deserialize) => typedError<SearchResultDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("search_models", { request })),
@@ -56,6 +58,11 @@ export const commands = {
 	importOrynt3d: (library: number) => typedError<ImportReportDto, IpcError_Serialize>(__TAURI_INVOKE("import_orynt3d", { library })),
 	/**  Identical model files across all libraries. Reads files, which takes a while over a network share. */
 	findDuplicates: () => typedError<DuplicateGroupDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("find_duplicates")),
+	/**
+	 *  Uses `image` as the picture of `folder`'s card (`None`: back to the detected one). Returns the copy's path when
+	 *  the library allows writing and the picture was copied into the folder as `folder.<ext>`.
+	 */
+	setFolderCover: (library: number, folder: string, image: string | null) => typedError<string | null, IpcError_Serialize>(__TAURI_INVOKE("set_folder_cover", { library, folder, image })),
 	/**  Stops a running duplicate search; it then fails with `cancelled`. */
 	cancelDuplicates: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_duplicates")),
 	/**
@@ -66,6 +73,11 @@ export const commands = {
 	undoFileOperation: (id: number) => typedError<FileChangeDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("undo_file_operation", { id })),
 	/**  The latest renames and moves across all libraries, newest first. */
 	fileJournal: (limit: number) => typedError<JournalEntryDto[], IpcError_Serialize>(__TAURI_INVOKE("file_journal", { limit })),
+	/**
+	 *  Writes a PNG of the 3D preview of `file` next to it as `preview_<name>.png` (libraries that may write files). The bytes travel as a
+	 *  JSON number array, fine for a screenshot of a few MB.
+	 */
+	saveScreenshot: (id: number, file: string, png: number[]) => typedError<ScreenshotDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("save_screenshot", { id, file, png })),
 	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
 	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
 	/**  Collection presets that match this library's folders and are not in use yet. */
@@ -225,12 +237,16 @@ export type FolderPageDto = FolderPageDto_Serialize | FolderPageDto_Deserialize;
 
 export type FolderPageDto_Deserialize = {
 	folders: FolderDto_Deserialize[],
+	/**  Pictures in the folder that belong to no model, relative to the library. */
+	images: string[],
 	models: ModelSummaryDto_Deserialize[],
 	next?: CursorDto | null,
 };
 
 export type FolderPageDto_Serialize = {
 	folders: FolderDto_Serialize[],
+	/**  Pictures in the folder that belong to no model, relative to the library. */
+	images: string[],
 	models: ModelSummaryDto_Serialize[],
 	next: CursorDto | null,
 };
@@ -260,7 +276,7 @@ export type IpcError_Deserialize = {
 	/**
 	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
 	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
-	 *  `not_managed`), the path, name or library concerned.
+	 *  `not_managed`, `read_only`), the path, name or library concerned.
 	 */
 	details?: string | null,
 };
@@ -275,7 +291,7 @@ export type IpcError_Serialize = {
 	/**
 	 *  Extra data for some codes: for `index_exists`, the existing index's last change in seconds since 1970; for
 	 *  refusals (`already_exists`, `empty_name`, `forbidden_character`, `trailing_dot_or_space`, `reserved_name`,
-	 *  `not_managed`), the path, name or library concerned.
+	 *  `not_managed`, `read_only`), the path, name or library concerned.
 	 */
 	details: string | null,
 };
@@ -416,6 +432,8 @@ export type PresetProposalDto = {
 export type RebuildReportDto = {
 	restored: number,
 	unreadable: number,
+	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
+	rulesRestored: number,
 };
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
@@ -431,6 +449,8 @@ export type ScanProgressEvent_Deserialize = {
 	unreadable: number | null,
 	/**  `path: reason` for the first of them. */
 	unreadableExamples: string[],
+	/**  Only one folder was scanned; `unreadable` covers just that part. */
+	partial: boolean,
 	/**  Set when `phase` is `failed`; same codes as command errors. */
 	error?: IpcError_Deserialize | null,
 };
@@ -445,8 +465,25 @@ export type ScanProgressEvent_Serialize = {
 	unreadable: number | null,
 	/**  `path: reason` for the first of them. */
 	unreadableExamples: string[],
+	/**  Only one folder was scanned; `unreadable` covers just that part. */
+	partial: boolean,
 	/**  Set when `phase` is `failed`; same codes as command errors. */
 	error: IpcError_Serialize | null,
+};
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto = ScreenshotDto_Serialize | ScreenshotDto_Deserialize;
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto_Deserialize = {
+	path: string,
+	warning?: string | null,
+};
+
+/**  Where a screenshot was written, relative to its library; `warning` when the rescan afterwards did not work. */
+export type ScreenshotDto_Serialize = {
+	path: string,
+	warning: string | null,
 };
 
 export type SearchRequestDto = SearchRequestDto_Serialize | SearchRequestDto_Deserialize;

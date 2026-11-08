@@ -1,7 +1,7 @@
 //! The only adapter that changes files inside a library. Used only for libraries in Managed mode.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use hoarddeck_application::ports::{FileError, FileOperations};
@@ -39,6 +39,36 @@ impl FileOperations for FsFileOperations {
 
     fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String> {
         absolute(Path::new(root), path).try_exists().map_err(|error| format!("{path}: {error}"))
+    }
+
+    fn create_file(&self, root: &str, path: &RelPath, bytes: &[u8]) -> Result<(), FileError> {
+        let failed = |message: String| FileError::Failed(message);
+        let root = fs::canonicalize(root).map_err(|error| failed(format!("{root}: {error}")))?;
+        let target = absolute(&root, path);
+        let parent = target.parent().ok_or_else(|| failed(format!("{path} has no parent folder")))?;
+        inside(&root, parent).map_err(failed)?;
+        // `create_new` refuses an existing file atomically, also on network shares.
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                FileError::AlreadyExists
+            } else {
+                failed(format!("{path}: {error}"))
+            }
+        })?;
+        file.write_all(bytes).and_then(|()| file.sync_all()).map_err(|error| {
+            // A half-written image is worse than none.
+            let _ = fs::remove_file(&target);
+            failed(format!("{path}: {error}"))
+        })
+    }
+
+    fn copy_file(&self, root: &str, from: &RelPath, to: &RelPath) -> Result<u64, FileError> {
+        let canonical = fs::canonicalize(root).map_err(|error| FileError::Failed(format!("{root}: {error}")))?;
+        let source = absolute(&canonical, from);
+        inside(&canonical, &source).map_err(FileError::Failed)?;
+        let bytes = fs::read(&source).map_err(|error| FileError::Failed(format!("{from}: {error}")))?;
+        self.create_file(root, to, &bytes)?;
+        Ok(bytes.len() as u64)
     }
 
     fn remove_empty_dir(&self, root: &str, dir: &RelPath) -> Result<(), String> {
@@ -154,6 +184,15 @@ mod tests {
             .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["Dragon"]);
+    }
+
+    #[test]
+    fn new_files_never_replace_existing_ones() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path().to_str().expect("utf-8");
+        FsFileOperations.create_file(root, &path("preview.png"), b"one").expect("create");
+        assert_eq!(FsFileOperations.create_file(root, &path("preview.png"), b"two"), Err(FileError::AlreadyExists));
+        assert_eq!(fs::read(dir.path().join("preview.png")).expect("read"), b"one");
     }
 
     #[test]

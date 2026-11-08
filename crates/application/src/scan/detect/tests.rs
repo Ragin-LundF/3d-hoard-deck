@@ -147,3 +147,66 @@ fn files_in_the_root_and_in_top_level_variant_folders_are_kept() {
     let summary: Vec<_> = catalog.models.iter().map(|m| (m.kind, m.path.as_str())).collect();
     assert_eq!(summary, vec![(ModelKind::Folder, "Resin"), (ModelKind::File, "x.stl")]);
 }
+
+#[test]
+fn a_saved_screenshot_is_the_cover_of_its_single_file_model() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Makerworld/gear.stl", 100),
+            file("Makerworld/preview_gear.png", 10),
+            file("Makerworld/Busts/bust.stl", 100),
+        ],
+    );
+    let gear = catalog.models.iter().find(|model| model.title == "gear").expect("gear");
+    assert_eq!(gear.cover, Some(path("Makerworld/preview_gear.png")));
+}
+
+#[test]
+fn a_single_loose_file_next_to_model_folders_keeps_the_folders_pictures() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Hex3D/Helmet/helmet_uncut.stl", 100),
+            file("Hex3D/Helmet/battlestar1.png", 10),
+            file("Hex3D/Helmet/cr10_cut.png", 10),
+            file("Hex3D/Helmet/cr10_cut/part1.stl", 50),
+            file("Hex3D/Helmet/ender3_cuts/part1.stl", 50),
+        ],
+    );
+    let helmet = catalog.models.iter().find(|model| model.path == path("Hex3D/Helmet/helmet_uncut.stl")).expect("file");
+    let names: Vec<&str> = helmet.files.iter().map(|file| file.path.name()).collect();
+    assert_eq!(names, ["battlestar1.png", "helmet_uncut.stl"], "the cut folder's own picture stays with it");
+    assert_eq!(helmet.cover, Some(path("Hex3D/Helmet/battlestar1.png")));
+    let cut = catalog.models.iter().find(|model| model.path == path("Hex3D/Helmet/cr10_cut")).expect("folder");
+    assert_eq!(cut.cover, Some(path("Hex3D/Helmet/cr10_cut.png")));
+}
+
+#[test]
+fn a_folder_shows_its_own_picture_before_the_covers_of_its_models() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Pack/overview.jpg", 10),
+            file("Pack/A/a.stl", 100),
+            file("Pack/A/a.png", 10),
+            file("Pack/B/b.stl", 100),
+        ],
+    );
+    let pack = catalog.folders.iter().find(|folder| folder.path == path("Pack")).expect("folder");
+    assert_eq!(pack.cover, Some(path("Pack/overview.jpg")));
+}
+
+#[test]
+fn a_folder_without_any_cover_borrows_a_picture_from_below() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Creator/Dragon/dragon.stl", 100),
+            file("Creator/Orc/orc.stl", 100),
+            file("Creator/Orc/Renders/Final/orc_front.jpg", 10),
+        ],
+    );
+    let creator = catalog.folders.iter().find(|folder| folder.path == path("Creator")).expect("folder");
+    assert_eq!(creator.cover, Some(path("Creator/Orc/Renders/Final/orc_front.jpg")));
+}

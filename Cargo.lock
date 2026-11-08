@@ -1738,7 +1738,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hoarddeck-app"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1753,7 +1753,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-application"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "globset",
  "hoarddeck-domain",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-app",
  "hoarddeck-application",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-app",
  "hoarddeck-application",
@@ -1795,7 +1795,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-domain"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-fs"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "hoarddeck-application",
@@ -1818,7 +1818,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-mesh"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-platform"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1838,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-sqlite"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1849,7 +1849,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-tantivy"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1860,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-thumbs"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "image",
  "tempfile",

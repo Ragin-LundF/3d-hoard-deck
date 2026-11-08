@@ -60,6 +60,9 @@ impl EntryStore for Store {
         *self.finished.lock().expect("lock") = true;
         Ok(0)
     }
+    fn finish_folder_scan(&self, library: LibraryId, generation: Generation, _: &RelPath) -> Result<u64, IndexError> {
+        self.finish_scan(library, generation)
+    }
     fn folders(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
         Ok(Vec::new())
     }
@@ -97,6 +100,9 @@ impl ModelRepository for Store {
     fn child_folders(&self, _: LibraryId, _: &RelPath) -> Result<Vec<Folder>, IndexError> {
         Ok(Vec::new())
     }
+    fn loose_images(&self, _: LibraryId, _: &RelPath) -> Result<Vec<RelPath>, IndexError> {
+        Ok(Vec::new())
+    }
 }
 
 struct NoSearch;
@@ -126,7 +132,14 @@ struct ScriptedScanner {
 }
 
 impl LibraryScanner for ScriptedScanner {
-    fn scan(&self, _: &str, _: &KnownDirs, _: &CompiledRules, out: &SyncSender<ScanItem>) -> Result<(), ScanError> {
+    fn scan(
+        &self,
+        _: &str,
+        _: &RelPath,
+        _: &KnownDirs,
+        _: &CompiledRules,
+        out: &SyncSender<ScanItem>,
+    ) -> Result<(), ScanError> {
         for item in &self.items {
             out.send(item.clone()).map_err(|_| ScanError::Aborted("closed".to_owned()))?;
         }

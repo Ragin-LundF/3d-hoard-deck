@@ -3,10 +3,10 @@ use std::sync::Arc;
 
 use hoarddeck_application::AppError;
 use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
-use hoarddeck_application::files::{MoveModel, ReconcileJournal, UndoFileOperation};
+use hoarddeck_application::files::{MoveModel, ReconcileJournal, SaveScreenshot, UndoFileOperation};
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
-    FindDuplicates, ImportOrynt3d, ListTags, ManageCollections, RebuildFromSidecars, UpdateModelMeta,
+    FindDuplicates, ImportOrynt3d, ListTags, ManageCollections, RebuildFromSidecars, SetFolderCover, UpdateModelMeta,
 };
 use hoarddeck_application::ports::{EventSink, FileJournal, LibraryRepository};
 use hoarddeck_application::scan::{
@@ -36,6 +36,7 @@ pub struct App {
     pub auto_rescan: Arc<AutoRescan>,
     pub move_model: MoveModel,
     pub undo_file_operation: UndoFileOperation,
+    pub save_screenshot: SaveScreenshot,
     /// Recent renames and moves, for the undo list.
     pub file_journal: Arc<dyn FileJournal>,
     pub set_folder_role: SetFolderRole,
@@ -52,6 +53,7 @@ pub struct App {
     pub update_model_meta: Arc<UpdateModelMeta>,
     pub import_orynt3d: ImportOrynt3d,
     pub rebuild_from_sidecars: RebuildFromSidecars,
+    pub set_folder_cover: SetFolderCover,
     pub list_tags: ListTags,
     pub open_in_slicer: OpenInSlicer,
 }
@@ -80,13 +82,7 @@ impl App {
             events.clone(),
             locks.clone(),
         ));
-        let editor = Arc::new(RuleEditor {
-            libraries: index.clone(),
-            entries: index.clone(),
-            models: index.clone(),
-            search: search.clone(),
-            locks: locks.clone(),
-        });
+        let editor = rule_editor(&index, &search, &locks);
         let search_models = Arc::new(SearchModels { search: search.clone(), models: index.clone() });
         let update_model_meta = Arc::new(UpdateModelMeta {
             libraries: index.clone(),
@@ -97,7 +93,8 @@ impl App {
             locks: locks.clone(),
         });
         let slicers = Arc::new(ManageSlicers { store: index.clone(), detector: Arc::new(InstalledSlicers) });
-        let (move_model, undo_file_operation) = file_operations(&index, &locks, &scan_library);
+        let (move_model, undo_file_operation, save_screenshot, set_folder_cover) =
+            file_operations(&index, &locks, &scan_library);
         Ok(Self {
             index_dir: index_dir.clone(),
             libraries: index.clone(),
@@ -118,12 +115,13 @@ impl App {
             add_library: AddLibrary { libraries: index.clone(), index_dir: index_dir.clone() },
             move_model,
             undo_file_operation,
+            save_screenshot,
             file_journal: index.clone(),
             auto_rescan: auto_rescan(&index, &scan_library),
             scan_library,
             set_folder_role: SetFolderRole { editor: editor.clone() },
             folder_rules: FolderRules { editor: editor.clone() },
-            collection_presets: CollectionPresets { entries: index.clone(), editor },
+            collection_presets: CollectionPresets { entries: index.clone(), editor: editor.clone() },
             browse_folder: BrowseFolder { models: index.clone() },
             get_folder_children: GetFolderChildren { models: index.clone() },
             list_archive: ListArchive { libraries: index.clone(), archives: Arc::new(ZipArchives) },
@@ -150,7 +148,9 @@ impl App {
                 sidecars: Arc::new(SidecarFileStore),
                 search: search.clone(),
                 locks: locks.clone(),
+                editor: editor.clone(),
             },
+            set_folder_cover,
             list_tags: ListTags { meta: index.clone() },
             collections: ManageCollections {
                 store: index.clone(),
@@ -163,12 +163,12 @@ impl App {
     }
 }
 
-/// Rename, move and undo share the journal, the locks and the rescan afterwards. Settles changes a crash interrupted.
+/// Rename, move, undo, screenshots and copied folder covers write into libraries; they share locks and rescans. Settles changes a crash interrupted.
 fn file_operations(
     index: &Arc<SqliteIndex>,
     locks: &Arc<LibraryLocks>,
     scan: &Arc<ScanLibrary>,
-) -> (MoveModel, UndoFileOperation) {
+) -> (MoveModel, UndoFileOperation, SaveScreenshot, SetFolderCover) {
     // An interrupted rename must not block opening; it is tried again on the next start.
     let reconcile =
         ReconcileJournal { libraries: index.clone(), files: Arc::new(FsFileOperations), journal: index.clone() };
@@ -182,6 +182,7 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
+        sidecars: Arc::new(SidecarFileStore),
     };
     let undo = UndoFileOperation {
         libraries: index.clone(),
@@ -189,8 +190,22 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
+        sidecars: Arc::new(SidecarFileStore),
     };
-    (move_model, undo)
+    let screenshot = SaveScreenshot {
+        libraries: index.clone(),
+        models: index.clone(),
+        files: Arc::new(FsFileOperations),
+        locks: locks.clone(),
+        scan: scan.clone(),
+    };
+    let folder_cover = SetFolderCover {
+        libraries: index.clone(),
+        covers: index.clone(),
+        files: Arc::new(FsFileOperations),
+        scan: scan.clone(),
+    };
+    (move_model, undo, screenshot, folder_cover)
 }
 
 fn find_duplicates(index: &Arc<SqliteIndex>, events: Arc<dyn EventSink>) -> FindDuplicates {
@@ -207,4 +222,19 @@ fn find_duplicates(index: &Arc<SqliteIndex>, events: Arc<dyn EventSink>) -> Find
 
 fn auto_rescan(index: &Arc<SqliteIndex>, scan: &Arc<ScanLibrary>) -> Arc<AutoRescan> {
     Arc::new(AutoRescan::new(index.clone(), Arc::new(SystemStorage), Arc::new(NotifyWatcher::new()), scan.clone()))
+}
+
+fn rule_editor(
+    index: &Arc<SqliteIndex>,
+    search: &Arc<TantivySearchIndex>,
+    locks: &Arc<LibraryLocks>,
+) -> Arc<RuleEditor> {
+    Arc::new(RuleEditor {
+        libraries: index.clone(),
+        entries: index.clone(),
+        models: index.clone(),
+        search: search.clone(),
+        locks: locks.clone(),
+        sidecars: Arc::new(SidecarFileStore),
+    })
 }
