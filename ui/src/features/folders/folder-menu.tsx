@@ -42,6 +42,16 @@ export function FolderMenu({ target, onClose, onError }: { target: MenuTarget; o
       <button role="menuitemcheckbox" aria-checked={target.isCollection} onClick={choose("collection")}>{t("Treat as collection")}</button>
       <hr />
       <button role="menuitem" onClick={choose(null)}>{t("Detect automatically")}</button>
+      <hr />
+      <button
+        role="menuitem"
+        onClick={() => {
+          unwrap(commands.scanFolder(target.library, target.folder)).catch((error) => onError(describeError(error)));
+          onClose();
+        }}
+      >
+        {t("Scan this folder")}
+      </button>
       <p className="menu-hint">{t("Rules for whole patterns (suggested collections) are listed in Settings › Libraries.")}</p>
     </div>
   );

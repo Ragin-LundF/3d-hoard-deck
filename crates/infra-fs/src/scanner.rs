@@ -37,6 +37,7 @@ impl LibraryScanner for FsLibraryScanner {
     fn scan(
         &self,
         root: &str,
+        from: &RelPath,
         known: &KnownDirs,
         rules: &CompiledRules,
         out: &SyncSender<ScanItem>,
@@ -52,7 +53,7 @@ impl LibraryScanner for FsLibraryScanner {
             .build()
             .map_err(|error| ScanError::Aborted(error.to_string()))?;
         let walk = Walk { root, known, rules, out, stopped: AtomicBool::new(false) };
-        pool.scope(|scope| visit(scope, &walk, RelPath::root()));
+        pool.scope(|scope| visit(scope, &walk, from.clone()));
         if walk.stopped.load(Ordering::Relaxed) {
             return Err(ScanError::Aborted("the index writer stopped".to_owned()));
         }

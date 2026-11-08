@@ -256,3 +256,40 @@ fn pictures_of_a_folder_without_its_own_model_files_are_shown_on_its_page() {
         .expect("browse");
     assert_eq!(page.images, [RelPath::new("Pack/overview.jpg").expect("valid")], "A.png is A's cover, not loose");
 }
+
+#[test]
+fn scanning_one_folder_updates_it_and_leaves_the_rest_alone() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["A/old/old.stl", "B/kept/kept.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    fs::remove_dir_all(root.join("A/old")).expect("remove in A");
+    fs::create_dir_all(root.join("A/new")).expect("dir");
+    fs::write(root.join("A/new/new.stl"), vec![0_u8; 134]).expect("new in A");
+    fs::create_dir_all(root.join("B/later")).expect("dir");
+    fs::write(root.join("B/later/later.stl"), vec![0_u8; 134]).expect("new in B");
+    fs::remove_dir_all(root.join("B/kept")).expect("remove in B");
+
+    let report = app
+        .scan_library
+        .scan_folder(library.id, &RelPath::new("A").expect("valid"), ScanMode::Incremental)
+        .expect("folder scan");
+    assert!(report.partial);
+    let titles = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models.len()
+    };
+    assert_eq!(titles("new"), 1, "the new model in A is found");
+    assert_eq!(titles("old"), 0, "the removed model in A is gone");
+    assert_eq!(titles("later"), 0, "B was not scanned");
+    assert_eq!(titles("kept"), 1, "B keeps what it had");
+}

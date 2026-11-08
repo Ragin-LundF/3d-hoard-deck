@@ -356,4 +356,7 @@ export const de: Record<string, string> = {
   "Previous picture": "Vorheriges Bild",
   "Next picture": "Nächstes Bild",
   "Close": "Schließen",
+  "Scan this folder": "Diesen Ordner scannen",
+  "Reads only this folder and its subfolders again, much faster than the whole library":
+    "Liest nur diesen Ordner und seine Unterordner neu, viel schneller als die ganze Bibliothek",
 };

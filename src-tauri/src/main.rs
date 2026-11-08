@@ -55,6 +55,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::index::index_location,
             commands::index::move_index_location,
             commands::library::scan_library,
+            commands::library::scan_folder,
             commands::browse::browse_folder,
             commands::browse::folder_children,
             commands::browse::search_models,

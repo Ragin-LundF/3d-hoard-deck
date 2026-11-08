@@ -11,7 +11,7 @@ use hoarddeck_domain::{Entry, EntryKind, FileKind, LibraryId, RelPath};
 use rusqlite::params;
 
 use crate::SqliteIndex;
-use crate::rows::{converted, rel_path, to_i64, to_u64};
+use crate::rows::{converted, rel_path, subtree_bounds, to_i64, to_u64};
 
 impl EntryStore for SqliteIndex {
     fn begin_scan(&self, library: LibraryId) -> Result<(Generation, KnownDirs), IndexError> {
@@ -48,6 +48,25 @@ impl EntryStore for SqliteIndex {
             )?;
             transaction.execute("UPDATE libraries SET last_scan_at = ?2 WHERE id = ?1", params![library.0, now])?;
             transaction.commit()?;
+            Ok(removed as u64)
+        })
+    }
+
+    fn finish_folder_scan(
+        &self,
+        library: LibraryId,
+        generation: Generation,
+        folder: &RelPath,
+    ) -> Result<u64, IndexError> {
+        if folder.is_root() {
+            return self.finish_scan(library, generation);
+        }
+        let (low, high) = subtree_bounds(folder);
+        self.write(|connection| {
+            let removed = connection.execute(
+                "DELETE FROM entries WHERE library_id = ?1 AND generation < ?2 AND (path = ?3 OR (path >= ?4 AND path < ?5))",
+                params![library.0, generation.0, folder.as_str(), low, high],
+            )?;
             Ok(removed as u64)
         })
     }

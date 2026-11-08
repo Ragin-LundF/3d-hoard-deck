@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { describeError, type FolderDto_Serialize, type LibraryDto, type ModelSummaryDto_Serialize, type SortDto } from "../../ipc";
+import { commands, describeError, unwrap, type FolderDto_Serialize, type LibraryDto, type ModelSummaryDto_Serialize, type SortDto } from "../../ipc";
 import { folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import type { LibraryRoute, Route } from "../../shared/route";
@@ -68,6 +68,15 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
             {searching && total !== undefined ? plural(total, "{count} match", "{count} matches") : null}
           </span>
           <span className="spacer" />
+          {!searching && route.folder && (
+            <button
+              className="btn ghost"
+              title={t("Reads only this folder and its subfolders again, much faster than the whole library")}
+              onClick={() => unwrap(commands.scanFolder(library.id, route.folder)).catch((error) => onError(describeError(error)))}
+            >
+              <Icon name="refresh" />{t("Scan this folder")}
+            </button>
+          )}
           {!searching && (
             <div className="seg" role="group" aria-label={t("Folder display")}>
               <button className={route.all ? "" : "on"} aria-pressed={!route.all} onClick={() => navigate({ ...route, all: false })}>

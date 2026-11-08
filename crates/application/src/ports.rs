@@ -56,6 +56,16 @@ pub trait EntryStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn finish_scan(&self, library: LibraryId, generation: Generation) -> Result<u64, IndexError>;
+    /// Like [`Self::finish_scan`] after scanning only `folder` and what is below it: removes unseen entries there and
+    /// leaves the rest of the library alone.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn finish_folder_scan(
+        &self,
+        library: LibraryId,
+        generation: Generation,
+        folder: &RelPath,
+    ) -> Result<u64, IndexError>;
     /// All stored folder paths of a library (the root excluded).
     /// # Errors
     /// Fails when the index cannot be read.
@@ -122,7 +132,8 @@ pub trait SearchIndex: Send + Sync {
 
 /// Walks a library folder. Implementations must only read, never write into the library.
 pub trait LibraryScanner: Send + Sync {
-    /// Sends one item per folder. Folders whose mtime matches `known` are reported as unchanged without listing them.
+    /// Sends one item per folder at and below `from` (the root for a whole library). Folders whose mtime matches
+    /// `known` are reported as unchanged without listing them.
     /// Files and folders matching the ignore rules are neither reported nor descended into.
     /// Stops early when the receiver is gone.
     /// # Errors
@@ -130,6 +141,7 @@ pub trait LibraryScanner: Send + Sync {
     fn scan(
         &self,
         root: &str,
+        from: &RelPath,
         known: &KnownDirs,
         rules: &CompiledRules,
         out: &SyncSender<ScanItem>,

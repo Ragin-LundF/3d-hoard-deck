@@ -45,4 +45,6 @@ pub struct ScanProgress {
     pub failed: u64,
     /// `path: reason` for the first of them.
     pub failures: Vec<String>,
+    /// Only one folder and what is below it was scanned; `failures` covers just that part.
+    pub partial: bool,
 }

@@ -6,6 +6,9 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Scan this folder:** a button in the folder header and an entry in the folder's right-click menu read just that
+  folder and its subfolders again. Much faster than a full scan in big libraries; the rest of the library stays as
+  it is, and the full scan is still there.
 - **Screenshot** button in the 3D preview: turn and zoom the model, then save that view as `preview_<name>.png` next
   to the mesh file. In a folder without images it becomes the cover right away; only that folder is updated, so
   there is no wait for a library scan. Existing files are never replaced, and libraries set to "never change files"

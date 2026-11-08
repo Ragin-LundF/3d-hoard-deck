@@ -17,6 +17,8 @@ pub struct ScanProgressEvent {
     pub unreadable: f64,
     /// `path: reason` for the first of them.
     pub unreadable_examples: Vec<String>,
+    /// Only one folder was scanned; `unreadable` covers just that part.
+    pub partial: bool,
     /// Set when `phase` is `failed`; same codes as command errors.
     pub error: Option<crate::dto::IpcError>,
 }
@@ -48,6 +50,7 @@ impl ScanProgressEvent {
             files: 0.0,
             unreadable: 0.0,
             unreadable_examples: Vec::new(),
+            partial: false,
             error: Some(error),
         }
     }
@@ -68,6 +71,7 @@ impl EventSink for TauriEvents {
             files: progress.files as f64,
             unreadable: progress.failed as f64,
             unreadable_examples: progress.failures.clone(),
+            partial: progress.partial,
             error: None,
         };
         if progress.phase == ScanPhase::Done {
