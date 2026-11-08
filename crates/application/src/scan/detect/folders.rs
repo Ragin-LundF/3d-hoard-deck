@@ -33,7 +33,8 @@ pub(super) fn build_folders(models: &[Model], images: &ImagesByDir<'_>, rules: &
         .map(|(path, counts)| {
             let parsed = parse_folder_name(path.name());
             Folder {
-                cover: images.sibling_of(&path).or(counts.cover),
+                // `Release.jpg` next to it, else its own pictures (an overview beside model subfolders), else a model's.
+                cover: images.sibling_of(&path).or_else(|| images.best_in(&path)).or(counts.cover),
                 display_name: parsed.display,
                 released: parsed.released,
                 direct_models: counts.direct,

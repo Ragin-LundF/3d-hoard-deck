@@ -181,3 +181,18 @@ fn a_single_loose_file_next_to_model_folders_keeps_the_folders_pictures() {
     let cut = catalog.models.iter().find(|model| model.path == path("Hex3D/Helmet/cr10_cut")).expect("folder");
     assert_eq!(cut.cover, Some(path("Hex3D/Helmet/cr10_cut.png")));
 }
+
+#[test]
+fn a_folder_shows_its_own_picture_before_the_covers_of_its_models() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Pack/overview.jpg", 10),
+            file("Pack/A/a.stl", 100),
+            file("Pack/A/a.png", 10),
+            file("Pack/B/b.stl", 100),
+        ],
+    );
+    let pack = catalog.folders.iter().find(|folder| folder.path == path("Pack")).expect("folder");
+    assert_eq!(pack.cover, Some(path("Pack/overview.jpg")));
+}

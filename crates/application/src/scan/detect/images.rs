@@ -17,6 +17,11 @@ impl<'a> ImagesByDir<'a> {
         Self(by_dir)
     }
 
+    /// The best of the pictures lying directly in `dir`.
+    pub(super) fn best_in(&self, dir: &RelPath) -> Option<RelPath> {
+        best_image(self.0.get(dir)?)
+    }
+
     /// `Release.jpg` next to the folder `Release/`.
     pub(super) fn sibling_of(&self, folder: &RelPath) -> Option<RelPath> {
         self.with_stem(&folder.parent()?, folder.name())
@@ -28,6 +33,18 @@ impl<'a> ImagesByDir<'a> {
         let named = |name: &str| images.iter().find(|image| stem(image.path.name()).eq_ignore_ascii_case(name));
         named(wanted).or_else(|| named(&format!("preview_{wanted}"))).map(|image| image.path.clone())
     }
+}
+
+/// Image names that mark the picture meant as the cover.
+const COVER_WORDS: [&str; 4] = ["cover", "preview", "main", "render"];
+
+/// An image named like cover/preview/render wins, else the largest image.
+pub(super) fn best_image(images: &[&Entry]) -> Option<RelPath> {
+    let named = images.iter().find(|image| {
+        let lower = stem(image.path.name()).to_lowercase();
+        COVER_WORDS.iter().any(|word| lower.starts_with(word))
+    });
+    named.or_else(|| images.iter().max_by_key(|image| image.size)).map(|image| image.path.clone())
 }
 
 /// `dragon.stl.txt` → `dragon`, so `dragon.jpg` is found as its cover.

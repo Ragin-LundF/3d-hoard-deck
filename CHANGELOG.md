@@ -16,6 +16,8 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
   when metadata files are on, and **Rebuild from metadata files** restores them on a new computer.
 - A folder's own pictures that belong to no model (for example an overview next to model subfolders) are shown
   above its cards and open in a viewer with zoom, without having to mark the folder as one model.
+- Such a folder also uses one of its own pictures as its card cover (an image named cover, preview, main or render
+  first, else the largest), before falling back to the cover of a model inside.
 
 ### Fixed
 - Pictures lying next to a single model file in a folder that also holds model subfolders were not shown anywhere;

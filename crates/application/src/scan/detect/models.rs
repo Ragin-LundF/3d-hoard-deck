@@ -7,11 +7,9 @@ use hoarddeck_domain::{
     Entry, FileKind, Model, ModelFile, ModelKind, RelPath, YearMonth, file_title, parse_folder_name,
 };
 
-use super::images::{ImagesByDir, model_stem, stem};
+use super::images::{ImagesByDir, best_image, model_stem, stem};
 use super::owners::{Group, Owned};
 use crate::scan::CompiledRules;
-
-const COVER_WORDS: [&str; 4] = ["cover", "preview", "main", "render"];
 
 pub(super) fn build_models(
     groups: BTreeMap<RelPath, Group<'_>>,
@@ -134,11 +132,7 @@ fn file_model(file: &Owned<'_>, pictures: &[&Owned<'_>], images: &ImagesByDir<'_
 /// An image named like cover/preview/render wins, else the largest image.
 fn cover_from(owned: &[Owned<'_>]) -> Option<RelPath> {
     let images: Vec<&Entry> = owned.iter().filter(|file| file.kind == FileKind::Image).map(|file| file.entry).collect();
-    let named = images.iter().find(|image| {
-        let lower = stem(image.path.name()).to_lowercase();
-        COVER_WORDS.iter().any(|word| lower.starts_with(word))
-    });
-    named.or_else(|| images.iter().max_by_key(|image| image.size)).map(|image| image.path.clone())
+    best_image(&images)
 }
 
 /// Release date from the nearest folder named like `2019-05 - X`, at or above `path`.
