@@ -3,33 +3,36 @@
 All notable changes to 3D Hoard Deck are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-11-08
 
-### Added
-- **Folder covers like a movie library:** a folder without pictures of its own borrows the nearest picture from its
-  subfolders. On a model page, **Use for folder…** makes the shown image the card picture of its folder or any
-  folder above. In libraries that allow writing it is also copied into that folder as `folder.<ext>` (never
-  overwriting); in read-only libraries the choice is kept in the index. **Automatic cover** in the folder's
-  right-click menu goes back.
-- **Scan this folder:** a button in the folder header and an entry in the folder's right-click menu read just that
-  folder and its subfolders again. Much faster than a full scan in big libraries; the rest of the library stays as
-  it is, and the full scan is still there.
-- **Screenshot** button in the 3D preview: turn and zoom the model, then save that view as `preview_<name>.png` next
-  to the mesh file. In a folder without images it becomes the cover right away; only that folder is updated, so
-  there is no wait for a library scan. Existing files are never replaced, and libraries set to "never change files"
-  do not allow it.
-- **Turn buttons** in the 3D preview: ▲ ◀ ▶ ▼ turn the view in 15° steps, and Front, Side and Top look at the model
-  straight on. The mouse works as before.
-- Folder rules (one model, collection, accepted suggestions) are saved in the `.3dhoarddeck` at the library root
-  when metadata files are on, and **Rebuild from metadata files** restores them on a new computer.
-- A folder's own pictures that belong to no model (for example an overview next to model subfolders) are shown
-  above its cards and open in a viewer with zoom, without having to mark the folder as one model.
-- Such a folder also uses one of its own pictures as its card cover (an image named cover, preview, main or render
-  first, else the largest), before falling back to the cover of a model inside.
+3D Hoard Deck is ready for everyday use. This release is about finding your models faster, giving every folder a
+nice picture, and making big libraries on a NAS feel quick.
+
+### New
+- **Make your own cover pictures.** Turn a model in the 3D preview until it looks right and press **Screenshot**.
+  The picture is saved next to the file and shows up as the cover straight away, with no waiting for a scan.
+- **Folder pictures like in a movie library.** Folders without a picture now borrow one from their subfolders. You
+  can also choose one yourself: show an image on a model page and press **Use for folder…**. If the library allows
+  it, the picture is copied into that folder, so it stays even on a new computer. Right-click a folder and choose
+  **Automatic cover** to go back.
+- **Scan just one folder.** Added or changed a few files? Open the folder and press **Scan this folder**, or use the
+  folder's right-click menu. Only that folder is read again, which takes seconds instead of minutes in a big
+  library.
+- **Turn the 3D view precisely.** Arrow buttons turn the model step by step, and Front, Side and Top show it
+  straight on. Mouse and trackpad work as before.
+- **Pictures in a folder are visible.** Pictures that lie in a folder next to model subfolders, such as an overview
+  of a release, now appear above the folder's cards and open in a large viewer with zoom.
+
+### Improved
+- When metadata files are switched on, your folder decisions (one model, collection, accepted suggestions) are
+  saved too, and **Rebuild from metadata files** brings them back.
+- A folder that was deleted outside the app disappears after **Scan this folder**, instead of being reported as
+  unreadable.
+- The large picture viewer can be used with the keyboard alone.
 
 ### Fixed
-- Pictures lying next to a single model file in a folder that also holds model subfolders were not shown anywhere;
-  they now belong to that file's model (for example `battlestar1.png` next to `Hex3d_CylonHelmet_Uncut.stl`).
+- Pictures next to a single model file were not shown when the same folder also had model subfolders. They now
+  appear on that model's page.
 
 ## [0.1.0] - 2026-11-07
 
@@ -102,5 +105,5 @@ never writes into a library unless you allow it.
 - Some messages from deep inside the app, such as rare file-system errors, are still shown in English.
 - There are no automatic updates yet.
 
-[Unreleased]: https://github.com/Ragin-LundF/3d-hoard-deck/compare/v0.1.0...HEAD
+[1.0.0]: https://github.com/Ragin-LundF/3d-hoard-deck/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/Ragin-LundF/3d-hoard-deck/releases/tag/v0.1.0

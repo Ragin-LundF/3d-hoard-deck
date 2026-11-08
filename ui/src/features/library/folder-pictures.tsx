@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fileUrl, thumbUrl } from "../../ipc";
 import { fileName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
@@ -8,10 +8,19 @@ import { ZoomImage } from "../model/zoom-image";
 /** Pictures lying in a folder that belong to no model, e.g. an overview next to model subfolders. */
 export function FolderPictures({ library, images }: { library: number; images: string[] }) {
   const [shown, setShown] = useState<number | null>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (shown === null) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShown(null);
+      // Tab stays inside the viewer, so keyboard users do not land on the page hidden behind it.
+      if (event.key === "Tab" && dialog.current) {
+        const buttons = [...dialog.current.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const next = (at + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+        event.preventDefault();
+      }
       if (event.key === "ArrowRight") setShown((index) => (index === null ? null : (index + 1) % images.length));
       if (event.key === "ArrowLeft") setShown((index) => (index === null ? null : (index - 1 + images.length) % images.length));
     };
@@ -31,7 +40,7 @@ export function FolderPictures({ library, images }: { library: number; images: s
         ))}
       </div>
       {current && (
-        <div className="lightbox" role="dialog" aria-modal="true" aria-label={fileName(current)}>
+        <div className="lightbox" role="dialog" aria-modal="true" aria-label={fileName(current)} ref={dialog}>
           <ZoomImage src={fileUrl(library, current)} alt={fileName(current)} />
           <div className="lightbox-bar">
             <span>{fileName(current)}</span>

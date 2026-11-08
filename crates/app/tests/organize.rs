@@ -338,3 +338,32 @@ fn a_chosen_folder_cover_works_read_only_and_is_copied_where_writing_is_allowed(
     app.set_folder_cover.execute(library.id, &creator, None).expect("back to automatic");
     assert_eq!(cover(), copy, "folder.png is now the folder's own picture, so it stays the detected cover");
 }
+
+#[test]
+fn scanning_a_folder_that_was_deleted_outside_the_app_removes_it() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Gone/dragon.stl", "Kept/orc.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    fs::remove_dir_all(root.join("Gone")).expect("deleted outside the app");
+
+    let report = app
+        .scan_library
+        .scan_folder(library.id, &RelPath::new("Gone").expect("valid"), ScanMode::Incremental)
+        .expect("folder scan");
+    assert_eq!(report.dirs_failed, 0, "a deleted folder is not unreadable");
+    let found = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models.len()
+    };
+    assert_eq!(found("gone"), 0, "the deleted folder's model is removed");
+    assert_eq!(found("kept"), 1, "the rest of the library stays");
+}

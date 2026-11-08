@@ -68,6 +68,9 @@ fn visit<'s>(scope: &rayon::Scope<'s>, walk: &'s Walk<'s>, dir: RelPath) {
     let absolute = walk.absolute(&dir);
     let mtime = match with_retries(|| fs::metadata(&absolute)) {
         Ok(metadata) => mtime_millis(&metadata),
+        // Gone since its parent was read, or a scanned folder deleted outside the app: reporting nothing lets the
+        // end of the scan remove it. The library root itself was checked for being reachable before.
+        Err(error) if error.kind() == ErrorKind::NotFound => return,
         Err(error) => return walk.send(ScanItem::Failed { dir, message: error.to_string() }),
     };
     let subdirs: Vec<RelPath> = match walk.known.get(&dir) {
