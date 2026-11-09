@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hoarddeck_app::App;
+use hoarddeck_application::organize::{BatchTarget, TagSource};
 use hoarddeck_application::ports::EventSink;
 use hoarddeck_application::scan::{ScanMode, ScanProgress};
 use hoarddeck_application::search::SearchRequest;
@@ -98,4 +99,62 @@ fn a_library_root_that_suddenly_looks_empty_keeps_its_index() {
     assert!(app.scan_library.execute(library.id, ScanMode::Full).is_err(), "an empty root is refused");
     let request = SearchRequest { text: "model".to_owned(), library: None, scope: None, offset: 0, limit: 1 };
     assert_eq!(app.search_models.execute(&request).expect("search").total, 25, "nothing was removed");
+}
+
+#[test]
+fn tags_are_added_and_removed_in_batches_and_can_be_undone() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    for name in ["Diorama/Gridfinity base", "Diorama/AMS box", "Diorama/Castle"] {
+        write_stl(library_dir.path(), &format!("Minis/{name}/model.stl"));
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Lib", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let diorama = TagName::new("Diorama").expect("valid");
+    let mut rule = tag_rule_presets().remove(3);
+    (rule.tag, rule.pattern, rule.unless) = ("Diorama".to_owned(), "diorama".to_owned(), String::new());
+    app.tag_rules.save(&[rule]).expect("rule");
+    assert!(app.tag_rules.editor.wait_for_regroups(Duration::from_secs(10)));
+    let total = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 10 };
+        app.search_models.execute(&request).expect("search")
+    };
+    assert_eq!(total("tag:diorama").total, 3);
+    let checked = app.tags.check(library.id, &diorama, &RelPath::root()).expect("check");
+    assert!(checked.iter().all(|item| item.source == TagSource::Rule), "{checked:?}");
+
+    let wrong: Vec<_> = total("gridfinity").models.into_iter().chain(total("ams").models).map(|m| m.id).collect();
+    let (changed, token) =
+        app.tags.batch(library.id, &BatchTarget::Models(wrong), &[], std::slice::from_ref(&diorama)).expect("remove");
+    assert_eq!((changed, total("tag:diorama").total), (2, 1), "the rule tag is hidden on the two wrong models");
+    let all = BatchTarget::Search { text: "tag:diorama".to_owned(), folder: RelPath::new("Minis").expect("valid") };
+    app.tags.batch(library.id, &all, &[TagName::new("checked").expect("valid")], &[]).expect("add to all results");
+    assert_eq!(total("tag:checked").total, 1, "every result of the search, here the one left");
+
+    let wrong_id = total("gridfinity").models[0].id;
+    let mut meta = app.get_model.execute(wrong_id).expect("read").expect("model").meta;
+    meta.favorite = true;
+    app.update_model_meta.execute(wrong_id, meta).expect("favorite after the batch");
+    app.tags.undo_batch(token).expect("undo");
+    assert_eq!(total("tag:diorama").total, 3, "undo shows the rule tag again");
+    assert!(app.get_model.execute(wrong_id).expect("read").expect("model").meta.favorite, "undo reverts only the tags");
+    assert!(app.tags.undo_batch(token).is_err(), "a batch is undone once");
+}
+
+#[test]
+fn select_all_and_check_reach_past_one_page_of_results() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    for n in 0..620 {
+        write_stl(library_dir.path(), &format!("Bases/Base {n}/model.stl"));
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Lib", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let base = TagName::new("base").expect("valid");
+    let all = BatchTarget::Search { text: "base".to_owned(), folder: RelPath::root() };
+    let (changed, _) = app.tags.batch(library.id, &all, std::slice::from_ref(&base), &[]).expect("add to all");
+    assert_eq!(changed, 620, "every result, not only the first page");
+    assert_eq!(app.tags.check(library.id, &base, &RelPath::root()).expect("check").len(), 620);
 }

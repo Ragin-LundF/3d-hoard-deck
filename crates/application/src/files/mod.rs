@@ -4,11 +4,13 @@
 mod disk;
 mod move_model;
 mod reconcile;
+mod rendered;
 mod save_screenshot;
 mod undo;
 
 pub use move_model::{MoveModel, Target};
 pub use reconcile::ReconcileJournal;
+pub use rendered::{Kept, RenderedPreviews};
 pub use save_screenshot::{SaveScreenshot, Screenshot};
 pub use undo::UndoFileOperation;
 

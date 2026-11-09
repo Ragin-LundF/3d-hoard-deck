@@ -13,8 +13,6 @@ use crate::tagging::TagRuleBook;
 
 /// Changes arriving within this time are grouped together, so marking several folders in a row regroups once.
 const QUIET: Duration = Duration::from_millis(400);
-/// How often a queued regroup looks again while a scan holds the library.
-const BUSY_RETRY: Duration = Duration::from_millis(500);
 
 /// Changes a library's scan rules and regroups from the stored entries. Shared by the use cases that edit folder
 /// rules: [`Self::edit`] waits for the regroup, [`Self::edit_soon`] returns at once and regroups in the background.
@@ -124,35 +122,34 @@ impl RuleEditor {
 
     fn regroup_when_quiet(&self, library: LibraryId, ticket: u64) {
         thread::sleep(QUIET);
-        loop {
-            // A newer edit has its own thread, which will regroup with all changes.
-            if self.queue().get(&library) != Some(&ticket) {
-                return;
-            }
-            match self.locks.lock(library) {
-                Err(AppError::LibraryBusy(_)) => thread::sleep(BUSY_RETRY),
-                Err(_) => break,
-                Ok(_busy) => {
+        // A newer edit has its own thread, which will regroup with all changes.
+        if self.queue().get(&library) == Some(&ticket) {
+            // A scan holds the library lock for minutes on a network share. The regroup does not wait for it: the
+            // regroup lock keeps it apart from the scan's own regroup, which reads the rules again. While a scan runs
+            // the UI only hears "regrouped", so its scan status stays.
+            let busy = self.locks.lock(library);
+            let scanning = matches!(busy, Err(AppError::LibraryBusy(_)));
+            if busy.is_ok() || scanning {
+                if !scanning {
                     self.progress(library, ScanPhase::Grouping);
-                    let result = CompiledRules::compile(&self.libraries.scan_rules(library).unwrap_or_default())
-                        .and_then(|rules| {
-                            regroup(
-                                self.entries.as_ref(),
-                                self.models.as_ref(),
-                                self.search.as_ref(),
-                                &self.locks,
-                                library,
-                                &rules,
-                                &self.tag_rules.current(),
-                            )
-                        });
-                    if let Err(error) = result {
-                        // shortcut: the UI is not told about a failed background regroup; the next scan regroups.
-                        eprintln!("regrouping library {} failed: {error}", library.0);
-                    }
-                    self.progress(library, ScanPhase::Done);
-                    break;
                 }
+                let result =
+                    CompiledRules::compile(&self.libraries.scan_rules(library).unwrap_or_default()).and_then(|rules| {
+                        regroup(
+                            self.entries.as_ref(),
+                            self.models.as_ref(),
+                            self.search.as_ref(),
+                            &self.locks,
+                            library,
+                            &rules,
+                            &self.tag_rules.current(),
+                        )
+                    });
+                if let Err(error) = result {
+                    // shortcut: the UI is not told about a failed background regroup; the next scan regroups.
+                    eprintln!("regrouping library {} failed: {error}", library.0);
+                }
+                self.progress(library, if scanning { ScanPhase::Regrouped } else { ScanPhase::Done });
             }
         }
         let mut queue = self.queue();

@@ -483,3 +483,94 @@ fn tags_are_counted_per_view_merged_deleted_grouped_and_pinned() {
     assert_eq!(app.tags.delete(library.id, &[sci_fi]).expect("delete"), 2);
     assert_eq!(app.search_models.execute(&request).expect("search").total, 0);
 }
+
+#[test]
+fn renaming_a_tag_rewrites_the_metadata_file_of_every_model() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let names: Vec<String> = (0..9).map(|index| format!("Minis/Model {index}")).collect();
+    for name in &names {
+        write_stl(library_dir.path(), &format!("{name}/model.stl"));
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexAndSidecar)
+        .expect("allow metadata files");
+    let request = SearchRequest { text: "model".to_owned(), library: None, scope: None, offset: 0, limit: 20 };
+    for model in app.search_models.execute(&request).expect("search").models {
+        let meta =
+            ModelMeta { tags: [TagName::new("SciFi").expect("valid")].into_iter().collect(), ..ModelMeta::default() };
+        app.update_model_meta.execute(model.id, meta).expect("tag");
+    }
+
+    let renamed =
+        app.tags.rename(library.id, &[TagName::new("SciFi").expect("valid")], &TagName::new("Sci-Fi").expect("valid"));
+    assert_eq!(renamed.expect("rename"), 9);
+    for name in &names {
+        let file = fs::read_to_string(library_dir.path().join(name).join(".3dhoarddeck")).expect("metadata file");
+        let json: serde_json::Value = serde_json::from_str(&file).expect("json");
+        assert_eq!(json["tags"], serde_json::json!(["Sci-Fi"]), "{name}");
+    }
+}
+
+#[test]
+fn rendered_previews_wait_in_the_app_folder_until_kept_or_skipped() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    write_stl(library_dir.path(), "Parts/Knob/knob_v2.stl");
+    write_stl(library_dir.path(), "Parts/Clip/clip.stl");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Parts", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let find = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 1 };
+        app.search_models.execute(&request).expect("search").models.remove(0)
+    };
+    let (knob, clip) = (find("knob").id, find("clip").id);
+    let png = {
+        let mut bytes = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+        bytes.extend_from_slice(&[0; 16]);
+        bytes
+    };
+    assert_eq!(
+        app.rendered.source(knob).expect("source").map(|(path, _)| path.as_str().to_owned()).as_deref(),
+        Some("Parts/Knob/knob_v2.stl")
+    );
+    assert!(app.rendered.store(knob, b"not a png").is_err());
+    app.rendered.store(knob, &png).expect("store knob");
+    app.rendered.store(clip, &png).expect("store clip");
+    assert_eq!(find("knob").rendered.as_deref(), Some("cached"));
+    assert!(
+        !library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists(),
+        "nothing in the library before keeping"
+    );
+
+    let kept = app.rendered.keep(&[knob]).expect("keep in a read-only library");
+    assert_eq!(
+        (kept.written, kept.kept, find("knob").rendered.as_deref()),
+        (0, 1, Some("kept")),
+        "kept in the index only"
+    );
+    assert!(!library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists());
+    app.rendered.reset(&[knob], Some("cached")).expect("undo");
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexOnly)
+        .expect("allow files");
+    let kept = app.rendered.keep(&[knob, clip]).expect("save all");
+    assert_eq!((kept.written, kept.kept), (2, 0));
+    assert!(library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists());
+    let (knob_now, clip_now) = (find("knob"), find("clip"));
+    assert_eq!(
+        (knob_now.rendered, knob_now.cover.map(String::from), clip_now.cover.map(String::from)),
+        (None, Some("Parts/Knob/preview_knob_v2.png".to_owned()), Some("Parts/Clip/preview_clip.png".to_owned())),
+        "both folders are in the index after one update"
+    );
+
+    app.rendered.store(clip, &png).expect("render again");
+    app.rendered.skip(&[clip]).expect("skip");
+    assert_eq!(find("clip").rendered.as_deref(), Some("skipped"));
+    app.rendered.reset(&[clip], Some("cached")).expect("undo skip");
+    assert_eq!(find("clip").rendered.as_deref(), Some("cached"));
+}

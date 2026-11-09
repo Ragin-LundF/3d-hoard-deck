@@ -33,6 +33,8 @@ pub enum ScanPhase {
     Walking,
     Grouping,
     Done,
+    /// Models were regrouped after a rule edit while a scan of the library goes on; the scan itself is not done.
+    Regrouped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

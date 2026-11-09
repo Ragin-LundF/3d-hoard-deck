@@ -26,6 +26,9 @@ import { SettingsNav } from "./features/settings/settings-nav";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirmDiscard, useHasUnsavedChanges } from "./features/settings/drafts";
 import { ReviewView } from "./features/ai/review/review-view";
+import { CheckView } from "./features/batch/check-view";
+import { UndoToast } from "./features/batch/undo-toast";
+import { useRenderQueue } from "./features/render/render-queue";
 import { t, plural } from "./shared/i18n";
 
 export function App() {
@@ -38,6 +41,7 @@ export function App() {
   const scans = useScanStatus(onScanFailed);
   useSuggestProgressListener();
   useUpdateCheck();
+  useRenderQueue();
   // Where "Back to library" returns to: the last screen outside Settings, however many settings pages were opened.
   const outside = useRef<Route>(HOME);
   if (route.view !== "settings") outside.current = route;
@@ -133,6 +137,8 @@ export function App() {
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
           <SettingsView route={route} navigate={navigate} libraries={list} scans={scans} theme={theme} onTheme={setTheme} onTags={(id) => navigate({ view: "tags", library: id })} onError={setToast} />
+        ) : route.view === "check" ? (
+          <CheckView library={route.library} tag={route.tag} folder={route.folder} navigate={navigate} onMessage={setToast} />
         ) : route.view === "review" ? (
           <ReviewView route={route} libraryName={list.find((item) => item.id === route.library)?.name ?? ""} navigate={(next) => navigate(next, { replace: true })} onMessage={setToast} />
         ) : route.view === "tags" ? (
@@ -176,7 +182,7 @@ export function App() {
       </footer>
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {toast ? <div className="toast" role="status">{toast}</div> : <UndoToast onMessage={setToast} />}
     </div>
   );
 }

@@ -14,7 +14,7 @@ use hoarddeck_application::scan::{
 use hoarddeck_application::search::{SearchDocument, SearchHits, SearchQuery};
 use hoarddeck_application::tagging::{TagRule, TagRuleBook};
 use hoarddeck_application::{AppError, IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
-use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, RelPath};
+use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, ModelKind, RelPath};
 
 #[derive(Default)]
 struct Store {
@@ -91,6 +91,10 @@ impl EntryStore for Store {
 }
 
 impl ModelRepository for Store {
+    fn models_at(&self, _: LibraryId, _: &[RelPath]) -> Result<Vec<(RelPath, ModelId, ModelKind)>, IndexError> {
+        Ok(Vec::new())
+    }
+
     fn search_pending(&self, _: LibraryId) -> Result<bool, IndexError> {
         Ok(false)
     }

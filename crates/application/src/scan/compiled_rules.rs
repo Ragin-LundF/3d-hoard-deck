@@ -13,6 +13,7 @@ pub struct CompiledRules {
     models: GlobSet,
     collections: GlobSet,
     variants: HashSet<String>,
+    pub(crate) parent_covers: bool,
 }
 
 impl CompiledRules {
@@ -24,6 +25,7 @@ impl CompiledRules {
             models: glob_set(rules.with_role(FolderRole::Model))?,
             collections: glob_set(rules.with_role(FolderRole::Collection))?,
             variants: rules.variant_folders.iter().map(|name| normalize(name)).collect(),
+            parent_covers: rules.parent_covers,
         })
     }
 

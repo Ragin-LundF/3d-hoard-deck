@@ -39,6 +39,11 @@ export function useScanStatus(onFailed: (error: IpcFailure) => void): Record<num
   const queryClient = useQueryClient();
   useEffect(() => {
     const unlisten = events.scanProgressEvent.listen(({ payload }) => {
+      // A rule edit was applied while a scan goes on: show the new grouping, keep the scan's status.
+      if (payload.phase === "regrouped") {
+        void queryClient.invalidateQueries();
+        return;
+      }
       setStatus((current) => ({
         ...current,
         [payload.library]: {

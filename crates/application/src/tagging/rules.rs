@@ -248,6 +248,8 @@ impl CompiledTagRules {
             marked_by_user: false,
             files: Vec::new(),
             auto_tags: Vec::new(),
+            cover_source: hoarddeck_domain::CoverSource::Own,
+            fallback_cover: None,
         };
         let found = Evaluator::new(&self.rules).model(&model);
         self.switched_on(found).into_iter().map(String::from).collect()
@@ -452,6 +454,8 @@ mod tests {
             collection: None,
             marked_by_user: false,
             auto_tags: Vec::new(),
+            cover_source: hoarddeck_domain::CoverSource::Own,
+            fallback_cover: None,
             path,
         }
     }

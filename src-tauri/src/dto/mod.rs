@@ -28,7 +28,7 @@ pub use rules::{FolderRuleDto, PresetProposalDto};
 pub use search::{SearchRequestDto, SearchResultDto};
 pub use slicer::SlicerDto;
 pub use tag_rules::TagRuleDto;
-pub use tags::{TagGroupDto, TagInfoDto};
+pub use tags::{BatchResultDto, CheckItemDto, TagGroupDto, TagInfoDto};
 
 fn id32(id: i64) -> u32 {
     u32::try_from(id).unwrap_or(u32::MAX)

@@ -4,7 +4,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::once;
 
 use hoarddeck_domain::{
-    Entry, FileKind, Model, ModelFile, ModelKind, RelPath, YearMonth, file_title, parse_folder_name,
+    CoverSource, Entry, FileFormat, FileKind, Model, ModelFile, ModelKind, RelPath, YearMonth, file_title,
+    parse_folder_name,
 };
 
 use super::images::{ImagesByDir, best_image, model_stem, stem};
@@ -51,8 +52,65 @@ pub(super) fn build_models(
     for model in &mut models {
         model.collection = nearest_collection(&model.folder, rules, &mut collections);
     }
+    fill_missing_covers(&mut models, images, rules);
     models.sort_by(|a, b| a.path.cmp(&b.path));
     models
+}
+
+/// Models without a picture take the preview inside their 3MF, else one from the folder above: the model's own
+/// folder for a loose file, the parent folder for a folder model, one more level only if that has none, never the
+/// library root. Pictures named after another model and other models' own covers stay theirs. A borrowed picture is
+/// only the cover, never one of the model's files.
+fn fill_missing_covers(models: &mut [Model], images: &ImagesByDir<'_>, rules: &CompiledRules) {
+    let mut taken_names: HashMap<RelPath, HashSet<String>> = HashMap::new();
+    for model in models.iter() {
+        let name = match model.kind {
+            ModelKind::Folder => model.path.name().to_lowercase(),
+            ModelKind::File => model_stem(model.path.name()).to_lowercase(),
+        };
+        taken_names.entry(model.folder.clone()).or_default().insert(name);
+    }
+    let own_covers: HashSet<RelPath> = models.iter().filter_map(|model| model.cover.clone()).collect();
+    for model in models.iter_mut().filter(|model| model.cover.is_none()) {
+        let parent =
+            if rules.parent_covers { parent_picture(model, images, rules, &taken_names, &own_covers) } else { None };
+        // Whether the 3MF really holds a preview is only known when it is opened, so the folder picture stays ready.
+        let embedded = model.files.iter().find(|file| file.kind == FileKind::Mesh(FileFormat::ThreeMf));
+        if let Some(file) = embedded {
+            model.cover = Some(file.path.clone());
+            model.cover_source = CoverSource::Embedded;
+            model.fallback_cover = parent;
+        } else if parent.is_some() {
+            model.cover = parent;
+            model.cover_source = CoverSource::Parent;
+        }
+    }
+}
+
+/// The best free picture one folder above the model, or two if the first has none; never the library root.
+fn parent_picture(
+    model: &Model,
+    images: &ImagesByDir<'_>,
+    rules: &CompiledRules,
+    taken_names: &HashMap<RelPath, HashSet<String>>,
+    own_covers: &HashSet<RelPath>,
+) -> Option<RelPath> {
+    let first = match model.kind {
+        ModelKind::Folder => model.path.parent(),
+        ModelKind::File => Some(model.folder.clone()),
+    };
+    let levels = first.iter().cloned().chain(first.as_ref().and_then(RelPath::parent)).filter(|dir| !dir.is_root());
+    for dir in levels {
+        let names = taken_names.get(&dir);
+        let free = |entry: &Entry| {
+            let name = stem(entry.path.name()).to_lowercase();
+            !own_covers.contains(&entry.path) && !names.is_some_and(|taken| taken.contains(&name))
+        };
+        if let Some(picture) = images.best_for_folder(&dir, |name| rules.is_variant(name), free) {
+            return Some(picture);
+        }
+    }
+    None
 }
 
 /// The deepest folder marked as a collection at or above `folder`, cached per folder.
@@ -94,6 +152,8 @@ fn folder_model(path: RelPath, marked_by_user: bool, owned: Vec<Owned<'_>>, imag
         marked_by_user,
         files,
         auto_tags: Vec::new(),
+        cover_source: hoarddeck_domain::CoverSource::Own,
+        fallback_cover: None,
         kind: ModelKind::Folder,
         path,
     }
@@ -125,6 +185,8 @@ fn file_model(file: &Owned<'_>, pictures: &[&Owned<'_>], images: &ImagesByDir<'_
         collection: None,
         marked_by_user: false,
         auto_tags: Vec::new(),
+        cover_source: hoarddeck_domain::CoverSource::Own,
+        fallback_cover: None,
         kind: ModelKind::File,
         folder,
         path,

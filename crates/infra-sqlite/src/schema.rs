@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 13] = [
+const MIGRATIONS: [&str; 16] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -196,6 +196,24 @@ CREATE TABLE tag_suggestions (
     created_at INTEGER NOT NULL,
     PRIMARY KEY (library_id, path)
 ) WITHOUT ROWID;
+",
+    r"
+-- 14: where a model's cover comes from: its own pictures, the preview inside its 3MF, or the folder above.
+ALTER TABLE models ADD COLUMN cover_source TEXT NOT NULL DEFAULT 'own';
+",
+    r"
+-- 15: previews rendered in the app for models without any picture: 'cached' (waiting for the user), 'kept' (the
+-- user's cover in a read-only library), 'skipped' (not wanted). The pictures live in the thumbnail folder.
+CREATE TABLE rendered_previews (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    state      TEXT NOT NULL,
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
+",
+    r"
+-- 16: the folder picture shown instead when a model's 3MF cover has no preview inside.
+ALTER TABLE models ADD COLUMN fallback_cover TEXT;
 ",
 ];
 

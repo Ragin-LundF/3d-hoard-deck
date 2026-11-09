@@ -2017,9 +2017,11 @@ name = "hoarddeck-infra-thumbs"
 version = "1.0.0"
 dependencies = [
  "hoarddeck-application",
+ "hoarddeck-domain",
  "image",
  "tempfile",
  "thiserror 2.0.21",
+ "zip 9.4.1",
 ]
 
 [[package]]

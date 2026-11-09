@@ -6,7 +6,7 @@ use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
 use hoarddeck_application::ports::{CatalogChange, FolderCoverStore, ModelRepository};
 use hoarddeck_application::search::SearchDocument;
 use hoarddeck_application::{IndexError, ModelDetail, ModelSummary};
-use hoarddeck_domain::{Catalog, Folder, LibraryId, Model, ModelId, RelPath};
+use hoarddeck_domain::{Catalog, Folder, LibraryId, Model, ModelId, ModelKind, RelPath};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::SqliteIndex;
@@ -83,6 +83,28 @@ impl ModelRepository for SqliteIndex {
         })
     }
 
+    fn models_at(
+        &self,
+        library: LibraryId,
+        paths: &[RelPath],
+    ) -> Result<Vec<(RelPath, ModelId, ModelKind)>, IndexError> {
+        let wanted = serde_json::to_string(&paths.iter().map(RelPath::as_str).collect::<Vec<_>>()).unwrap_or_default();
+        self.read(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT path, id, kind FROM models WHERE library_id = ?1 AND path IN (SELECT value FROM json_each(?2))",
+            )?;
+            statement
+                .query_map(params![library.0, wanted], |row| {
+                    Ok((
+                        crate::rows::rel_path(row, 0)?,
+                        ModelId(row.get(1)?),
+                        crate::rows::converted(2, ModelKind::from_code(&row.get::<_, String>(2)?))?,
+                    ))
+                })?
+                .collect()
+        })
+    }
+
     fn search_pending(&self, library: LibraryId) -> Result<bool, IndexError> {
         self.read(|connection| {
             connection
@@ -119,7 +141,8 @@ impl ModelRepository for SqliteIndex {
                  WHERE e.library_id = ?1 AND e.parent = ?2 AND e.is_dir = 0 AND e.kind = 'image'
                    AND NOT EXISTS (SELECT 1 FROM model_files mf JOIN models m ON m.id = mf.model_id
                                    WHERE m.library_id = ?1 AND mf.path = e.path)
-                   AND NOT EXISTS (SELECT 1 FROM models m WHERE m.library_id = ?1 AND m.cover = e.path)
+                   AND NOT EXISTS (SELECT 1 FROM models m WHERE m.library_id = ?1 AND m.cover = e.path
+                                   AND m.cover_source <> 'parent')
                  ORDER BY e.path",
             )?;
             statement.query_map(params![library.0, folder.as_str()], |row| rel_path(row, 0))?.collect()
@@ -137,12 +160,12 @@ fn upsert_model(
 ) -> rusqlite::Result<i64> {
     let id: i64 = transaction
         .prepare_cached(
-            "INSERT INTO models (library_id, path, folder, kind, title, released, cover, formats, file_count, total_size, added_at, collection, marked_by_user, seen, fingerprint, auto_tags)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, ?14, ?15)
+            "INSERT INTO models (library_id, path, folder, kind, title, released, cover, formats, file_count, total_size, added_at, collection, marked_by_user, seen, fingerprint, auto_tags, cover_source, fallback_cover)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, ?14, ?15, ?16, ?17)
              ON CONFLICT (library_id, path) DO UPDATE SET
                 folder = ?3, kind = ?4, title = ?5, released = ?6, cover = ?7, formats = ?8,
                 file_count = ?9, total_size = ?10, collection = ?12, marked_by_user = ?13, seen = 1, fingerprint = ?14,
-                auto_tags = ?15
+                auto_tags = ?15, cover_source = ?16, fallback_cover = ?17
              RETURNING id",
         )?
         .query_row(
@@ -162,6 +185,8 @@ fn upsert_model(
                 model.marked_by_user,
                 fingerprint,
                 serde_json::to_string(&model.auto_tags).unwrap_or_else(|_| "[]".to_owned()),
+                model.cover_source.code(),
+                model.fallback_cover.as_ref().map(RelPath::as_str),
             ],
             |row| row.get(0),
         )?;
@@ -190,6 +215,13 @@ fn fingerprint(model: &Model) -> i64 {
     for file in &model.files {
         let _ =
             write!(text, "|{}:{}:{}:{}", file.path, file.kind.code(), file.size, file.variant.as_deref().unwrap_or(""));
+    }
+    // Only when borrowed or embedded, so the fingerprints stored before cover sources existed still match.
+    if model.cover_source != hoarddeck_domain::CoverSource::Own {
+        let _ = write!(text, "|cover:{}", model.cover_source.code());
+    }
+    if let Some(fallback) = &model.fallback_cover {
+        let _ = write!(text, "|fallback:{fallback}");
     }
     // Only when there are any, so the fingerprints stored before tag rules existed still match.
     for tag in &model.auto_tags {

@@ -103,6 +103,8 @@ impl ScanLibrary {
         let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
         let mut report = self.walk(&library, &rules, from, mode, changed)?;
         self.progress(id, ScanPhase::Grouping, &report);
+        // Read again: the user may have marked a folder while the scan was walking.
+        let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
         (report.models, report.folders) = regroup(
             self.entries.as_ref(),
             self.models.as_ref(),
@@ -121,12 +123,20 @@ impl ScanLibrary {
     /// # Errors
     /// Fails when the library is busy or the index cannot be written.
     pub fn add_files(&self, id: LibraryId, dir: &RelPath, files: Vec<Entry>) -> Result<(), AppError> {
+        self.add_files_in(id, vec![(dir.clone(), files)])
+    }
+
+    /// Like [`Self::add_files`] for files in several folders, with one regroup for all of them.
+    /// # Errors
+    /// Fails when the rules or the index cannot be read or written.
+    pub fn add_files_in(&self, id: LibraryId, folders: Vec<(RelPath, Vec<Entry>)>) -> Result<(), AppError> {
         let _busy = self.locks.lock(id)?;
         let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
         // A fresh generation without `finish_scan` deletes nothing; the next full scan settles everything again.
         let (generation, _) = self.entries.begin_scan(id)?;
-        let folder = ScanItem::Listed { dir: dir.clone(), mtime: i64::MIN, children: files };
-        self.entries.apply(id, generation, &[folder])?;
+        let listed: Vec<ScanItem> =
+            folders.into_iter().map(|(dir, children)| ScanItem::Listed { dir, mtime: i64::MIN, children }).collect();
+        self.entries.apply(id, generation, &listed)?;
         // No progress events: a "done" would replace the last real scan's report (unreadable folders) in the UI.
         regroup(
             self.entries.as_ref(),

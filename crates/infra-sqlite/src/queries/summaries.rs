@@ -27,8 +27,9 @@ pub(crate) fn detail(connection: &Connection, id: ModelId) -> rusqlite::Result<O
         .query_row(&sql, [id.0], |row| {
             Ok((
                 summary(row)?,
-                row.get::<_, String>(15)?,
-                converted(16, serde_json::from_str(&row.get::<_, String>(16)?))?,
+                // The summary takes columns 0 to 16.
+                row.get::<_, String>(18)?,
+                converted(19, serde_json::from_str(&row.get::<_, String>(19)?))?,
             ))
         })
         .optional()?

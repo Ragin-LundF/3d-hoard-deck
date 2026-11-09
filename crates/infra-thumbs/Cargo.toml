@@ -6,7 +6,9 @@ rust-version.workspace = true
 
 [dependencies]
 hoarddeck-application.workspace = true
+hoarddeck-domain.workspace = true
 thiserror.workspace = true
+zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 
 [dev-dependencies]

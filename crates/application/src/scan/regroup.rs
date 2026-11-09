@@ -19,6 +19,7 @@ pub(crate) fn regroup(
     rules: &CompiledRules,
     tags: &CompiledTagRules,
 ) -> Result<(usize, usize), AppError> {
+    let _regroup = locks.regroup_sync();
     let mut catalog = detect(&entries.files(library)?, rules);
     // Rule tags are part of the model row, so only models whose tags change are written and re-indexed.
     if !tags.is_empty() {

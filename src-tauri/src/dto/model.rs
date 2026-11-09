@@ -22,6 +22,12 @@ pub struct ModelSummaryDto {
     pub printed: bool,
     pub released: Option<String>,
     pub cover: Option<String>,
+    /// `own`, `embedded` (the preview inside its 3MF) or `parent` (borrowed from the folder above).
+    pub cover_source: String,
+    /// The folder picture to show when an `embedded` cover turns out to have no preview inside.
+    pub fallback_cover: Option<String>,
+    /// A preview rendered in the app: `cached` (waiting for the user), `kept` or `skipped`.
+    pub rendered: Option<String>,
     /// Folder path of the collection the model belongs to.
     pub collection: Option<String>,
     /// The user marked this model's folder as one model; offer "detect automatically".
@@ -45,6 +51,9 @@ impl From<ModelSummary> for ModelSummaryDto {
             printed: model.printed,
             released: model.released.map(|r| r.to_string()),
             cover: model.cover.map(String::from),
+            cover_source: model.cover_source.code().to_owned(),
+            fallback_cover: model.fallback_cover.map(String::from),
+            rendered: model.rendered,
             collection: model.collection.map(String::from),
             marked_by_user: model.marked_by_user,
             formats: model.formats.iter().map(|f| f.code().to_owned()).collect(),

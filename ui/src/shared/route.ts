@@ -8,6 +8,7 @@ export type Route =
   | { view: "duplicates" }
   | { view: "tags"; library: number }
   | { view: "review"; library: number; tab: ReviewTab; tag: string; folder: string }
+  | { view: "check"; library: number; tag: string; folder: string }
   | { view: "settings"; tab: SettingsTab; lib: number | null; sub: string };
 
 /** The pages of Settings; `library` is one library's detail (`lib`), `sub` a tab inside a page. */
@@ -38,6 +39,9 @@ export function parseRoute(hash: string): Route {
   }
   if (view === "duplicates") return { view: "duplicates" };
   const tagsLibrary = Number(params.get("lib"));
+  if (view === "check" && Number.isInteger(tagsLibrary) && tagsLibrary > 0 && params.get("tag")) {
+    return { view: "check", library: tagsLibrary, tag: params.get("tag") ?? "", folder: params.get("folder") ?? "" };
+  }
   if (view === "review" && Number.isInteger(tagsLibrary) && tagsLibrary > 0) {
     const tab = REVIEW_TABS.find((name) => name === params.get("tab")) ?? "tag";
     return reviewRoute(tagsLibrary, tab, params.get("tag") ?? "", params.get("folder") ?? "");
@@ -60,6 +64,11 @@ export function formatRoute(route: Route): string {
   const params = new URLSearchParams({ view: route.view });
   if (route.view === "model" || route.view === "collection") params.set("id", String(route.id));
   if (route.view === "tags") params.set("lib", String(route.library));
+  if (route.view === "check") {
+    params.set("lib", String(route.library));
+    params.set("tag", route.tag);
+    if (route.folder) params.set("folder", route.folder);
+  }
   if (route.view === "review") {
     params.set("lib", String(route.library));
     if (route.tab !== "tag") params.set("tab", route.tab);

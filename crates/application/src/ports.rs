@@ -132,6 +132,14 @@ pub trait ModelRepository: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be read or written.
     fn search_pending(&self, library: LibraryId) -> Result<bool, IndexError>;
+    /// Id and kind of the models at `paths` (unknown paths are left out); cheap compared to loading every document.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn models_at(
+        &self,
+        library: LibraryId,
+        paths: &[RelPath],
+    ) -> Result<Vec<(RelPath, ModelId, ModelKind)>, IndexError>;
     /// # Errors
     /// Fails when the index cannot be written.
     fn set_search_pending(&self, library: LibraryId, pending: bool) -> Result<(), IndexError>;
@@ -195,6 +203,10 @@ pub trait MetaStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn save_meta(&self, library: LibraryId, path: &RelPath, meta: &ModelMeta) -> Result<(), IndexError>;
+    /// Like [`Self::save_meta`] for many models, in one transaction.
+    /// # Errors
+    /// Fails when the index cannot be written; then nothing is changed.
+    fn save_metas(&self, library: LibraryId, metas: &[(RelPath, ModelMeta)]) -> Result<(), IndexError>;
     /// When the metadata was last saved (seconds since 1970); `None` when there is none.
     /// # Errors
     /// Fails when the index cannot be read.
@@ -678,6 +690,24 @@ pub trait AiStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn save_ai_folders(&self, library: LibraryId, folders: &crate::ai::AiFolders) -> Result<(), IndexError>;
+}
+
+/// Previews rendered in the app: their state in the index, keyed by model path.
+pub trait RenderedStore: Send + Sync {
+    /// `None` forgets the state (the model is a render candidate again).
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_rendered(&self, library: LibraryId, paths: &[RelPath], state: Option<&str>) -> Result<(), IndexError>;
+}
+
+/// The rendered pictures themselves, in the app's own folder (never in a library).
+pub trait RenderedCache: Send + Sync {
+    /// # Errors
+    /// A readable reason when the picture cannot be written.
+    fn save_rendered(&self, id: ModelId, png: &[u8]) -> Result<(), String>;
+    /// # Errors
+    /// A readable reason when there is no such picture.
+    fn rendered(&self, id: ModelId) -> Result<Vec<u8>, String>;
 }
 
 pub trait SlicerStore: Send + Sync {

@@ -1,7 +1,7 @@
 //! Mapping between rows and domain or view types.
 
 use hoarddeck_application::ModelSummary;
-use hoarddeck_domain::{FileFormat, Folder, LibraryId, ModelId, ModelKind, RelPath, YearMonth};
+use hoarddeck_domain::{CoverSource, FileFormat, Folder, LibraryId, ModelId, ModelKind, RelPath, YearMonth};
 use rusqlite::Row;
 use rusqlite::types::Type;
 
@@ -14,7 +14,11 @@ pub(crate) const TITLE: &str = "COALESCE(mm.display_name, m.title)";
 
 pub(crate) const SUMMARY_COLUMNS: &str = "m.id, m.library_id, m.path, m.folder, m.kind, COALESCE(mm.display_name, m.title), \
      m.released, COALESCE((SELECT f.path FROM model_files f WHERE f.model_id = m.id AND f.path = mm.cover), m.cover), m.formats, m.file_count, m.total_size, m.collection, m.marked_by_user, \
-     COALESCE(mm.favorite, 0), COALESCE(mm.printed, 0)";
+     COALESCE(mm.favorite, 0), COALESCE(mm.printed, 0), \
+     CASE WHEN mm.cover IS NOT NULL AND EXISTS (SELECT 1 FROM model_files f WHERE f.model_id = m.id AND f.path = mm.cover) \
+          THEN 'own' ELSE m.cover_source END, \
+     (SELECT r.state FROM rendered_previews r WHERE r.library_id = m.library_id AND r.path = m.path), \
+     m.fallback_cover";
 
 pub(crate) fn summary(row: &Row<'_>) -> rusqlite::Result<ModelSummary> {
     Ok(ModelSummary {
@@ -33,6 +37,9 @@ pub(crate) fn summary(row: &Row<'_>) -> rusqlite::Result<ModelSummary> {
         marked_by_user: row.get(12)?,
         favorite: row.get(13)?,
         printed: row.get(14)?,
+        cover_source: CoverSource::from_code(&row.get::<_, String>(15)?),
+        rendered: row.get(16)?,
+        fallback_cover: optional_rel_path(row, 17)?,
     })
 }
 

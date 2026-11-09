@@ -46,8 +46,23 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 - **AI folders.** Choose per library which folders the AI works on (untick subfolders to leave them out), only models
   without own tags, whether new models get suggestions after each scan, and whether models without a picture are
   skipped. The screen shows how many models that is and about how long it takes.
-
-### Faster
+- **Fix many tags at once.** Click **Select** (or ⌘/Ctrl-click, ⇧-click for a range, ⌘A) and use **Add tag** or
+  **Remove tag** on all selected models; in a search, **Select all** covers every result, also those not loaded yet.
+- **Check a tag.** The ▾ on an active tag in the tag bar opens **Check this tag…**: every model with it, grouped by
+  folder, with where it comes from (tag rule or added by you). Mark the wrong ones, or a whole folder, and remove
+  the tag from them in one go. If many come from a tag rule, the app points you to the rule. **Remove from all
+  here…** does it for everything shown. Every batch can be undone.
+- Removing a tag that a tag rule gives hides it on those models, so it doesn't come back with the next scan.
+- **Far fewer cards without a picture.** A model without a picture of its own now borrows one from the folder above
+  (or the one above that, never the library root), marked **from folder** on the card. 3MF files from Bambu Studio
+  and OrcaSlicer show the preview picture stored inside them. Turn the folder fallback off under the library's
+  scanning rules.
+- **Rendered previews.** Models that still have no picture get a preview rendered from their 3D file: grey on light
+  grey, with a dashed frame and a **rendered** badge, so it is never mistaken for a photo. Only cards on screen are
+  rendered, one at a time; files over 50 MB only when you ask. Hover a card to **Save** it (written as
+  `preview_<file>.png` into the model folder) or, in a read-only library, **Keep** it in the app; ✕ skips the model
+  for good. **Save all** / **Keep all** above the grid does it for all of them. Keep and skip can be undone.
+  Settings › General chooses whether previews render for models on screen, only when you ask, or never.
 - **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion
   or removing a rule now take effect at once; the models are regrouped in the background. Marking several folders
   in a row regroups only once, and a running scan is simply waited for.

@@ -7,7 +7,7 @@ use crate::after_scan::AfterScan;
 use hoarddeck_application::AppError;
 use hoarddeck_application::ai::SuggestTags;
 use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
-use hoarddeck_application::files::{MoveModel, ReconcileJournal, SaveScreenshot, UndoFileOperation};
+use hoarddeck_application::files::{MoveModel, ReconcileJournal, RenderedPreviews, SaveScreenshot, UndoFileOperation};
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
     FindDuplicates, ImportOrynt3d, ManageCollections, ManageTags, RebuildFromSidecars, SetFolderCover, UpdateModelMeta,
@@ -45,7 +45,9 @@ pub struct App {
     pub auto_rescan: Arc<AutoRescan>,
     pub move_model: MoveModel,
     pub undo_file_operation: UndoFileOperation,
-    pub save_screenshot: SaveScreenshot,
+    pub save_screenshot: Arc<SaveScreenshot>,
+    /// Previews rendered in the app for models without any picture.
+    pub rendered: RenderedPreviews,
     /// Recent renames and moves, for the undo list.
     pub file_journal: Arc<dyn FileJournal>,
     pub set_folder_role: SetFolderRole,
@@ -117,6 +119,7 @@ impl App {
         let tags = Arc::new(manage_tags(&index, &search, &search_models, &locks));
         let thumbnails = Arc::new(ThumbnailCache::new(index_dir.join("thumbnails")));
         let suggest_tags = suggest_tags(&index, &tags, &thumbnails, &update_model_meta, events.clone());
+        let rendered = rendered_previews(&index, &thumbnails, &save_screenshot);
         let _ = after_scan.suggest.set(Arc::downgrade(&suggest_tags));
         Ok(Self {
             io_priority: io_priority.clone(),
@@ -140,6 +143,7 @@ impl App {
             move_model,
             undo_file_operation,
             save_screenshot,
+            rendered,
             file_journal: index.clone(),
             auto_rescan: auto_rescan(&index, &scan_library),
             scan_library,
@@ -186,7 +190,7 @@ fn file_operations(
     index: &Arc<SqliteIndex>,
     locks: &Arc<LibraryLocks>,
     scan: &Arc<ScanLibrary>,
-) -> (MoveModel, UndoFileOperation, SaveScreenshot, SetFolderCover) {
+) -> (MoveModel, UndoFileOperation, Arc<SaveScreenshot>, SetFolderCover) {
     // An interrupted rename must not block opening; it is tried again on the next start.
     let reconcile =
         ReconcileJournal { libraries: index.clone(), files: Arc::new(FsFileOperations), journal: index.clone() };
@@ -210,13 +214,13 @@ fn file_operations(
         scan: scan.clone(),
         sidecars: Arc::new(SidecarFileStore),
     };
-    let screenshot = SaveScreenshot {
+    let screenshot = Arc::new(SaveScreenshot {
         libraries: index.clone(),
         models: index.clone(),
         files: Arc::new(FsFileOperations),
         locks: locks.clone(),
         scan: scan.clone(),
-    };
+    });
     let folder_cover = SetFolderCover {
         libraries: index.clone(),
         covers: index.clone(),
@@ -281,6 +285,21 @@ fn manage_tags(
         search: search.clone(),
         search_models: search_models.clone(),
         locks: locks.clone(),
+        undo: Mutex::default(),
+    }
+}
+
+fn rendered_previews(
+    index: &Arc<SqliteIndex>,
+    thumbnails: &Arc<ThumbnailCache>,
+    screenshot: &Arc<SaveScreenshot>,
+) -> RenderedPreviews {
+    RenderedPreviews {
+        libraries: index.clone(),
+        models: index.clone(),
+        store: index.clone(),
+        cache: thumbnails.clone(),
+        screenshot: screenshot.clone(),
     }
 }
 

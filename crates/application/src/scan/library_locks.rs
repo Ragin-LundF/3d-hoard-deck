@@ -10,6 +10,7 @@ use crate::AppError;
 pub struct LibraryLocks {
     libraries: Mutex<HashSet<LibraryId>>,
     search: Mutex<()>,
+    regroup: Mutex<()>,
 }
 
 impl LibraryLocks {
@@ -28,6 +29,12 @@ impl LibraryLocks {
     /// regroup is never overwritten by the regroup's older copy.
     pub fn search_sync(&self) -> MutexGuard<'_, ()> {
         self.search.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Held for a whole regroup (read entries, write models, update search), so a regroup after a rule edit can run
+    /// while a scan walks, and still never interleaves with the scan's own regroup. Taken before [`Self::search_sync`].
+    pub fn regroup_sync(&self) -> MutexGuard<'_, ()> {
+        self.regroup.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

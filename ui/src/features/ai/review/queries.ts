@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, describeError, unwrap, type DecisionDto } from "../../../ipc";
 import { logReview, markUndone, tally, type LogEntry } from "./review-log";
 
+/** What a kept or dropped suggestion can change on screen; refetching only these keeps the review quick. */
+const AFFECTED = ["review", "pending", "suggestedTags", "suggestions", "tags", "tag-facets", "model", "search"];
+const refresh = (queryClient: ReturnType<typeof useQueryClient>) =>
+  queryClient.invalidateQueries({ predicate: (query) => AFFECTED.includes(String(query.queryKey[0])) });
+
 export function useReviewItems(library: number, folder: string) {
   return useQuery({ queryKey: ["review", library, folder], queryFn: () => unwrap(commands.reviewSuggestions(library, folder, null)) });
 }
@@ -14,7 +19,7 @@ export function useDecide(library: number, onMessage: (message: string) => void)
       const resolutions = await unwrap(commands.decideSuggestions(library, decisions));
       return logReview({ library, label, resolutions, ...tally(resolutions) });
     },
-    onSuccess: () => void queryClient.invalidateQueries(),
+    onSuccess: () => void refresh(queryClient),
     onError: (error) => onMessage(describeError(error)),
   });
 }
@@ -26,7 +31,7 @@ export function useUndo(onMessage: (message: string) => void) {
       await unwrap(commands.undoSuggestions(entry.library, entry.resolutions));
       markUndone(entry.id);
     },
-    onSuccess: () => void queryClient.invalidateQueries(),
+    onSuccess: () => void refresh(queryClient),
     onError: (error) => onMessage(describeError(error)),
   });
 }

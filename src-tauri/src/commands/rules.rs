@@ -36,6 +36,20 @@ pub async fn remove_folder_rule(app: AppState<'_>, library: u32, pattern: String
     blocking(move || app.folder_rules.queue_remove(LibraryId(i64::from(library)), &pattern)).await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn parent_covers(app: AppState<'_>, library: u32) -> Result<bool, IpcError> {
+    Ok(app.folder_rules.parent_covers(LibraryId(i64::from(library)))?)
+}
+
+/// Models without a picture borrow one from the folder above; regrouped in the background.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_parent_covers(app: AppState<'_>, library: u32, on: bool) -> Result<(), IpcError> {
+    let app = Arc::clone(&app);
+    blocking(move || app.folder_rules.set_parent_covers(LibraryId(i64::from(library)), on)).await
+}
+
 /// Collection presets that match this library's folders and are not in use yet.
 #[tauri::command]
 #[specta::specta]

@@ -167,3 +167,25 @@ impl AiStore for SqliteIndex {
 fn folders_key(library: LibraryId) -> String {
     format!("ai_folders:{}", library.0)
 }
+
+impl hoarddeck_application::ports::RenderedStore for SqliteIndex {
+    fn set_rendered(&self, library: LibraryId, paths: &[RelPath], state: Option<&str>) -> Result<(), IndexError> {
+        self.write(|connection| {
+            let transaction = connection.transaction()?;
+            for path in paths {
+                match state {
+                    Some(state) => transaction.execute(
+                        "INSERT INTO rendered_previews (library_id, path, state) VALUES (?1, ?2, ?3)
+                         ON CONFLICT (library_id, path) DO UPDATE SET state = ?3",
+                        params![library.0, path.as_str(), state],
+                    )?,
+                    None => transaction.execute(
+                        "DELETE FROM rendered_previews WHERE library_id = ?1 AND path = ?2",
+                        params![library.0, path.as_str()],
+                    )?,
+                };
+            }
+            transaction.commit()
+        })
+    }
+}

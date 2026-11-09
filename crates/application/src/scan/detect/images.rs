@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use hoarddeck_domain::{Entry, FileKind, RelPath};
 
-pub(super) struct ImagesByDir<'a>(HashMap<RelPath, Vec<&'a Entry>>);
+pub(super) struct ImagesByDir<'a>(HashMap<RelPath, Vec<&'a Entry>>, HashMap<RelPath, Vec<RelPath>>);
 
 impl<'a> ImagesByDir<'a> {
     pub(super) fn new(files: &[(&'a Entry, FileKind)]) -> Self {
@@ -14,7 +14,32 @@ impl<'a> ImagesByDir<'a> {
                 by_dir.entry(dir).or_default().push(entry);
             }
         }
-        Self(by_dir)
+        // Picture folders by their parent, so `Pack/images/` is found from `Pack`.
+        let mut children: HashMap<RelPath, Vec<RelPath>> = HashMap::new();
+        for dir in by_dir.keys() {
+            if let Some(parent) = dir.parent() {
+                children.entry(parent).or_default().push(dir.clone());
+            }
+        }
+        Self(by_dir, children)
+    }
+
+    /// The best picture of a folder for models below it: lying in `dir` or in its picture subfolders (`images/`,
+    /// `renders/` …), leaving out pictures `free` refuses (named after another model, or someone's own cover).
+    pub(super) fn best_for_folder(
+        &self,
+        dir: &RelPath,
+        is_variant: impl Fn(&str) -> bool,
+        free: impl Fn(&Entry) -> bool,
+    ) -> Option<RelPath> {
+        let direct = self.0.get(dir).into_iter().flatten();
+        let below = self.1.get(dir).into_iter().flatten().filter(|child| is_variant(child.name()));
+        let candidates: Vec<&Entry> = direct
+            .chain(below.flat_map(|child| self.0.get(child).into_iter().flatten()))
+            .copied()
+            .filter(|entry| free(entry))
+            .collect();
+        best_image(&candidates)
     }
 
     /// Every folder that holds pictures, with the best of them.

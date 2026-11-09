@@ -1,6 +1,7 @@
 //! Organizing: display names, tags, favorite and printed marks, notes, folder covers, and the `.3dhoarddeck` files
 //! beside models.
 
+mod batch_tags;
 mod collections;
 mod find_duplicates;
 mod import_orynt3d;
@@ -10,6 +11,7 @@ mod set_folder_cover;
 mod sidecar_path;
 mod update_model_meta;
 
+pub use batch_tags::{BatchTarget, BatchUndo, CheckItem, TagSource};
 pub use collections::ManageCollections;
 pub use find_duplicates::{DuplicateFile, DuplicateGroup, FindDuplicates};
 pub use import_orynt3d::{ImportOrynt3d, ImportReport};

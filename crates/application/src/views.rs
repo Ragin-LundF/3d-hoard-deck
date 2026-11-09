@@ -1,4 +1,6 @@
-use hoarddeck_domain::{FileFormat, LibraryId, ModelFile, ModelId, ModelKind, ModelMeta, RelPath, TagName, YearMonth};
+use hoarddeck_domain::{
+    CoverSource, FileFormat, LibraryId, ModelFile, ModelId, ModelKind, ModelMeta, RelPath, TagName, YearMonth,
+};
 
 /// What a grid tile or list row needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +16,12 @@ pub struct ModelSummary {
     pub printed: bool,
     pub released: Option<YearMonth>,
     pub cover: Option<RelPath>,
+    /// Where `cover` comes from: own, the 3MF preview, or the folder above.
+    pub cover_source: CoverSource,
+    /// The folder picture for when an embedded 3MF cover has no preview inside.
+    pub fallback_cover: Option<RelPath>,
+    /// A preview rendered in the app: `cached` (waiting), `kept` (the cover in a read-only library) or `skipped`.
+    pub rendered: Option<String>,
     pub collection: Option<RelPath>,
     pub marked_by_user: bool,
     pub formats: Vec<FileFormat>,

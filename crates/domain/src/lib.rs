@@ -13,7 +13,7 @@ mod rel_path;
 mod slicer;
 mod sniff;
 
-pub use catalog::{Catalog, Folder, Model, ModelFile, ModelKind};
+pub use catalog::{Catalog, CoverSource, Folder, Model, ModelFile, ModelKind};
 pub use collection::{Collection, CollectionId, SmartSearch, collection_name};
 pub use entry::{Entry, EntryKind};
 pub use error::DomainError;

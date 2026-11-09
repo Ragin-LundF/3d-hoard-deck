@@ -74,6 +74,7 @@ impl EventSink for TauriEvents {
             ScanPhase::Walking => "walking",
             ScanPhase::Grouping => "grouping",
             ScanPhase::Done => "done",
+            ScanPhase::Regrouped => "regrouped",
         };
         let event = ScanProgressEvent {
             library: u32::try_from(progress.library.0).unwrap_or(u32::MAX),

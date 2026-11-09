@@ -110,8 +110,15 @@ impl SuggestTags {
         self.tags.rewrite_paths(library, &changed, |path, meta| {
             meta.tags.extend(additions.get(path).into_iter().flat_map(|tags| tags.iter().cloned()));
         })?;
+        // Grouped by the tags taken out: a "keep on N, skip M" is one index write instead of one per model.
+        let mut groups: HashMap<Vec<String>, (Vec<TagName>, Vec<RelPath>)> = HashMap::new();
         for resolution in &resolutions {
-            self.store.remove_suggested(library, std::slice::from_ref(&resolution.path), &resolution.removed)?;
+            let key = resolution.removed.iter().map(TagName::key).collect();
+            let group = groups.entry(key).or_insert_with(|| (resolution.removed.clone(), Vec::new()));
+            group.1.push(resolution.path.clone());
+        }
+        for (tags, paths) in groups.values() {
+            self.store.remove_suggested(library, paths, tags)?;
         }
         Ok(resolutions)
     }

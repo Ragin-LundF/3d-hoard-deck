@@ -14,38 +14,51 @@ impl MetaStore for SqliteIndex {
     }
 
     fn save_meta(&self, library: LibraryId, path: &RelPath, meta: &ModelMeta) -> Result<(), IndexError> {
-        let tags = serde_json::to_string(&meta.tags).map_err(|error| IndexError(error.to_string()))?;
-        let hidden = serde_json::to_string(&meta.hidden_tags).map_err(|error| IndexError(error.to_string()))?;
+        self.save_metas(library, &[(path.clone(), meta.clone())])
+    }
+
+    fn save_metas(&self, library: LibraryId, metas: &[(RelPath, ModelMeta)]) -> Result<(), IndexError> {
         let now =
             SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+        let rows = metas
+            .iter()
+            .map(|(path, meta)| {
+                let tags = serde_json::to_string(&meta.tags).map_err(|error| IndexError(error.to_string()))?;
+                let hidden = serde_json::to_string(&meta.hidden_tags).map_err(|error| IndexError(error.to_string()))?;
+                Ok((path, meta, tags, hidden))
+            })
+            .collect::<Result<Vec<_>, IndexError>>()?;
         self.write(|connection| {
-            if meta.is_empty() {
-                connection.execute(
-                    "DELETE FROM model_meta WHERE library_id = ?1 AND path = ?2",
-                    params![library.0, path.as_str()],
-                )?;
-            } else {
-                connection.execute(
-                    "INSERT INTO model_meta (library_id, path, display_name, favorite, printed, notes, tags, cover, updated_at, hidden_tags)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                     ON CONFLICT (library_id, path) DO UPDATE SET
-                        display_name = ?3, favorite = ?4, printed = ?5, notes = ?6, tags = ?7, cover = ?8, updated_at = ?9,
-                        hidden_tags = ?10",
-                    params![
-                        library.0,
-                        path.as_str(),
-                        meta.display_name,
-                        meta.favorite,
-                        meta.printed,
-                        meta.notes,
-                        tags,
-                        meta.cover.as_ref().map(RelPath::as_str),
-                        now,
-                        hidden
-                    ],
-                )?;
+            let transaction = connection.transaction()?;
+            for (path, meta, tags, hidden) in &rows {
+                if meta.is_empty() {
+                    transaction.execute(
+                        "DELETE FROM model_meta WHERE library_id = ?1 AND path = ?2",
+                        params![library.0, path.as_str()],
+                    )?;
+                } else {
+                    transaction.execute(
+                        "INSERT INTO model_meta (library_id, path, display_name, favorite, printed, notes, tags, cover, updated_at, hidden_tags)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                         ON CONFLICT (library_id, path) DO UPDATE SET
+                            display_name = ?3, favorite = ?4, printed = ?5, notes = ?6, tags = ?7, cover = ?8, updated_at = ?9,
+                            hidden_tags = ?10",
+                        params![
+                            library.0,
+                            path.as_str(),
+                            meta.display_name,
+                            meta.favorite,
+                            meta.printed,
+                            meta.notes,
+                            tags,
+                            meta.cover.as_ref().map(RelPath::as_str),
+                            now,
+                            hidden
+                        ],
+                    )?;
+                }
             }
-            Ok(())
+            transaction.commit()
         })
     }
 

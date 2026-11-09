@@ -65,6 +65,16 @@ export const commands = {
 	/**  Creates a group (`id` empty) or renames and recolours one. Returns its id. */
 	saveTagGroup: (library: number, id: number | null, name: string, color: string) => typedError<number | null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_group", { library, id, name, color })),
 	deleteTagGroup: (library: number, id: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_tag_group", { library, id })),
+	/**
+	 *  Adds and removes tags on the picked models (`ids`) or on every result of a search (`query` in `folder`), in one
+	 *  go. Returns the number of models and a token for `undo_tag_batch`.
+	 */
+	batchUpdateTags: (library: number, ids: number[] | null, query: string | null, folder: string, add: string[], remove: string[]) => typedError<BatchResultDto, IpcError_Serialize>(__TAURI_INVOKE("batch_update_tags", { library, ids, query, folder, add, remove })),
+	undoTagBatch: (token: number) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("undo_tag_batch", { token })),
+	/**  The models in `folder` carrying `tag_name`, with where the tag comes from. */
+	checkTag: (library: number, tagName: string, folder: string) => typedError<CheckItemDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("check_tag", { library, tagName, folder })),
+	/**  Tags of the picked models with how many of them carry each, for "Remove tag". */
+	selectionTags: (library: number, ids: number[]) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("selection_tags", { library, ids })),
 	/**  A newer published release, or `None`. Errors (no network, GitHub down) are for the log and "Check now" only. */
 	checkForUpdate: () => typedError<UpdateInfoDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("check_for_update")),
 	/**  Downloads, checks the signature, installs and restarts. Progress comes as [`UpdateProgressEvent`]. */
@@ -135,8 +145,19 @@ export const commands = {
 	 *  JSON number array, fine for a screenshot of a few MB.
 	 */
 	saveScreenshot: (id: number, file: string, png: number[]) => typedError<ScreenshotDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("save_screenshot", { id, file, png })),
+	renderSource: (id: number) => typedError<RenderSourceDto | null, IpcError_Serialize>(__TAURI_INVOKE("render_source", { id })),
+	/**  Stores a preview rendered in the app (in the app's folder, never the library). */
+	storeRenderedPreview: (id: number, png: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("store_rendered_preview", { id, png })),
+	/**  Keeps rendered previews: written into the model folder where allowed, else kept in the index. */
+	keepRenderedPreviews: (ids: number[]) => typedError<KeptDto, IpcError_Serialize>(__TAURI_INVOKE("keep_rendered_previews", { ids })),
+	skipRenderedPreviews: (ids: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("skip_rendered_previews", { ids })),
+	/**  Sets rendered previews back to `state` (`cached`, or none to render again): undo of skip and of keeping in the index. */
+	resetRenderedPreviews: (ids: number[], state: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("reset_rendered_previews", { ids, state })),
 	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
 	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
+	parentCovers: (library: number) => typedError<boolean, IpcError_Serialize>(__TAURI_INVOKE("parent_covers", { library })),
+	/**  Models without a picture borrow one from the folder above; regrouped in the background. */
+	setParentCovers: (library: number, on: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_parent_covers", { library, on })),
 	/**  Collection presets that match this library's folders and are not in use yet. */
 	proposePresets: (library: number) => typedError<PresetProposalDto[], IpcError_Serialize>(__TAURI_INVOKE("propose_presets", { library })),
 	acceptPreset: (library: number, id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("accept_preset", { library, id })),
@@ -209,6 +230,12 @@ export type ArchiveEntryDto = {
 	size: number | null,
 };
 
+/**  How many models a batch changed, and the token to undo it. */
+export type BatchResultDto = {
+	changed: number,
+	token: number,
+};
+
 export type BrowseRequestDto = BrowseRequestDto_Serialize | BrowseRequestDto_Deserialize;
 
 export type BrowseRequestDto_Deserialize = {
@@ -227,6 +254,26 @@ export type BrowseRequestDto_Serialize = {
 	sort: SortDto,
 	cursor: CursorDto | null,
 	limit: number,
+};
+
+export type CheckItemDto = CheckItemDto_Serialize | CheckItemDto_Deserialize;
+
+export type CheckItemDto_Deserialize = {
+	id: number,
+	title: string,
+	path: string,
+	folder: string,
+	cover?: string | null,
+	source: TagSourceDto,
+};
+
+export type CheckItemDto_Serialize = {
+	id: number,
+	title: string,
+	path: string,
+	folder: string,
+	cover: string | null,
+	source: TagSourceDto,
 };
 
 export type CollectionDto = CollectionDto_Serialize | CollectionDto_Deserialize;
@@ -414,6 +461,11 @@ export type JournalEntryDto = {
 	status: string,
 };
 
+export type KeptDto = {
+	written: number,
+	kept: number,
+};
+
 export type LibraryDto = {
 	id: number,
 	name: string,
@@ -505,6 +557,12 @@ export type ModelSummaryDto_Deserialize = {
 	printed: boolean,
 	released?: string | null,
 	cover?: string | null,
+	/**  `own`, `embedded` (the preview inside its 3MF) or `parent` (borrowed from the folder above). */
+	coverSource: string,
+	/**  The folder picture to show when an `embedded` cover turns out to have no preview inside. */
+	fallbackCover?: string | null,
+	/**  A preview rendered in the app: `cached` (waiting for the user), `kept` or `skipped`. */
+	rendered?: string | null,
 	/**  Folder path of the collection the model belongs to. */
 	collection?: string | null,
 	/**  The user marked this model's folder as one model; offer "detect automatically". */
@@ -526,6 +584,12 @@ export type ModelSummaryDto_Serialize = {
 	printed: boolean,
 	released: string | null,
 	cover: string | null,
+	/**  `own`, `embedded` (the preview inside its 3MF) or `parent` (borrowed from the folder above). */
+	coverSource: string,
+	/**  The folder picture to show when an `embedded` cover turns out to have no preview inside. */
+	fallbackCover: string | null,
+	/**  A preview rendered in the app: `cached` (waiting for the user), `kept` or `skipped`. */
+	rendered: string | null,
 	/**  Folder path of the collection the model belongs to. */
 	collection: string | null,
 	/**  The user marked this model's folder as one model; offer "detect automatically". */
@@ -548,6 +612,12 @@ export type RebuildReportDto = {
 	unreadable: number,
 	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
 	rulesRestored: number,
+};
+
+/**  The main mesh of a model to render a preview from, with its size in bytes. */
+export type RenderSourceDto = {
+	path: string,
+	size: number | null,
 };
 
 /**  What a decision changed; sent back as is to undo it. */
@@ -729,6 +799,9 @@ export type TagRuleDto = {
 	nameOnly: boolean,
 	enabled: boolean,
 };
+
+/**  Where a model's tag comes from, for the RULE / YOU labels when checking a tag. */
+export type TagSourceDto = "own" | "rule" | "both";
 
 export type UpdateInfoDto = UpdateInfoDto_Serialize | UpdateInfoDto_Deserialize;
 

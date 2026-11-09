@@ -11,6 +11,8 @@ pub struct ScanRules {
     pub variant_folders: Vec<String>,
     /// What the user decided for folders the automatic detection gets wrong.
     pub folder_rules: Vec<FolderRule>,
+    /// Models without a picture of their own borrow one from the folder above (one level, two if that has none).
+    pub parent_covers: bool,
 }
 
 /// Gives every folder matching `pattern` a role chosen by the user.
@@ -106,6 +108,7 @@ impl Default for ScanRules {
             ignore: ignore.map(str::to_owned).to_vec(),
             variant_folders: variants.map(str::to_owned).to_vec(),
             folder_rules: Vec::new(),
+            parent_covers: true,
         }
     }
 }

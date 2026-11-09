@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { formatNumber, t } from "../../shared/i18n";
 import { Icon } from "../../shared/icons";
 import { AllTags } from "./all-tags";
@@ -8,13 +9,24 @@ import { modeOf, readTags, setMode, toggleExclude, toggleInclude, wanted } from 
 /** Chips shown before "All tags…". */
 const CHIPS = 14;
 
-type Props = { library: number; folder: string; query: string; onQuery: (query: string) => void };
+type Props = {
+  library: number;
+  folder: string;
+  query: string;
+  onQuery: (query: string) => void;
+  /** Opens "Check this tag" for an active tag. */
+  onCheck?: (tag: string) => void;
+  /** Removes an active tag from every model shown. */
+  onRemoveAll?: (tag: string) => void;
+};
 
 /** The most common tags of what is shown, as chips above the grid. Click requires a tag, ⌥-click excludes it. */
-export function TagBar({ library, folder, query, onQuery }: Props) {
+export function TagBar({ library, folder, query, onQuery, onCheck, onRemoveAll }: Props) {
   const filter = readTags(query);
   const facets = useTagFacets(library, folder, query, CHIPS + 10);
   const [open, setOpen] = useState(false);
+  // The tag row clips its chips, so the menu is placed on the page at the button's position.
+  const [menu, setMenu] = useState<{ tag: string; x: number; y: number } | null>(null);
   const active = [...wanted(filter), ...filter.exclude];
   const isActive = (name: string) => active.some((tag) => tag.toLowerCase() === name.toLowerCase());
   const suggestions = (facets.data ?? []).filter((facet) => !isActive(facet.name)).slice(0, CHIPS);
@@ -33,9 +45,26 @@ export function TagBar({ library, folder, query, onQuery }: Props) {
       )}
       <div className="track">
         {wanted(filter).map((tag) => (
-          <button key={`+${tag}`} className="chip inc" onClick={click(tag)} title={t("Click to remove")} aria-pressed="true">
-            {tag}<Icon name="close" />
-          </button>
+          <span key={`+${tag}`} className="split chip-split">
+            <button className="chip inc" onClick={click(tag)} title={t("Click to remove")} aria-pressed="true">
+              {tag}<Icon name="close" />
+            </button>
+            {(onCheck || onRemoveAll) && (
+              <button className="chip inc menu-btn" aria-haspopup="menu" aria-expanded={menu?.tag === tag} aria-label={t("More for {tag}", { tag })}
+                onClick={(event) => {
+                  const box = event.currentTarget.getBoundingClientRect();
+                  setMenu(menu?.tag === tag ? null : { tag, x: box.left, y: box.bottom + 4 });
+                }}>▾</button>
+            )}
+            {menu?.tag === tag && createPortal(
+              // On the page itself: the tag row's fade mask would cut the menu off.
+              <div className="menu" role="menu" style={{ left: menu.x, top: menu.y }} onMouseLeave={() => setMenu(null)}>
+                {onCheck && <button role="menuitem" onClick={() => { setMenu(null); onCheck(tag); }}>{t("Check this tag…")}</button>}
+                {onRemoveAll && <button role="menuitem" onClick={() => { setMenu(null); onRemoveAll(tag); }}>{t("Remove from all here…")}</button>}
+              </div>,
+              document.body,
+            )}
+          </span>
         ))}
         {filter.exclude.map((tag) => (
           <button key={`-${tag}`} className="chip exc" onClick={() => onQuery(toggleExclude(query, tag))} title={t("Excluded. Click to remove")} aria-pressed="true">

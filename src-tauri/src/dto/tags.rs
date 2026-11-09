@@ -41,3 +41,49 @@ impl From<TagGroup> for TagGroupDto {
         Self { id: group.id as f64, name: group.name, color: group.color }
     }
 }
+
+/// Where a model's tag comes from, for the RULE / YOU labels when checking a tag.
+#[derive(Debug, Clone, Copy, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TagSourceDto {
+    Own,
+    Rule,
+    Both,
+}
+
+#[derive(Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckItemDto {
+    pub id: u32,
+    pub title: String,
+    pub path: String,
+    pub folder: String,
+    pub cover: Option<String>,
+    pub source: TagSourceDto,
+}
+
+impl From<hoarddeck_application::organize::CheckItem> for CheckItemDto {
+    fn from(item: hoarddeck_application::organize::CheckItem) -> Self {
+        use hoarddeck_application::organize::TagSource;
+        Self {
+            id: u32::try_from(item.id.0).unwrap_or(u32::MAX),
+            title: item.title,
+            path: item.path.into(),
+            folder: item.folder.into(),
+            cover: item.cover.map(String::from),
+            source: match item.source {
+                TagSource::Own => TagSourceDto::Own,
+                TagSource::Rule => TagSourceDto::Rule,
+                TagSource::Both => TagSourceDto::Both,
+            },
+        }
+    }
+}
+
+/// How many models a batch changed, and the token to undo it.
+#[derive(Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchResultDto {
+    pub changed: u32,
+    pub token: u32,
+}

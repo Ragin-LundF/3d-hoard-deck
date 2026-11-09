@@ -20,6 +20,7 @@ import { useUpdate } from "../update/use-update";
 import { IndexSettings } from "./index-settings";
 import { ACCESS_LABELS, LibrarySettings, type LibrarySub } from "./library-settings";
 import { SlicerSettings } from "./slicer-settings";
+import { renderMode, setRenderMode, type RenderMode } from "../render/render-queue";
 import { confirmDiscard } from "./drafts";
 
 type Props = {
@@ -196,6 +197,7 @@ function GeneralPage({ theme, onTheme }: { theme: Theme; onTheme: (theme: Theme)
             <option value="de">Deutsch</option>
           </select>
         </div>
+        <RenderModeRow />
         <div className="prow2">
           <div className="t"><b>{t("Theme")}</b></div>
           <div className="seg" role="group" aria-label={t("Theme")}>
@@ -272,5 +274,23 @@ function OverviewPage({ libraries, scans, theme, go }: OverviewProps) {
         ))}
       </div>
     </>
+  );
+}
+
+/** When previews are rendered for models without any picture. */
+function RenderModeRow() {
+  const [mode, setMode] = useState<RenderMode>(renderMode);
+  return (
+    <div className="prow2">
+      <div className="t">
+        <b>{t("Rendered previews")}</b>
+        <span>{t("Models without any picture get a preview rendered from their 3D file. It is only shown until you save or keep it.")}</span>
+      </div>
+      <select className="sel" aria-label={t("Rendered previews")} value={mode} onChange={(event) => { const next = event.target.value as RenderMode; setRenderMode(next); setMode(next); }}>
+        <option value="auto">{t("For models on screen")}</option>
+        <option value="request">{t("Only when I ask")}</option>
+        <option value="off">{t("Off")}</option>
+      </select>
+    </div>
   );
 }

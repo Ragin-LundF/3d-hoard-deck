@@ -1,7 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
+use std::thread;
 
-use hoarddeck_domain::{LibraryId, ModelKind, ModelMeta, RelPath, TagName};
+use hoarddeck_domain::{LibraryId, ModelId, ModelKind, ModelMeta, RelPath, TagName};
 
 use super::sidecar_path;
 use crate::AppError;
@@ -12,6 +13,10 @@ use crate::ports::{
 use crate::scan::LibraryLocks;
 use crate::search::{SearchModels, SearchRequest};
 
+/// `.3dhoarddeck` files written at the same time; modest, so a NAS stays usable for others.
+const SIDECAR_WRITERS: usize = 4;
+/// More changed models than this rebuild the library's search index instead of updating them one by one.
+const FULL_REFRESH_ABOVE: usize = 2000;
 /// Counting tags of a search looks at this many hits; enough to rank the chips above the grid.
 const FACET_MODELS: usize = 5000;
 
@@ -26,6 +31,8 @@ pub struct ManageTags {
     pub search: Arc<dyn SearchIndex>,
     pub search_models: Arc<SearchModels>,
     pub locks: Arc<LibraryLocks>,
+    /// The last batches, so they can be undone.
+    pub undo: std::sync::Mutex<super::BatchUndo>,
 }
 
 impl ManageTags {
@@ -54,9 +61,11 @@ impl ManageTags {
                 library: Some(library),
                 scope: (!folder.is_root()).then(|| folder.clone()),
                 offset: 0,
-                limit: FACET_MODELS,
+                limit: 0,
             };
-            TagScope::Models(self.search_models.execute(&request)?.models.into_iter().map(|model| model.id).collect())
+            TagScope::Models(
+                self.search_models.all(&request, FACET_MODELS)?.models.into_iter().map(|model| model.id).collect(),
+            )
         };
         Ok(self.tags.tag_counts(library, &scope, limit)?)
     }
@@ -103,6 +112,37 @@ impl ManageTags {
         Ok(self.tags.set_tag_pinned(library, tags, pinned)?)
     }
 
+    /// Writes the `.3dhoarddeck` files a few at a time: each is its own file in its own folder, and on a network share
+    /// one write after another spends most of the time waiting. Every file is tried; the first failure is returned.
+    fn write_sidecars(&self, root: &str, files: &[(RelPath, ModelMeta)]) -> Result<(), AppError> {
+        if files.is_empty() {
+            return Ok(());
+        }
+        let chunk = files.len().div_ceil(SIDECAR_WRITERS);
+        let failures: Vec<String> = thread::scope(|scope| {
+            let workers: Vec<_> = files
+                .chunks(chunk)
+                .map(|part| {
+                    scope.spawn(move || {
+                        part.iter()
+                            .filter_map(|(file, meta)| self.sidecars.write(root, file, meta).err())
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .flat_map(|worker| worker.join().unwrap_or_else(|_| vec!["writer stopped".to_owned()]))
+                .collect()
+        });
+        match failures.first() {
+            None => Ok(()),
+            Some(first) => {
+                Err(AppError::InvalidInput(format!("metadata file: {first} ({} files failed)", failures.len())))
+            }
+        }
+    }
+
     /// # Errors
     /// Fails when the index cannot be read.
     pub fn groups(&self, library: LibraryId) -> Result<Vec<TagGroup>, AppError> {
@@ -137,8 +177,8 @@ impl ManageTags {
         self.rewrite_paths(library, &paths, |_, meta| change(meta))
     }
 
-    /// Applies `change` to the metadata of the models at `paths`, then refreshes the search index once, also when a
-    /// write failed halfway, so search matches what was changed until then.
+    /// Applies `change` to the metadata of the models at `paths` in one index transaction, writes their metadata files,
+    /// then refreshes the search index once, also when a metadata file failed, so search matches the index.
     pub(crate) fn rewrite_paths(
         &self,
         library: LibraryId,
@@ -149,24 +189,39 @@ impl ManageTags {
         if paths.is_empty() {
             return Ok(0);
         }
-        let kinds: HashMap<RelPath, ModelKind> =
-            self.models.search_documents(library)?.into_iter().map(|document| (document.path, document.kind)).collect();
-        let written = paths.iter().try_for_each(|path| -> Result<(), AppError> {
+        let models: HashMap<RelPath, (ModelId, ModelKind)> =
+            self.models.models_at(library, paths)?.into_iter().map(|(path, id, kind)| (path, (id, kind))).collect();
+        let mut changed: Vec<ModelId> = Vec::new();
+        let mut files: Vec<(RelPath, ModelMeta)> = Vec::new();
+        let mut metas: Vec<(RelPath, ModelMeta)> = Vec::new();
+        for path in paths {
             let mut meta = self.meta.meta(library, path)?;
             change(path, &mut meta);
             let meta = meta.normalized()?;
-            self.meta.save_meta(library, path, &meta)?;
+            changed.extend(models.get(path).map(|(id, _)| *id));
             if writes_sidecars(found.settings)
-                && let Some(file) = kinds.get(path).and_then(|kind| sidecar_path(path, *kind))
+                && let Some(file) = models.get(path).and_then(|(_, kind)| sidecar_path(path, *kind))
             {
-                self.sidecars
-                    .write(&found.root, &file, &meta)
-                    .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
+                files.push((file, meta.clone()));
             }
-            Ok(())
-        });
+            metas.push((path.clone(), meta));
+        }
+        // One transaction for all models: a batch is applied whole or not at all, and quickly.
+        self.meta.save_metas(library, &metas)?;
+        let written = self.write_sidecars(&found.root, &files);
         let _sync = self.locks.search_sync();
-        let refreshed = self.search.replace_library(library, &self.models.search_documents(library)?);
+        // Only the changed models go to search; rebuilding all of a big library took seconds per click.
+        let refreshed: Result<(), AppError> = if changed.len() > FULL_REFRESH_ABOVE {
+            self.search.replace_library(library, &self.models.search_documents(library)?).map_err(Into::into)
+        } else {
+            changed
+                .iter()
+                .map(|id| self.models.search_document(*id))
+                .filter_map(Result::transpose)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(AppError::from)
+                .and_then(|documents| self.search.update_documents(&documents).map_err(Into::into))
+        };
         written?;
         refreshed?;
         Ok(paths.len())

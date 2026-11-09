@@ -22,6 +22,11 @@ describe("route", () => {
     expect(parseRoute(formatRoute(route))).toEqual(route);
   });
 
+  it("round-trips checking a tag", () => {
+    const route: Route = { view: "check", library: 2, tag: "Diorama", folder: "Makerworld" };
+    expect(parseRoute(formatRoute(route))).toEqual(route);
+  });
+
   it("round-trips collections", () => {
     expect(parseRoute(formatRoute({ view: "collection", id: 7 }))).toEqual({ view: "collection", id: 7 });
   });
