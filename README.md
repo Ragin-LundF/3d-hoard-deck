@@ -70,9 +70,18 @@ You can also build the app yourself as described in [docs/developer.md](docs/dev
 brew install --cask ragin-lundf/tap/3d-hoard-deck
 ```
 
+Installing with the full name also trusts this cask, which Homebrew 6 and later require for taps outside Homebrew
+itself ([Tap Trust](https://docs.brew.sh/Tap-Trust)). To install with the short name, trust the cask first:
+
+```bash
+brew tap ragin-lundf/tap
+brew trust --cask ragin-lundf/tap/3d-hoard-deck
+brew install --cask 3d-hoard-deck
+```
+
 Because the app is not signed yet, allow it once under System Settings › Privacy & Security › **Open Anyway**
-after the first start. `brew upgrade --cask 3d-hoard-deck` gets a
-new version; the app's own update check works as well.
+after the first start. The app updates itself, so `brew upgrade` skips it; `brew upgrade --greedy` updates it
+through Homebrew anyway. More in the [tap's README](https://github.com/Ragin-LundF/homebrew-tap#trusting-this-tap-homebrew-6-and-later).
 
 ## Getting started
 
