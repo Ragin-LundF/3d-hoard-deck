@@ -5,6 +5,18 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 
 ## [Unreleased]
 
+### New
+- **Extract ZIP, RAR and 7z archives.** A model page with archives, and a folder with loose archives, offer
+  **Extract…** for one archive or **Extract all…** (untick the ones to leave packed); a long extraction can run in
+  the background while you browse on. Each archive goes into a new folder named after it (with a number if the name is taken; a single
+  folder inside the archive is not nested twice). Files appear only once everything is unpacked and every checksum
+  matched; a damaged archive, a wrong password, too little space or cancelling leaves nothing behind. Then you check
+  the result and choose: **Delete the archives** (into the trash, or for good on a network share after a red
+  warning), **Keep archives and folders**, or **Discard the extracted folders** (into the trash too; for good only after a second question). Tags and notes of a deleted archive
+  move to its new folder. Needs file changes allowed for the library ("rename and move"). Multi-volume RAR sets and
+  password-protected archives work; names Windows and NAS shares cannot store are adjusted and listed, and a few
+  pictures of the result are shown before you decide. Only the archive's folder is read again afterwards.
+
 ## [1.1.0] - 2026-11-09
 
 This release is about tags without typing and pictures for every card: tag rules and optional AI suggestions,

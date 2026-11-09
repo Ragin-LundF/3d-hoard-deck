@@ -31,10 +31,12 @@ export function FileJournal({ libraries, onError }: Props) {
       {entries.map((entry) => (
         <div className="prow2" key={entry.id}>
           <div className="t">
-            <b>{entry.from} → {entry.to}</b>
+            <b>{entry.extract ? t("Extracted {archive} → {folder}", { archive: entry.from, folder: entry.to }) : `${entry.from} → ${entry.to}`}</b>
             <span>{libraryName(entry.library)} · {formatDate(new Date((entry.doneAt ?? 0) * 1000))}</span>
           </div>
-          {entry.status === "done"
+          {entry.extract
+            ? <span className={`pill${entry.status === "failed" ? " err" : ""}`}>{entry.status === "done" ? t("Extracted") : entry.status === "undone" ? t("Discarded") : STATUS[entry.status] ?? entry.status}</span>
+            : entry.status === "done"
             ? <button className="btn" disabled={undo.isPending} onClick={() => undo.mutate(entry.id)}>{t("Undo")}</button>
             : <span className={`pill${entry.status === "failed" ? " err" : ""}`}>{STATUS[entry.status] ?? entry.status}</span>}
         </div>

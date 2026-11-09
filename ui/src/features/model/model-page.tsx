@@ -5,6 +5,7 @@ import { commands, describeError, unwrap, type LibraryDto, type ModelFileDto_Ser
 import { folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import { viewerFormat, type MeshFormat } from "../viewer/formats";
+import { ArchiveActions } from "../files/archive-actions";
 import { ModelDetails } from "./model-details";
 import { ModelFiles } from "./model-files";
 import { ModelHeader } from "./model-header";
@@ -122,7 +123,10 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
           </div>
           <div className="ipane" role="tabpanel">
             {tab === "files" ? (
-              <ModelFiles library={summary.library} files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
+              <>
+                {library && <ArchiveActions model={summary.id} library={library} files={files} />}
+                <ModelFiles library={summary.library} files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
+              </>
             ) : (
               <ModelDetails model={data} library={library} onMessage={onMessage} />
             )}

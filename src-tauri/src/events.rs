@@ -23,6 +23,16 @@ pub struct ScanProgressEvent {
     pub error: Option<crate::dto::IpcError>,
 }
 
+/// Pushed while an archive is extracted: `done` of `total` bytes written, `file` being written.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractProgressEvent {
+    pub archive: String,
+    pub done: f64,
+    pub total: f64,
+    pub file: String,
+}
+
 /// Pushed while duplicates are searched: `done` of `total` groups of same-size files compared.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +103,17 @@ impl EventSink for TauriEvents {
             }
         }
         // A closed window cannot receive progress; nothing to recover.
+        let _ = event.emit(&self.handle);
+    }
+
+    #[allow(clippy::cast_precision_loss)] // byte counts below 2^53 are exact
+    fn extract_progress(&self, archive: &hoarddeck_domain::RelPath, done: u64, total: u64, file: &str) {
+        let event = ExtractProgressEvent {
+            archive: archive.to_string(),
+            done: done as f64,
+            total: total as f64,
+            file: file.to_owned(),
+        };
         let _ = event.emit(&self.handle);
     }
 

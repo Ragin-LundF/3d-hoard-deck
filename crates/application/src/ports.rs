@@ -346,6 +346,8 @@ pub trait HashCache: Send + Sync {
 pub enum FileError {
     /// Something is already at the target; nothing is ever overwritten.
     AlreadyExists,
+    /// The drive has no trash; the file is still there.
+    NoTrash,
     Failed(String),
 }
 
@@ -353,6 +355,7 @@ impl std::fmt::Display for FileError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AlreadyExists => formatter.write_str("the target already exists"),
+            Self::NoTrash => formatter.write_str("this drive has no trash"),
             Self::Failed(reason) => formatter.write_str(reason),
         }
     }
@@ -384,7 +387,49 @@ pub trait FileOperations: Send + Sync {
     /// # Errors
     /// Fails when the file system refuses.
     fn recover(&self, root: &str, to: &RelPath) -> Result<bool, String>;
+    /// Size and modification time (milliseconds since 1970) of a file.
+    /// # Errors
+    /// Fails when the file is missing or cannot be read.
+    fn stamp(&self, _root: &str, path: &RelPath) -> Result<ArchiveStamp, String> {
+        Err(format!("{path}: not supported"))
+    }
+    /// Deletes an extracted archive (one file): into the trash, or for good with `permanent`.
+    /// # Errors
+    /// [`FileError::NoTrash`] when the drive has no trash (nothing was deleted); fails when the file system refuses.
+    fn delete_archive(&self, _root: &str, path: &RelPath, _permanent: bool) -> Result<Deleted, FileError> {
+        Err(FileError::Failed(format!("{path}: not supported")))
+    }
+    /// Moves an extracted folder to the trash.
+    /// # Errors
+    /// [`FileError::NoTrash`] when the drive has no trash (nothing moved); fails when the file system refuses.
+    fn trash_dir(&self, _root: &str, dir: &RelPath) -> Result<(), FileError> {
+        Err(FileError::Failed(format!("{dir}: not supported")))
+    }
+    /// Removes an extraction's hidden staging folder with everything in it. Refuses any other folder.
+    /// # Errors
+    /// Fails for a folder that is not a staging folder, or when the file system refuses.
+    fn remove_staging_dir(&self, _root: &str, dir: &RelPath) -> Result<(), String> {
+        Err(format!("{dir}: not supported"))
+    }
 }
+
+/// Where a deleted archive went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Deleted {
+    Trashed,
+    Removed,
+}
+
+/// Size and modification time of an archive when it was extracted, so a changed archive is never deleted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArchiveStamp {
+    pub size: u64,
+    /// Milliseconds since 1970.
+    pub mtime: i64,
+}
+
+/// The first part of an extraction's hidden staging folder name; the scanner never lists such folders.
+pub const STAGING_PREFIX: &str = ".hoarddeck-extract-";
 
 /// Where a journaled rename or move stands. `Pending` and `Undoing` are only seen after a crash mid-change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -423,6 +468,10 @@ pub struct JournalEntry {
     pub to: RelPath,
     /// Folder or single-file model; a single file carries its `.3dhoarddeck` and cover image along.
     pub kind: ModelKind,
+    /// Set for an archive extracted into a new folder (`from` the archive, `to` the folder) instead of a move.
+    pub extract: Option<ArchiveStamp>,
+    /// The archive's files at extraction (several for a multi-volume RAR); only these are ever deleted.
+    pub parts: Vec<RelPath>,
     /// Seconds since 1970.
     pub done_at: i64,
     pub status: JournalStatus,
@@ -434,6 +483,17 @@ pub trait FileJournal: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn begin(&self, library: LibraryId, from: &RelPath, to: &RelPath, kind: ModelKind) -> Result<i64, IndexError>;
+    /// Records an extraction of `archive` into `folder` about to start, as [`JournalStatus::Pending`].
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn begin_extract(
+        &self,
+        library: LibraryId,
+        archive: &RelPath,
+        folder: &RelPath,
+        stamp: ArchiveStamp,
+        parts: &[RelPath],
+    ) -> Result<i64, IndexError>;
     /// # Errors
     /// Fails when the index cannot be written.
     fn set_status(&self, id: i64, status: JournalStatus) -> Result<(), IndexError>;
@@ -566,6 +626,98 @@ pub trait ChangeWatcher: Send + Sync {
 
 pub trait StorageInspector: Send + Sync {
     fn kind(&self, dir: &Path) -> StorageKind;
+    /// Free bytes on the drive holding `dir`; `None` when unknown.
+    fn free_space(&self, _dir: &Path) -> Option<u64> {
+        None
+    }
+}
+
+/// One entry of an archive to extract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchiveItem {
+    /// Position in the archive; [`ArchiveExtractor::extract`] refers to entries by it.
+    pub index: usize,
+    /// Path inside the archive as stored, not yet checked.
+    pub name: String,
+    /// Declared unpacked size.
+    pub size: u64,
+    pub packed: u64,
+    pub is_dir: bool,
+    /// Symbolic or hard link: never extracted.
+    pub is_link: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveFormat {
+    Zip,
+    Rar,
+    SevenZip,
+}
+
+/// What an archive holds, read without unpacking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchiveInfo {
+    pub format: ArchiveFormat,
+    /// Every file of a multi-volume archive, the first one included.
+    pub parts: Vec<RelPath>,
+    pub entries: Vec<ArchiveItem>,
+    /// A password is needed to read the files.
+    pub encrypted: bool,
+}
+
+/// Why an extraction did not happen. Nothing is left in the library afterwards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExtractError {
+    WrongPassword,
+    Cancelled,
+    /// Damaged data, a checksum mismatch, a missing part, an entry larger than declared…
+    Failed(String),
+}
+
+impl std::fmt::Display for ExtractError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongPassword => formatter.write_str("wrong password"),
+            Self::Cancelled => formatter.write_str("cancelled"),
+            Self::Failed(reason) => formatter.write_str(reason),
+        }
+    }
+}
+
+/// Bytes written so far, the total, and the file being written.
+pub type ExtractProgress<'a> = &'a (dyn Fn(u64, u64, &str) + Sync);
+
+/// Progress reports and the cancel flag of a running extraction.
+pub struct ExtractControl<'a> {
+    pub progress: ExtractProgress<'a>,
+    pub cancel: &'a std::sync::atomic::AtomicBool,
+}
+
+/// Reads and unpacks ZIP, RAR and 7z archives.
+pub trait ArchiveExtractor: Send + Sync {
+    /// The entries of `archive` (the first part of a multi-volume set). Without the password of an archive whose
+    /// file list is encrypted, `entries` stays empty and `encrypted` is set.
+    /// # Errors
+    /// Fails for an unreadable, damaged or unsupported archive, a missing part, or a wrong password.
+    fn inspect(&self, root: &str, archive: &RelPath, password: Option<&str>) -> Result<ArchiveInfo, String>;
+    /// The files of `archive`: just it, or every part of a multi-volume set.
+    /// # Errors
+    /// Fails when the folder cannot be listed.
+    fn parts(&self, root: &str, archive: &RelPath) -> Result<Vec<RelPath>, String>;
+    /// Writes each `(index, path)` of `plan` to `staging/path`. `staging` is a new folder named with
+    /// [`STAGING_PREFIX`]; paths are already checked. Every entry is read to its end so its checksum is verified, and
+    /// no entry may unpack to more than its declared size.
+    /// # Errors
+    /// Fails on any error; the caller then removes the staging folder.
+    fn extract(
+        &self,
+        root: &str,
+        archive: &RelPath,
+        staging: &RelPath,
+        plan: &[(usize, RelPath)],
+        password: Option<&str>,
+        control: &ExtractControl<'_>,
+    ) -> Result<(), ExtractError>;
 }
 
 /// Data derived from the index (the search index), kept next to it.
@@ -738,4 +890,6 @@ pub trait EventSink: Send + Sync {
     fn duplicates_progress(&self, _done: usize, _total: usize) {}
     /// Tag suggestions: `done` of `total` models asked, `failed` of them without an answer; `running` is false at the end.
     fn suggest_progress(&self, _library: LibraryId, _done: usize, _total: usize, _failed: usize, _running: bool) {}
+    /// Archive extraction: `done` of `total` bytes written, `file` being written.
+    fn extract_progress(&self, _archive: &RelPath, _done: u64, _total: u64, _file: &str) {}
 }

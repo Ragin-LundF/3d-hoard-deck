@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hoarddeck_domain::{AccessMode, Entry, EntryKind, FileKind, LibraryId, RelPath, Sniff, classify_by_name};
 
 use crate::AppError;
-use crate::ports::{FileError, FileOperations, FolderCoverStore, LibraryRepository};
+use crate::ports::{FileOperations, FolderCoverStore, LibraryRepository};
 use crate::scan::ScanLibrary;
 
 /// Lets the user choose the picture a folder card shows, like a movie library's poster. The choice is kept in the
@@ -52,10 +52,7 @@ impl SetFolderCover {
     fn copy_into(&self, root: &str, id: LibraryId, folder: &RelPath, image: &RelPath) -> Option<RelPath> {
         let extension = image.name().rsplit_once('.').map_or("png", |(_, extension)| extension).to_ascii_lowercase();
         let target = folder.join(&format!("folder.{extension}")).ok()?;
-        let size = match self.files.copy_file(root, image, &target) {
-            Ok(size) => size,
-            Err(FileError::AlreadyExists | FileError::Failed(_)) => return None,
-        };
+        let Ok(size) = self.files.copy_file(root, image, &target) else { return None };
         let mtime =
             SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0));
         let entry = Entry { path: target.clone(), kind: EntryKind::File(FileKind::Image), size, mtime };

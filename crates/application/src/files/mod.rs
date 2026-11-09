@@ -2,12 +2,14 @@
 //! the 3D preview (any library that may write files).
 
 mod disk;
+mod extract_archive;
 mod move_model;
 mod reconcile;
 mod rendered;
 mod save_screenshot;
 mod undo;
 
+pub use extract_archive::{ArchiveChoice, ExtractArchives, ExtractPlan, Extracted, Finished};
 pub use move_model::{MoveModel, Target};
 pub use reconcile::ReconcileJournal;
 pub use rendered::{Kept, RenderedPreviews};

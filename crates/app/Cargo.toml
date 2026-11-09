@@ -13,10 +13,12 @@ hoarddeck-infra-sqlite.workspace = true
 hoarddeck-infra-tantivy.workspace = true
 hoarddeck-infra-platform.workspace = true
 hoarddeck-infra-ai.workspace = true
+hoarddeck-infra-archive.workspace = true
 hoarddeck-infra-thumbs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 serde_json.workspace = true
 
 [lints]

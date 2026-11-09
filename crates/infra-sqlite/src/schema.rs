@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 16] = [
+const MIGRATIONS: [&str; 18] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -214,6 +214,16 @@ CREATE TABLE rendered_previews (
     r"
 -- 16: the folder picture shown instead when a model's 3MF cover has no preview inside.
 ALTER TABLE models ADD COLUMN fallback_cover TEXT;
+",
+    r"
+-- 17: archives extracted into a new folder are journaled too (from = archive, to = folder), with the archive's size
+-- and modification time, so it is only deleted while it is still the file that was extracted.
+ALTER TABLE file_journal ADD COLUMN archive_size INTEGER;
+ALTER TABLE file_journal ADD COLUMN archive_mtime INTEGER;
+",
+    r"
+-- 18: the archive files of an extraction (all parts of a multi-volume RAR), so only those are ever deleted.
+ALTER TABLE file_journal ADD COLUMN archive_parts TEXT;
 ",
 ];
 

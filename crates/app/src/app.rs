@@ -7,7 +7,9 @@ use crate::after_scan::AfterScan;
 use hoarddeck_application::AppError;
 use hoarddeck_application::ai::SuggestTags;
 use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
-use hoarddeck_application::files::{MoveModel, ReconcileJournal, RenderedPreviews, SaveScreenshot, UndoFileOperation};
+use hoarddeck_application::files::{
+    ExtractArchives, MoveModel, ReconcileJournal, RenderedPreviews, SaveScreenshot, UndoFileOperation,
+};
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
     FindDuplicates, ImportOrynt3d, ManageCollections, ManageTags, RebuildFromSidecars, SetFolderCover, UpdateModelMeta,
@@ -20,6 +22,7 @@ use hoarddeck_application::search::{RebuildSearchIndex, SearchModels};
 use hoarddeck_application::slicer::{ManageSlicers, OpenInSlicer};
 use hoarddeck_application::tagging::{ManageTagRules, TagRuleBook};
 use hoarddeck_infra_ai::{HttpTagSuggester, Keychain};
+use hoarddeck_infra_archive::Archives;
 use hoarddeck_infra_fs::{
     Blake3Hasher, BootstrapFile, FsFileOperations, FsLibraryScanner, IoPriority, NotifyWatcher, Orynt3dFiles,
     SidecarFileStore, SystemStorage,
@@ -45,6 +48,7 @@ pub struct App {
     pub auto_rescan: Arc<AutoRescan>,
     pub move_model: MoveModel,
     pub undo_file_operation: UndoFileOperation,
+    pub extract_archives: Arc<ExtractArchives>,
     pub save_screenshot: Arc<SaveScreenshot>,
     /// Previews rendered in the app for models without any picture.
     pub rendered: RenderedPreviews,
@@ -131,17 +135,11 @@ impl App {
                 meta: index.clone(),
                 sidecars: Arc::new(SidecarFileStore),
             },
-            move_index_location: MoveIndexLocation {
-                libraries: index.clone(),
-                export: index.clone(),
-                derived: Arc::new(SearchFolder),
-                location: Arc::new(BootstrapFile),
-                storage: Arc::new(SystemStorage),
-                locks: locks.clone(),
-            },
+            move_index_location: move_index_location(&index, &locks),
             add_library: AddLibrary { libraries: index.clone(), index_dir: index_dir.clone() },
             move_model,
             undo_file_operation,
+            extract_archives: extract_archives(&index, &locks, &scan_library, &search, events.clone()),
             save_screenshot,
             rendered,
             file_journal: index.clone(),
@@ -287,6 +285,39 @@ fn manage_tags(
         locks: locks.clone(),
         undo: Mutex::default(),
     }
+}
+
+fn move_index_location(index: &Arc<SqliteIndex>, locks: &Arc<LibraryLocks>) -> MoveIndexLocation {
+    MoveIndexLocation {
+        libraries: index.clone(),
+        export: index.clone(),
+        derived: Arc::new(SearchFolder),
+        location: Arc::new(BootstrapFile),
+        storage: Arc::new(SystemStorage),
+        locks: locks.clone(),
+    }
+}
+
+fn extract_archives(
+    index: &Arc<SqliteIndex>,
+    locks: &Arc<LibraryLocks>,
+    scan: &Arc<ScanLibrary>,
+    search: &Arc<TantivySearchIndex>,
+    events: Arc<dyn EventSink>,
+) -> Arc<ExtractArchives> {
+    Arc::new(ExtractArchives {
+        libraries: index.clone(),
+        models: index.clone(),
+        files: Arc::new(FsFileOperations),
+        extractor: Arc::new(Archives),
+        journal: index.clone(),
+        locks: locks.clone(),
+        scan: scan.clone(),
+        storage: Arc::new(SystemStorage),
+        search: search.clone(),
+        events,
+        cancel: AtomicBool::new(false),
+    })
 }
 
 fn rendered_previews(

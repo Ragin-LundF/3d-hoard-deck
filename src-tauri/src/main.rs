@@ -47,6 +47,7 @@ fn main() {
         .expect("failed to start 3D Hoard Deck");
 }
 
+#[allow(clippy::too_many_lines)] // the list of commands and events, one per line
 fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
@@ -136,11 +137,17 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::slicers::save_slicers,
             commands::slicers::detect_slicers,
             commands::slicers::open_in_slicer,
+            commands::extract::plan_extraction,
+            commands::extract::extract_archive,
+            commands::extract::cancel_extraction,
+            commands::extract::finish_extraction,
+            commands::extract::pending_extractions,
         ])
         .events(collect_events![
             events::ScanProgressEvent,
             events::DuplicatesProgressEvent,
             events::SuggestProgressEvent,
+            events::ExtractProgressEvent,
             commands::update::UpdateProgressEvent
         ])
 }

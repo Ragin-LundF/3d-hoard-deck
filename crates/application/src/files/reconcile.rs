@@ -17,6 +17,15 @@ impl ReconcileJournal {
     pub fn execute(&self) -> Result<(), AppError> {
         for entry in self.journal.unfinished()? {
             let Some(library) = self.libraries.get(entry.library)? else { continue };
+            if entry.extract.is_some() {
+                super::extract_archive::reconcile_extraction(
+                    self.files.as_ref(),
+                    self.journal.as_ref(),
+                    &library.root,
+                    &entry,
+                )?;
+                continue;
+            }
             let (old, new, done, abandoned) = match entry.status {
                 JournalStatus::Pending => (&entry.from, &entry.to, JournalStatus::Done, JournalStatus::Failed),
                 JournalStatus::Undoing => (&entry.to, &entry.from, JournalStatus::Undone, JournalStatus::Done),

@@ -165,6 +165,11 @@ Changing a role regroups the library within seconds; the folders are not read ag
 
 ## Questions
 
+**Can it unpack my ZIP and RAR downloads?** Yes, in libraries where file changes are allowed ("rename and move"):
+open the archive or the folder holding it and choose **Extract…**. You see the extracted files before the archive is
+deleted, and nothing is deleted without your confirmation. RAR support uses the official UnRAR code, see
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
 **Does it work with my Orynt3D library?** Yes. 3D Hoard Deck never changes Orynt3D's `_orynt3d` folders or
 `config.orynt3d` files, so both apps can use the same folders. **Settings › Libraries › Import from Orynt3D**
 takes over the names, notes and tags you entered there; it only reads the files and can be run again.

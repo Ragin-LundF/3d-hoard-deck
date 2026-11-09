@@ -32,6 +32,10 @@ impl StorageInspector for SystemStorage {
             _ => StorageKind::Local,
         }
     }
+
+    fn free_space(&self, dir: &Path) -> Option<u64> {
+        fs4::available_space(dir).ok()
+    }
 }
 
 /// Windows: `Z:\…` mapped to a share shows up in `net use` with a `\\server\share` target.

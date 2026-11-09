@@ -39,6 +39,10 @@ pub enum Refusal {
     NotManaged(String),
     #[error("{0} does not allow writing files; change it under Settings › Libraries")]
     ReadOnly(String),
+    #[error("{0} cannot be moved to the trash: this drive has no trash")]
+    NoTrash(String),
+    #[error("the password is missing or wrong")]
+    WrongPassword,
 }
 
 #[derive(Debug, Error)]

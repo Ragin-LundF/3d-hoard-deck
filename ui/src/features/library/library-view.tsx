@@ -14,6 +14,7 @@ import { VirtualGrid } from "./virtual-grid";
 import { SuggestFolderButton } from "../ai/suggest-folder-button";
 import { SelectionBar } from "../batch/selection-bar";
 import { RenderedStrip } from "../render/rendered-strip";
+import { FolderArchives, isArchive } from "../files/archive-actions";
 import { useBatchTags } from "../batch/batch";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { t, plural } from "../../shared/i18n";
@@ -182,6 +183,12 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
         ids={items.flatMap((item) => (item.kind === "model" && !item.model.cover && item.model.rendered === "cached" ? [item.model.id] : []))}
         onMessage={onError}
       />
+      {!searching && !route.all && (
+        <FolderArchives
+          library={library}
+          archives={items.flatMap((item) => (item.kind === "model" && item.model.formats.length === 0 && isArchive(item.model.path) ? [{ id: item.model.id, path: item.model.path, size: item.model.totalSize ?? 0 }] : []))}
+        />
+      )}
       {!searching && !route.all && <FolderPictures library={library.id} images={browse.data?.pages[0]?.images ?? []} />}
       {active.isError ? (
         <div className="empty err">{describeError(active.error)}</div>

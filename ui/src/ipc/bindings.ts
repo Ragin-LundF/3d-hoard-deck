@@ -169,11 +169,25 @@ export const commands = {
 	 *  `slicer` (`None` = the first that opens them). Returns the slicer's name.
 	 */
 	openInSlicer: (model: number, files: string[], slicer: number | null) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("open_in_slicer", { model, files, slicer })),
+	/**  Plans for the given archives (files of model `id`). Reads the archives, writes nothing. */
+	planExtraction: (id: number, archives: string[], password: string | null) => typedError<ExtractPlanDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("plan_extraction", { id, archives, password })),
+	/**  Extracts one archive into the new folder `name`; progress arrives as `ExtractProgressEvent`. */
+	extractArchive: (id: number, archive: string, name: string, password: string | null) => typedError<ExtractedDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("extract_archive", { id, archive, name, password })),
+	/**  Stops the running extraction; nothing is left behind. */
+	cancelExtraction: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_extraction")),
+	/**
+	 *  `delete` / `deletePermanently` the archive, or `discard` / `discardPermanently` the extracted folder (the plain
+	 *  forms use the trash). Fails with code `no_trash` when the trash cannot be used; nothing is deleted then.
+	 */
+	finishExtraction: (journal: number, choice: string) => typedError<FinishedDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("finish_extraction", { journal, choice })),
+	/**  Extracted archives of model `id` that are still there, for "Extracted to … · Delete archive". */
+	pendingExtractions: (id: number) => typedError<PendingExtractionDto[], IpcError_Serialize>(__TAURI_INVOKE("pending_extractions", { id })),
 };
 
 /** Events */
 export const events = {
 	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
+	extractProgressEvent: makeEvent<ExtractProgressEvent, ExtractProgressEvent>("extract-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
 	suggestProgressEvent: makeEvent<SuggestProgressEvent, SuggestProgressEvent>("suggest-progress-event"),
 	updateProgressEvent: makeEvent<UpdateProgressEvent, UpdateProgressEvent>("update-progress-event"),
@@ -349,6 +363,78 @@ export type DuplicatesProgressEvent = {
 /**  What to do when the chosen index folder already holds an index. */
 export type ExistingIndexDto = "ask" | "use" | "replace";
 
+/**  What extracting an archive would do; `problem` says why it cannot be done. */
+export type ExtractPlanDto = ExtractPlanDto_Serialize | ExtractPlanDto_Deserialize;
+
+/**  What extracting an archive would do; `problem` says why it cannot be done. */
+export type ExtractPlanDto_Deserialize = {
+	archive: string,
+	parts: string[],
+	folder: string,
+	clash: boolean,
+	files: number,
+	/**  Unpacked size in bytes. */
+	bytes: number | null,
+	unwrapped?: string | null,
+	encrypted: boolean,
+	free?: number | null,
+	network: boolean,
+	problem?: string | null,
+};
+
+/**  What extracting an archive would do; `problem` says why it cannot be done. */
+export type ExtractPlanDto_Serialize = {
+	archive: string,
+	parts: string[],
+	folder: string,
+	clash: boolean,
+	files: number,
+	/**  Unpacked size in bytes. */
+	bytes: number | null,
+	unwrapped: string | null,
+	encrypted: boolean,
+	free: number | null,
+	network: boolean,
+	problem: string | null,
+};
+
+/**  Pushed while an archive is extracted: `done` of `total` bytes written, `file` being written. */
+export type ExtractProgressEvent = {
+	archive: string,
+	done: number | null,
+	total: number | null,
+	file: string,
+};
+
+/**  A finished extraction waiting for the decision about the archive. */
+export type ExtractedDto = ExtractedDto_Serialize | ExtractedDto_Deserialize;
+
+/**  A finished extraction waiting for the decision about the archive. */
+export type ExtractedDto_Deserialize = {
+	journal: number,
+	folder: string,
+	files: number,
+	bytes: number | null,
+	renamed: RenamedDto[],
+	skipped: string[],
+	unwrapped?: string | null,
+	pictures: string[],
+	warning?: string | null,
+};
+
+/**  A finished extraction waiting for the decision about the archive. */
+export type ExtractedDto_Serialize = {
+	journal: number,
+	folder: string,
+	files: number,
+	bytes: number | null,
+	renamed: RenamedDto[],
+	skipped: string[],
+	unwrapped: string | null,
+	pictures: string[],
+	warning: string | null,
+};
+
 /**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
 export type FileChangeDto = FileChangeDto_Serialize | FileChangeDto_Deserialize;
 
@@ -361,6 +447,21 @@ export type FileChangeDto_Deserialize = {
 /**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
 export type FileChangeDto_Serialize = {
 	journal: number,
+	warning: string | null,
+};
+
+/**  How a settled extraction ended: `trashed` or `removed`, and a warning when the folder could not be read again. */
+export type FinishedDto = FinishedDto_Serialize | FinishedDto_Deserialize;
+
+/**  How a settled extraction ended: `trashed` or `removed`, and a warning when the folder could not be read again. */
+export type FinishedDto_Deserialize = {
+	outcome: string,
+	warning?: string | null,
+};
+
+/**  How a settled extraction ended: `trashed` or `removed`, and a warning when the folder could not be read again. */
+export type FinishedDto_Serialize = {
+	outcome: string,
 	warning: string | null,
 };
 
@@ -459,6 +560,8 @@ export type JournalEntryDto = {
 	doneAt: number | null,
 	/**  `pending`, `done`, `failed`, `undoing` or `undone`; only `done` can be undone. */
 	status: string,
+	/**  An archive extracted into a new folder (`from` the archive, `to` the folder), not a move. */
+	extract: boolean,
 };
 
 export type KeptDto = {
@@ -599,6 +702,13 @@ export type ModelSummaryDto_Serialize = {
 	totalSize: number | null,
 };
 
+/**  An extracted archive that is still there. */
+export type PendingExtractionDto = {
+	journal: number,
+	archive: string,
+	folder: string,
+};
+
 export type PresetProposalDto = {
 	id: string,
 	name: string,
@@ -612,6 +722,11 @@ export type RebuildReportDto = {
 	unreadable: number,
 	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
 	rulesRestored: number,
+};
+
+export type RenamedDto = {
+	from: string,
+	to: string,
 };
 
 /**  The main mesh of a model to render a preview from, with its size in bytes. */
