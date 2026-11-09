@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, describeError, IpcFailure, unwrap, type RuleKindDto, type TagRuleDto } from "../../ipc";
 import { Icon } from "../../shared/icons";
 import { t } from "../../shared/i18n";
+import { tagRuleDraft } from "../settings/drafts";
+import { SaveBar } from "../settings/save-bar";
 
 const KINDS: { kind: RuleKindDto; label: string; placeholder: string }[] = [
   { kind: "any", label: t("Any of these words"), placeholder: "presupported, supported, ready to slice" },
@@ -23,13 +25,13 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
   const queryClient = useQueryClient();
   const saved = useQuery({ queryKey: ["tagRules"], queryFn: () => unwrap(commands.tagRules()) });
   const presets = useQuery({ queryKey: ["tagRulePresets"], queryFn: () => unwrap(commands.tagRulePresets()), staleTime: Infinity });
-  const [draft, setDraft] = useState<TagRuleDto[] | null>(null);
+  const draft = tagRuleDraft.use();
   const [counts, setCounts] = useState<number[] | null>(null);
   const rules = draft ?? saved.data ?? [];
-  const changed = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved.data ?? []);
+  const changed = draft !== null;
 
   const update = (next: TagRuleDto[]) => {
-    setDraft(next);
+    tagRuleDraft.set(JSON.stringify(next) === JSON.stringify(saved.data ?? []) ? null : next);
     setCounts(null);
   };
   const change = (index: number, patch: Partial<TagRuleDto>) => update(rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
@@ -43,7 +45,7 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
     mutationFn: () => unwrap(commands.saveTagRules(rules)),
     onSuccess: () => {
       queryClient.setQueryData(["tagRules"], rules);
-      setDraft(null);
+      tagRuleDraft.set(null);
       // The regroup runs in the background; tags and grids refresh when the "done" event arrives.
     },
     onError: (error) => onError(describeError(error)),
@@ -70,11 +72,9 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
             onRemove={() => update(rules.filter((_, i) => i !== index))}
           />
         ))}
-        <RuleTester rules={rules} />
       </div>
+      <div className="panel"><RuleTester rules={rules} /></div>
       <div className="actions">
-        <button className="btn primary" onClick={() => save.mutate()} disabled={!changed || save.isPending}>{t("Save rules")}</button>
-        {changed && <button className="btn ghost" onClick={() => update(saved.data ?? [])}>{t("Discard changes")}</button>}
         <button className="btn" onClick={() => count.mutate()} disabled={rules.length === 0 || count.isPending}>
           <Icon name="search" />{count.isPending ? t("Counting…") : t("Count matches")}
         </button>
@@ -85,6 +85,7 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
           </button>
         )}
       </div>
+      {changed && <SaveBar what={t("Tag rules")} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => update(saved.data ?? [])} />}
     </>
   );
 }
@@ -94,6 +95,7 @@ type RowProps = { rule: TagRuleDto; count: number | undefined; onChange: (patch:
 function RuleRow({ rule, count, onChange, onRemove }: RowProps) {
   const kind = KINDS.find((k) => k.kind === rule.kind) ?? KINDS[0]!;
   const captures = rule.kind === "regex" || rule.kind === "folder";
+  const [options, setOptions] = useState(false);
   return (
     <div className={`prow2 trule${rule.enabled ? "" : " off"}`}>
       <input type="checkbox" checked={rule.enabled} onChange={(event) => onChange({ enabled: event.target.checked })} aria-label={t("Rule switched on")} />
@@ -117,9 +119,16 @@ function RuleRow({ rule, count, onChange, onRemove }: RowProps) {
             onChange={(event) => onChange({ pattern: event.target.value })}
           />
           {count !== undefined && <span className="pill">{t("{n} models", { n: count })}</span>}
+          <button className={`btn ghost${options ? " on" : ""}`} onClick={() => setOptions(!options)} aria-expanded={options} aria-label={t("Options of rule {tag}", { tag: rule.tag })} title={t("Options")}><Icon name="settings" /></button>
           <button className="btn ghost" onClick={onRemove} aria-label={t("Remove rule {tag}", { tag: rule.tag })}><Icon name="close" /></button>
         </div>
-        <div className="tr-line sub">
+        {!options && (rule.unless.trim() || rule.nameOnly) && (
+          <div className="tr-line sub">
+            {rule.unless.trim() && <span className="pill">{t("unless {words}", { words: rule.unless })}</span>}
+            {rule.nameOnly && <span className="pill">{t("own name only")}</span>}
+          </div>
+        )}
+        {options && <div className="tr-line sub">
           <label>
             {t("Unless")}
             <input value={rule.unless} aria-label={t("Unless these words")} onChange={(event) => onChange({ unless: event.target.value })} />
@@ -131,7 +140,7 @@ function RuleRow({ rule, count, onChange, onRemove }: RowProps) {
             </label>
           )}
           {captures && <span className="hint">{rule.kind === "regex" ? t("{1} in the tag is the part in ( ).") : t("{1} in the tag is the folder's name.")}</span>}
-        </div>
+        </div>}
       </div>
     </div>
   );

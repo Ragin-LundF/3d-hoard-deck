@@ -16,21 +16,25 @@ import { ModelPage } from "./features/model/model-page";
 import { SearchBox } from "./features/search/search-box";
 import { SettingsView, useAddLibrary } from "./features/settings/settings-view";
 import { Icon, Logo } from "./shared/icons";
-import { HOME, useRoute } from "./shared/route";
+import { HOME, settingsRoute, useRoute } from "./shared/route";
 import { useTheme } from "./shared/use-theme";
 import { SuggestStatus } from "./features/ai/suggest-status";
+import { UpdatePill } from "./features/update/update-pill";
+import { useUpdateCheck } from "./features/update/use-update";
 import { useSuggestProgressListener } from "./features/ai/queries";
+import { SettingsNav } from "./features/settings/settings-nav";
 import { t, plural } from "./shared/i18n";
 
 export function App() {
   const [route, navigate] = useRoute();
-  const [theme, toggleTheme] = useTheme();
+  const [theme, toggleTheme, setTheme] = useTheme();
   const [toast, setToast] = useState<string | null>(null);
   const [shown, setShown] = useState(0);
   const libraries = useLibraries();
   const onScanFailed = useCallback((error: IpcFailure) => setToast(describeError(error)), []);
   const scans = useScanStatus(onScanFailed);
   useSuggestProgressListener();
+  useUpdateCheck();
   const menu = useFolderMenu();
   const addLibrary = useAddLibrary(setToast);
 
@@ -55,19 +59,23 @@ export function App() {
         <div className="brand"><Logo /><span><b>3D</b> Hoard Deck</span></div>
         <SearchBox value={libraryRoute?.q ?? ""} onSearch={onSearch} />
         <div className="title-actions">
+          <UpdatePill scanning={list.some((item) => isScanning(scans[item.id]))} />
           <button className="tbtn" onClick={toggleTheme} aria-label={theme === "dark" ? t("Switch to light theme") : t("Switch to dark theme")} title={t("Light / dark theme")}>
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
           <button className="tbtn" onClick={() => library && void rescan(library)} disabled={!library || isScanning(scans[library.id])} aria-label={t("Scan for changes")} title={t("Scan for changes")}>
             <Icon name="refresh" />
           </button>
-          <button className="tbtn" onClick={() => navigate({ view: "settings" })} aria-label={t("Settings")} title={t("Settings")}>
+          <button className="tbtn" onClick={() => navigate(settingsRoute())} aria-label={t("Settings")} title={t("Settings")}>
             <Icon name="settings" />
           </button>
         </div>
       </header>
 
       <aside className="side" aria-label={t("Sidebar")}>
+        {route.view === "settings" ? (
+          <SettingsNav route={route} libraries={list} scans={scans} onNavigate={navigate} onBack={() => (history.length > 1 ? history.back() : navigate(HOME))} />
+        ) : (
         <div className="side-scroll">
           {list.map((item) => (
             <div className="sec" key={item.id}>
@@ -100,14 +108,15 @@ export function App() {
             </button>
           </div>
         </div>
-        {library && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate({ view: "settings" })} />}
+        )}
+        {library && route.view !== "settings" && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate(settingsRoute("library", library.id, "access"))} />}
       </aside>
 
       <main className="main">
         {libraries.isError ? (
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
-          <SettingsView libraries={list} scans={scans} onError={setToast} />
+          <SettingsView route={route} navigate={navigate} libraries={list} scans={scans} theme={theme} onTheme={setTheme} onTags={(id) => navigate({ view: "tags", library: id })} onError={setToast} />
         ) : route.view === "tags" ? (
           <TagBrowser
             library={route.library}

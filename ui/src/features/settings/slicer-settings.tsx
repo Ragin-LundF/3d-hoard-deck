@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, describeError, unwrap, type SlicerDto } from "../../ipc";
@@ -19,6 +20,17 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
   });
   const list = slicers.data ?? [];
   const update = (next: SlicerDto[]) => save.mutate(next);
+  const [dragged, setDragged] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const drop = (target: number) => {
+    if (dragged !== null && dragged !== target) {
+      const next = list.filter((_, i) => i !== dragged);
+      next.splice(target, 0, list[dragged]!);
+      update(next);
+    }
+    setDragged(null);
+    setOver(null);
+  };
 
   const add = async () => {
     const program = await open({ directory: false, title: t("Choose the slicer program") });
@@ -34,7 +46,17 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
           <div className="prow2"><div className="t"><b>{t("No slicers yet")}</b><span>{t("Find installed ones or add a program yourself.")}</span></div></div>
         )}
         {list.map((slicer, index) => (
-          <div className="prow2" key={slicer.program}>
+          <div
+            className={`prow2 slicer-row${over === index ? " drop" : ""}`}
+            key={slicer.program}
+            draggable
+            onDragStart={() => setDragged(index)}
+            onDragOver={(event) => { event.preventDefault(); setOver(index); }}
+            onDragLeave={() => setOver(null)}
+            onDrop={() => drop(index)}
+            onDragEnd={() => { setDragged(null); setOver(null); }}
+          >
+            <span className="grip" aria-hidden="true">⋮⋮</span>
             <div className="t">
               <b>{slicer.name} {index === 0 && <span className="pill ok-pill">{t("Default")}</span>}</b>
               <span className="mono">{slicer.program}</span>

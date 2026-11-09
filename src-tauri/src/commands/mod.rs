@@ -11,6 +11,7 @@ pub mod rules;
 pub mod slicers;
 pub mod tag_rules;
 pub mod tags;
+pub mod update;
 
 use std::sync::Arc;
 

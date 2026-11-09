@@ -51,6 +51,28 @@ npm run build
 Installers end up in `target/release/bundle/` (`dmg`/`app` on macOS, `msi`/NSIS on Windows, `AppImage`/`deb` on
 Linux). A debug build without installer: `npm run tauri -- build --debug --no-bundle`.
 
+## Updates
+
+The app asks GitHub for `releases/latest/download/latest.json` a few seconds after start (Settings › Updates can
+turn that off). Only **published** releases count, so publishing the draft release is what rolls an update out.
+
+One-time setup, needed before the first release that should be able to update itself:
+
+1. Create the updater key pair (with a password):
+
+   ```bash
+   npm run tauri signer generate -- -w ~/.tauri/3d-hoard-deck.key
+   ```
+
+2. Put the content of `~/.tauri/3d-hoard-deck.key.pub` into `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`.
+3. Add the GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` (content of `~/.tauri/3d-hoard-deck.key`) and
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The release workflow then signs the installers and attaches `latest.json`.
+4. Back up the private key. Without it, installed apps cannot update themselves any more.
+
+Builds without a key still work: the update hint then only opens the release page. Linux `.deb`/`.rpm` installs
+download the new package to Downloads instead of installing it. The release notes (and the "What's new" of the hint)
+start with the version's section of `CHANGELOG.md`.
+
 ## Architecture
 
 Hexagonal layers, one crate each, so the compiler enforces the dependency direction: the domain depends on

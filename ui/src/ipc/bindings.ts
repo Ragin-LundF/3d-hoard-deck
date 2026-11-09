@@ -65,6 +65,14 @@ export const commands = {
 	/**  Creates a group (`id` empty) or renames and recolours one. Returns its id. */
 	saveTagGroup: (library: number, id: number | null, name: string, color: string) => typedError<number | null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_group", { library, id, name, color })),
 	deleteTagGroup: (library: number, id: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_tag_group", { library, id })),
+	/**  A newer published release, or `None`. Errors (no network, GitHub down) are for the log and "Check now" only. */
+	checkForUpdate: () => typedError<UpdateInfoDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("check_for_update")),
+	/**  Downloads, checks the signature, installs and restarts. Progress comes as [`UpdateProgressEvent`]. */
+	installUpdate: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("install_update")),
+	/**  Saves the new `.deb` or `.rpm` to Downloads and shows it in the file manager. Returns the file path. */
+	downloadUpdatePackage: (version: string) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("download_update_package", { version })),
+	/**  Opens the release page of `version` in the browser. */
+	openReleasePage: (version: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("open_release_page", { version })),
 	aiSettings: () => typedError<AiViewDto, IpcError_Serialize>(__TAURI_INVOKE("ai_settings")),
 	/**  `key`: `None` keeps the stored key, an empty text removes it. */
 	saveAiSettings: (settings: AiSettingsDto, key: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_ai_settings", { settings, key })),
@@ -135,6 +143,7 @@ export const events = {
 	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
 	suggestProgressEvent: makeEvent<SuggestProgressEvent, SuggestProgressEvent>("suggest-progress-event"),
+	updateProgressEvent: makeEvent<UpdateProgressEvent, UpdateProgressEvent>("update-progress-event"),
 };
 
 /* Types */
@@ -661,6 +670,47 @@ export type TagRuleDto = {
 	unless: string,
 	nameOnly: boolean,
 	enabled: boolean,
+};
+
+export type UpdateInfoDto = UpdateInfoDto_Serialize | UpdateInfoDto_Deserialize;
+
+export type UpdateInfoDto_Deserialize = {
+	version: string,
+	current: string,
+	/**  Release notes (Markdown), possibly empty. */
+	notes: string,
+	/**  `YYYY-MM-DD`, when the release says. */
+	date?: string | null,
+	method: UpdateMethod,
+	page: string,
+};
+
+export type UpdateInfoDto_Serialize = {
+	version: string,
+	current: string,
+	/**  Release notes (Markdown), possibly empty. */
+	notes: string,
+	/**  `YYYY-MM-DD`, when the release says. */
+	date: string | null,
+	method: UpdateMethod,
+	page: string,
+};
+
+/**  How this installation can take an update. */
+export type UpdateMethod = 
+/**  The app downloads, installs and restarts itself. */
+"install" | 
+/**  A Linux system package: the new `.deb` is saved to Downloads. */
+"deb" | 
+/**  A Linux system package: the new `.rpm` is saved to Downloads. */
+"rpm" | 
+/**  Only the release page can help (no updater key in this build, or an unknown Linux install). */
+"page";
+
+/**  Pushed while an update downloads: `done` of `total` bytes (`total` is 0 when unknown). */
+export type UpdateProgressEvent = {
+	done: number,
+	total: number,
 };
 
 /* Tauri Specta runtime */

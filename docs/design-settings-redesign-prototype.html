@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Hoard Deck · Settings redesign prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0E1014; --panel: #14171D; --raised: #1B1F27; --hover: #232833; --line: #2A303B;
+  --text: #ECEEF2; --muted: #9AA2B1; --faint: #6E7686;
+  --accent: #FF7A45; --accent-soft: rgba(255, 122, 69, .14);
+  --ok: #4CC38A; --warn: #E8B04B; --info: #6AB7FF; --danger: #FF6B6B;
+  --font-body: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --shadow: 0 20px 50px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+body[data-ui="light"] {
+  --bg: #F7F8FA; --panel: #FFFFFF; --raised: #F1F3F6; --hover: #E7EAEF; --line: #DCE0E6;
+  --text: #14171D; --muted: #4D5564; --faint: #646C7A;
+  --accent: #E8602A; --accent-soft: rgba(232, 96, 42, .12);
+  --ok: #1E8A4C; --warn: #A86A12; --info: #2563B0; --danger: #C42B1C;
+  --shadow: 0 16px 40px rgba(20, 23, 29, .16);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-body); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* prototype controls */
+.proto { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px dashed var(--line); font-size: 12.5px; color: var(--muted); background: var(--bg); min-height: 46px; }
+.proto b { color: var(--text); font-weight: 600; margin-right: 6px; }
+.proto button { border: 1px solid var(--line); background: var(--raised); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.proto button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.proto .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+
+/* window (from app.css) */
+.win { height: calc(100% - 46px); min-height: 680px; display: grid; grid-template-rows: 46px 1fr 28px; grid-template-columns: 248px 1fr; grid-template-areas: "title title" "side main" "status status"; }
+.titlebar { grid-area: title; display: flex; align-items: center; gap: 14px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -.01em; width: 150px; }
+.brand b { color: var(--accent); font-weight: 600; }
+.search { flex: 1; max-width: 640px; margin: 0 auto; position: relative; display: flex; align-items: center; }
+.search > svg { position: absolute; left: 12px; color: var(--faint); }
+.search input { width: 100%; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 70px 0 36px; font-size: 13.5px; }
+.search kbd { position: absolute; right: 8px; font: 11px var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; background: var(--raised); }
+.title-actions { display: flex; gap: 4px; width: 150px; justify-content: flex-end; align-items: center; }
+.tbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; min-width: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); }
+.tbtn:hover { background: var(--hover); color: var(--text); }
+.tbtn.on { background: var(--accent-soft); color: var(--accent); }
+.upill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--text); white-space: nowrap; }
+.upill i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+/* settings sidebar */
+.side { grid-area: side; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side-head { padding: 10px 8px 6px; display: flex; flex-direction: column; gap: 8px; }
+.back { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 13px; text-align: left; }
+.back:hover { background: var(--hover); color: var(--text); }
+.sfind { position: relative; display: flex; align-items: center; }
+.sfind svg { position: absolute; left: 9px; color: var(--faint); width: 14px; height: 14px; }
+.sfind input { width: 100%; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px 0 28px; font-size: 13px; }
+.sfind input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.side-scroll { flex: 1; overflow: auto; padding: 4px 8px 16px; }
+.sec { margin-top: 14px; }
+.sec h3 { margin: 0 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.nav { position: relative; display: flex; align-items: center; gap: 9px; width: 100%; height: 30px; padding: 0 8px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); text-align: left; font-size: 13.5px; }
+.nav:hover { background: var(--hover); color: var(--text); }
+.nav.on { background: var(--accent-soft); color: var(--text); }
+.nav.on svg { color: var(--accent); }
+.nav .n { margin-left: auto; font: 11.5px var(--font-mono); color: var(--faint); }
+.nav .tag { margin-left: auto; font-size: 11px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; line-height: 17px; }
+.nav .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.nav .dot.warn { background: var(--warn); }
+.nav .dot.draft { background: var(--info); }
+.nav .dot + .n, .nav .dot + .tag { margin-left: 6px; }
+.found { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 8px; border-radius: 7px; color: var(--text); font-size: 13px; }
+.found:hover { background: var(--hover); }
+.found span { display: block; color: var(--faint); font-size: 11.5px; }
+.found mark { background: var(--accent-soft); color: var(--text); border-radius: 3px; padding: 0 1px; }
+.side-foot { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+
+/* main */
+.main { grid-area: main; overflow: auto; position: relative; display: flex; flex-direction: column; min-height: 0; }
+.page { padding: 22px 28px 90px; display: flex; flex-direction: column; gap: 18px; max-width: 920px; width: 100%; }
+.crumbs { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--faint); margin-bottom: -10px; }
+.crumbs button { border: 0; background: none; padding: 0; color: var(--muted); }
+.crumbs button:hover { color: var(--accent); }
+.phead { display: flex; align-items: flex-start; gap: 14px; }
+.phead .t { flex: 1; }
+.phead h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+.phead p { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 68ch; }
+.page h2 { margin: 6px 0 -6px; font-size: 15px; font-weight: 600; }
+.lead { margin: -8px 0 0; color: var(--muted); font-size: 13px; max-width: 68ch; }
+
+/* segmented sub tabs */
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-top: -4px; }
+.subtabs button { border: 0; background: none; padding: 8px 12px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; }
+.subtabs button:hover { color: var(--text); }
+.subtabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.subtabs .n { font: 11px var(--font-mono); color: var(--faint); }
+
+/* panels and rows (from app.css) */
+.panel { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.prow2 { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.prow2:last-child { border-bottom: 0; }
+.prow2.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.prow2 .t { flex: 1; min-width: 200px; }
+.prow2 .t b { display: block; font-weight: 500; font-size: 13.5px; }
+.prow2 .t > span { display: block; color: var(--muted); font-size: 12.5px; }
+.prow2 .t .mono { font-size: 12px; color: var(--faint); word-break: break-all; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); font-size: 13px; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--danger); }
+.btn:disabled { opacity: .45; cursor: default; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; vertical-align: 1px; }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.pill.acc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.pill.info { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, transparent); }
+.radios { display: flex; flex-direction: column; gap: 8px; }
+.radio { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.radio:hover { background: var(--hover); }
+.radio:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.radio:has(input:disabled) { opacity: .5; cursor: default; }
+.radio input { margin-top: 3px; accent-color: var(--accent); }
+.radio b { display: block; font-weight: 500; font-size: 13.5px; }
+.radio span { display: block; color: var(--muted); font-size: 12.5px; }
+.radio b .code { display: inline; color: var(--muted); }
+.callout { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--info) 45%, transparent); background: color-mix(in srgb, var(--info) 9%, transparent); font-size: 13px; }
+.callout svg { color: var(--info); }
+.callout.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 9%, transparent); }
+.callout.warn svg { color: var(--warn); }
+.callout .grow { flex: 1; }
+.sel, .inp { height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 10px; font-size: 13px; }
+.inp:focus, .sel:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.field .inp { color: var(--text); width: 100%; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.chk { display: flex; gap: 9px; align-items: center; font-size: 13px; }
+.chk input { accent-color: var(--accent); }
+.hint { color: var(--faint); font-size: 12px; }
+.warn-text { color: var(--warn); font-size: 12.5px; }
+.code { font: 12px var(--font-mono); color: var(--muted); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; }
+.chip.auto { border-style: dashed; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+textarea { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 8px 10px; font-size: 13px; resize: vertical; }
+
+/* switch */
+.sw { position: relative; width: 34px; height: 20px; flex: none; }
+.sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.sw span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; }
+.sw span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.sw input:checked + span { background: var(--accent); }
+.sw input:checked + span::after { transform: translateX(14px); }
+
+/* segmented control */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); }
+.seg button { border: 0; background: none; border-radius: 6px; padding: 4px 12px; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.seg button.on { background: var(--raised); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+
+/* overview */
+.attn { display: flex; flex-direction: column; gap: 8px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.card { text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 128px; }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--panel) 92%, var(--accent)); }
+.card .h { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; }
+.card .h .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--raised); color: var(--accent); }
+.card .h .go { margin-left: auto; color: var(--faint); }
+.card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.card li { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.card li .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.card .off { color: var(--faint); }
+
+/* libraries list */
+.lib { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.lib:last-child { border-bottom: 0; }
+.lib:hover { background: var(--hover); }
+.lib:first-child:hover { border-radius: 12px 12px 0 0; }
+.lib:last-child:hover { border-radius: 0 0 12px 12px; }
+.lib .ic { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--raised); color: var(--muted); flex: none; }
+.lib .t { flex: 1; min-width: 0; }
+.lib .t b { font-weight: 500; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.lib .t .mono { display: block; font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.lib .go { color: var(--faint); }
+.bar { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; width: 120px; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+
+/* rules table */
+.rules-head, .rrow { display: grid; grid-template-columns: 40px minmax(110px, 1fr) 196px minmax(160px, 1.6fr) 70px 64px; gap: 10px; align-items: center; padding: 0 14px; }
+.rules-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); height: 34px; border-bottom: 1px solid var(--line); }
+.rrow { min-height: 46px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.rrow.off > *:not(.sw) { opacity: .45; }
+.rrow .inp { height: 30px; width: 100%; }
+.rrow .sel { height: 30px; width: 100%; }
+.rrow .cnt { font: 12px var(--font-mono); color: var(--faint); text-align: right; }
+.rrow .btns { display: flex; gap: 2px; justify-content: flex-end; }
+.rrow .x { border: 0; background: none; color: var(--faint); border-radius: 6px; height: 28px; }
+.rrow .x:hover { background: var(--hover); color: var(--text); }
+.rsum { grid-column: 2 / -1; margin-top: -6px; padding-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.rsum:empty { display: none; }
+.rmore { grid-column: 2 / -1; display: flex; gap: 16px; align-items: center; padding: 0 0 10px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.rmore .inp { width: 200px; height: 28px; }
+.rexp { border: 0; background: none; color: var(--faint); font-size: 12px; padding: 0; }
+.rexp:hover { color: var(--accent); }
+.tester { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.tester .inp { width: 100%; font-family: var(--font-mono); font-size: 12px; }
+
+/* slicers */
+.handle { color: var(--faint); cursor: grab; }
+
+/* journal */
+.jrow { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.jrow:last-child { border-bottom: 0; }
+.jrow .when { font: 11.5px var(--font-mono); color: var(--faint); }
+.jrow .what span { display: block; font: 11.5px var(--font-mono); color: var(--faint); }
+
+/* AI off state */
+.empty { display: flex; gap: 18px; align-items: center; padding: 22px; }
+.empty .big { width: 52px; height: 52px; border-radius: 14px; background: var(--raised); display: grid; place-items: center; color: var(--faint); flex: none; }
+.empty .big svg { width: 24px; height: 24px; }
+.empty .t { flex: 1; }
+.empty b { font-size: 15px; font-weight: 600; }
+.empty p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.provs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 0 22px 22px; }
+.prov { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 10px 12px; text-align: left; font-size: 13px; }
+.prov:hover { border-color: var(--accent); }
+.prov span { display: block; font-size: 11.5px; color: var(--faint); }
+
+/* save bar */
+.savebar { position: sticky; bottom: 0; margin-top: auto; display: none; align-items: center; gap: 10px; padding: 10px 28px; background: var(--glass, var(--panel)); backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+body { --glass: rgba(20, 23, 29, .88); }
+body[data-ui="light"] { --glass: rgba(255, 255, 255, .9); }
+.savebar.show { display: flex; }
+.savebar .d { width: 8px; height: 8px; border-radius: 50%; background: var(--info); }
+.savebar .grow { flex: 1; font-size: 13px; }
+.savebar .grow span { color: var(--muted); }
+
+.status { grid-area: status; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-top: 1px solid var(--line); background: var(--panel); font-size: 11.5px; color: var(--faint); }
+.toast { position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; font-size: 13px; box-shadow: var(--shadow); transition: .2s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%); }
+.hl { animation: hl 1.6s ease; border-radius: 12px; }
+@keyframes hl { 0%, 40% { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); } 100% { box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="proto" id="proto"></div>
+<div class="win">
+  <header class="titlebar">
+    <div class="brand"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3 4 20h16L12 3Z" fill="var(--accent)" opacity=".9"/><path d="M8 14h8" stroke="var(--panel)" stroke-width="2"/></svg>3D <b>Hoard Deck</b></div>
+    <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Search models… try  dragon type:3mf  in:Miniatures"><kbd>⌘K</kbd></label>
+    <div class="title-actions" id="tactions"></div>
+  </header>
+  <aside class="side" id="side"></aside>
+  <main class="main" id="main"></main>
+  <footer class="status"><span>2 libraries</span><span>·</span><span id="stat">Up to date</span></footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const I = {
+  back: '<path d="M15 18l-6-6 6-6"/>', chev: '<path d="m9 6 6 6-6 6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  home: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  lib: '<path d="M4 6a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>',
+  hist: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  ai: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
+  slicer: '<path d="M4 20h16"/><path d="M7 16V9l5-5 5 5v7"/><path d="M10 16v-4h4v4"/>',
+  db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  gen: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  upd: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+  grip: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  folder: '<path d="M4 6a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>',
+  nas: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  open: '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
+};
+const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${I[n]}</svg>`;
+const $ = (s) => document.querySelector(s);
+
+/* ---------- state ---------- */
+const S = {
+  theme: 'dark', page: 'overview', lib: null, libTab: 'access', tagTab: 'rules',
+  ai: false, update: true, problem: true, managed: true, find: '',
+  dirty: { tags: false, ai: false }, checking: false, checked: false, skipped: false, aiTested: false, scanning: false,
+};
+const LIBS = [
+  { id: 1, name: '3D Print', root: '/Volumes/volume/3D Print', nas: true, models: '15,812', access: 'readOnly', meta: 'indexOnly', status: 'Up to date', problem: 3 },
+  { id: 2, name: 'Workshop', root: '/Users/ragin/3D/Workshop', nas: false, models: '214', access: 'managed', meta: 'indexAndSidecar', status: 'Up to date', problem: 0 },
+];
+const ACCESS = {
+  readOnly: ['Never change files in this library', 'Names, order, tags and folder roles live in the index only.', 'Read-only'],
+  metadataWrite: ['Write metadata files only', 'Allows a .3dhoarddeck file and screenshots of the 3D preview in each model folder. Model files are never touched.', 'Metadata files'],
+  managed: ['Metadata files, rename and move', 'Also allows renaming models and moving them to other folders on disk. Every change can be undone.', 'Rename & move'],
+};
+let RULES = [
+  { on: true, tag: 'presupported', kind: 'any', pat: 'presupported, supported, pre-supported', n: 1204, unless: 'unsupported', nameOnly: false },
+  { on: true, tag: '{1}mm', kind: 'regex', pat: '\\b(28|32|75) ?mm\\b', n: 3388, unless: '', nameOnly: true },
+  { on: true, tag: '{1}', kind: 'folder', pat: 'Loot Studios, MyMiniFactory, Makerworld', n: 6120, unless: '', nameOnly: false },
+  { on: true, tag: 'terrain', kind: 'any', pat: 'terrain, scatter, building', n: 412, unless: '', nameOnly: false },
+  { on: false, tag: 'space marine', kind: 'all', pat: 'space, marine', n: 37, unless: '', nameOnly: false },
+  { on: true, tag: 'bust', kind: 'any', pat: 'bust', n: 268, unless: '', nameOnly: true },
+];
+const KINDS = { any: 'Any of these words', all: 'All of these words', regex: 'Regular expression', folder: 'Name of the folder below' };
+let SLICERS = [
+  { name: 'Bambu Studio', prog: '/Applications/BambuStudio.app', ext: 'stl, 3mf, obj, step' },
+  { name: 'OrcaSlicer', prog: '/Applications/OrcaSlicer.app', ext: 'stl, 3mf, obj' },
+  { name: 'Lychee Slicer', prog: '/Applications/Lychee Slicer.app', ext: 'stl, lys' },
+];
+
+/* Pages, grouped as in the sidebar. `show` hides pages that do not apply. */
+const NAV = [
+  { group: null, items: [{ id: 'overview', label: 'Overview', icon: 'home' }] },
+  { group: 'Libraries', items: [
+    { id: 'libraries', label: 'Libraries', icon: 'lib' },
+    { id: 'changes', label: 'File changes', icon: 'hist', show: () => S.managed },
+  ] },
+  { group: 'Organize', items: [
+    { id: 'tags', label: 'Tags & rules', icon: 'tag' },
+    { id: 'ai', label: 'AI suggestions', icon: 'ai' },
+  ] },
+  { group: 'Open', items: [{ id: 'slicers', label: 'Slicers', icon: 'slicer' }] },
+  { group: 'App', items: [
+    { id: 'general', label: 'General', icon: 'gen' },
+    { id: 'index', label: 'Index & storage', icon: 'db' },
+    { id: 'updates', label: 'Updates', icon: 'upd' },
+  ] },
+];
+const TITLES = { overview: 'Overview', libraries: 'Libraries', changes: 'File changes', tags: 'Tags & rules', ai: 'AI suggestions', slicers: 'Slicers', general: 'General', index: 'Index & storage', updates: 'Updates' };
+
+/* Search index: every setting a user may look for, and where it lives. */
+const FIND = [
+  ['Add library folder', 'libraries'], ['Rescan / Full rescan', 'libraries'], ['What 3D Hoard Deck may change (read-only, rename & move)', 'lib:access'],
+  ['Where tags, notes and names are saved (.3dhoarddeck files)', 'lib:access'], ['Suggested collections', 'lib:collections'], ['Folder rules (one model, collection)', 'lib:collections'],
+  ['Rebuild from metadata files', 'lib:import'], ['Import from Orynt3D', 'lib:import'], ['Undo renames and moves', 'changes'],
+  ['Tag rules', 'tags'], ['Try a path', 'tags'], ['Count matches', 'tags'], ['Show pinned tags in the sidebar', 'tags:display'],
+  ['AI service (LM Studio, Ollama, OpenAI, Claude)', 'ai'], ['API key', 'ai'], ['Suggest tags for models without tags', 'ai'],
+  ['Slicer order and default', 'slicers'], ['File types per slicer', 'slicers'], ['Find installed slicers', 'slicers'],
+  ['Language', 'general'], ['Theme (light, dark, system)', 'general'], ['Index folder', 'index'], ['Check for updates on start', 'updates'], ['Skipped version', 'updates'], ['Installed version', 'updates'],
+];
+
+/* ---------- prototype bar ---------- */
+function proto() {
+  const t = (key, label) => `<button aria-pressed="${S[key]}" onclick="S.${key}=!S.${key};render()">${label}</button>`;
+  $('#proto').innerHTML = `<b>Settings redesign</b>
+    <button aria-pressed="${S.theme === 'dark'}" onclick="setTheme('dark')">Dark</button>
+    <button aria-pressed="${S.theme === 'light'}" onclick="setTheme('light')">Light</button>
+    <span class="sep"></span>
+    ${t('ai', 'AI on')} ${t('update', 'Update available')} ${t('problem', 'Scan problems')} ${t('managed', 'A library allows rename & move')}
+    <span class="sep"></span><span>Try: type “orynt” in “Find a setting”, edit a tag rule, then switch tabs.</span>`;
+}
+function setTheme(theme) { S.theme = theme; document.body.dataset.ui = theme; render(); }
+
+/* ---------- title bar ---------- */
+function titlebar() {
+  $('#tactions').innerHTML = `${S.update && !S.skipped ? `<button class="upill" onclick="go('updates')"><i></i>Update 0.3.0</button>` : ''}
+    <button class="tbtn" onclick="setTheme(S.theme==='dark'?'light':'dark')" title="Light / dark theme">${ic(S.theme === 'dark' ? 'sun' : 'moon')}</button>
+    <button class="tbtn on" title="Settings">${ic('gen')}</button>`;
+}
+
+/* ---------- sidebar ---------- */
+function badge(id) {
+  const draft = (id === 'tags' && S.dirty.tags) || (id === 'ai' && S.dirty.ai) ? '<i class="dot draft" title="Unsaved changes"></i>' : '';
+  switch (id) {
+    case 'libraries': return (S.problem ? '<i class="dot warn" title="Files could not be read"></i>' : '') + `<span class="n">${LIBS.length}</span>`;
+    case 'changes': return '<span class="n">5</span>';
+    case 'tags': return draft + `<span class="n">${RULES.filter((r) => r.on).length}</span>`;
+    case 'ai': return draft + (S.ai ? '<span class="tag">On</span>' : '<span class="tag">Off</span>');
+    case 'slicers': return `<span class="n">${SLICERS.length}</span>`;
+    case 'updates': return S.update && !S.skipped ? '<i class="dot" title="Update available"></i>' : '';
+    default: return '';
+  }
+}
+function side() {
+  const q = S.find.trim().toLowerCase();
+  let body;
+  if (q) {
+    const hits = FIND.filter(([label, where]) => label.toLowerCase().includes(q) || TITLES[where.split(':')[0]]?.toLowerCase().includes(q));
+    body = `<div class="sec"><h3>${hits.length} found</h3>${hits.map(([label, where]) => {
+      const i = label.toLowerCase().indexOf(q);
+      const shown = i < 0 ? label : `${label.slice(0, i)}<mark>${label.slice(i, i + q.length)}</mark>${label.slice(i + q.length)}`;
+      const page = where.split(':')[0];
+      const place = page === 'lib' ? 'Libraries › each library' : TITLES[page];
+      return `<button class="found" onclick="jump('${where}')">${shown}<span>${place}</span></button>`;
+    }).join('') || '<div class="hint" style="padding:6px 8px">Nothing matches. Try “tag”, “slicer” or “update”.</div>'}</div>`;
+  } else {
+    body = NAV.map((g) => {
+      const items = g.items.filter((it) => !it.show || it.show());
+      return `<div class="sec">${g.group ? `<h3>${g.group}</h3>` : ''}${items.map((it) =>
+        `<button class="nav ${S.page === it.id ? 'on' : ''}" onclick="go('${it.id}')">${ic(it.icon)}<span>${it.label}</span>${badge(it.id)}</button>`).join('')}</div>`;
+    }).join('');
+  }
+  $('#side').innerHTML = `<div class="side-head">
+      <button class="back" onclick="toast('Back to the library view you came from')">${ic('back')}Back to library</button>
+      <label class="sfind">${ic('search')}<input id="find" placeholder="Find a setting" value="${S.find.replace(/"/g, '&quot;')}" oninput="S.find=this.value;side();const f=$('#find');f.focus();f.setSelectionRange(f.value.length,f.value.length)"></label>
+    </div><div class="side-scroll">${body}</div>
+    <div class="side-foot">3D Hoard Deck 0.2.1 · Settings are saved at once, except tag rules and AI.</div>`;
+}
+
+/* ---------- pages ---------- */
+const head = (title, text, right = '') => `<div class="phead"><div class="t"><h1>${title}</h1>${text ? `<p>${text}</p>` : ''}</div>${right}</div>`;
+const sw = (on, attrs = '') => `<label class="sw"><input type="checkbox" ${on ? 'checked' : ''} ${attrs}><span></span></label>`;
+
+function overview() {
+  const attn = [];
+  if (S.problem) attn.push(`<div class="callout warn">${ic('warn')}<span class="grow"><b>3D Print:</b> 3 files could not be read in the last scan. Their earlier index data is kept.</span><button class="btn" onclick="openLib(1,'access')">Show</button></div>`);
+  if (S.update && !S.skipped) attn.push(`<div class="callout">${ic('upd')}<span class="grow">Version <b>0.3.0</b> is available. You have 0.2.1.</span><button class="btn" onclick="go('updates')">Details</button></div>`);
+  const card = (id, icon, title, lines) => `<button class="card" onclick="go('${id}')"><div class="h"><span class="ic">${ic(icon)}</span>${title}<span class="go">${ic('chev')}</span></div><ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></button>`;
+  return `<div class="page">${head('Settings', 'An overview of how 3D Hoard Deck is set up. Pick a card or a page on the left to change something.')}
+    ${attn.length ? `<div class="attn">${attn.join('')}</div>` : ''}
+    <div class="cards">
+      ${card('libraries', 'lib', 'Libraries', [
+        `${ic('nas')} 3D Print <span class="pill">Read-only</span>`,
+        `${ic('folder')} Workshop <span class="pill acc">Rename & move</span>`,
+        `<span class="off">16,026 models · last scan 08:12</span>`])}
+      ${card('tags', 'tag', 'Tags & rules', [
+        `${RULES.filter((r) => r.on).length} tag rules on, ${RULES.filter((r) => !r.on).length} off`,
+        'Pinned tags shown in the sidebar',
+        S.dirty.tags ? '<span class="pill info">Unsaved changes</span>' : '<span class="off">Rule tags: 11,429 models</span>'])}
+      ${card('ai', 'ai', 'AI suggestions', S.ai
+        ? ['LM Studio · <span class="mono">qwen2.5-vl-7b</span>', 'Sends preview picture and name', '<span class="off">Local server, nothing leaves this computer</span>']
+        : ['<span class="pill">Off</span>', '<span class="off">Nothing is sent anywhere. Turn on for tag suggestions from a local or cloud model.</span>'])}
+      ${card('slicers', 'slicer', 'Slicers', [`<b style="font-weight:500">${SLICERS[0].name}</b> <span class="pill ok">Default</span>`, `${SLICERS.slice(1).map((s) => s.name).join(', ')} in the “Open in” menu`])}
+      ${card('index', 'db', 'Index & storage', ['<span class="mono">~/.3dhoarddeck</span>', '<span class="off">Database, search index and thumbnails</span>'])}
+      ${card('updates', 'upd', 'Updates', S.update && !S.skipped
+        ? ['Installed 0.2.1', '<span class="pill acc">0.3.0 available</span>']
+        : ['Installed 0.2.1', '<span class="pill ok">Up to date</span>', '<span class="off">Checks on start</span>'])}
+      ${card('general', 'gen', 'General', ['Language: Like the system (English)', `Theme: ${S.theme === 'dark' ? 'Dark' : 'Light'}`])}
+    </div></div>`;
+}
+
+function libraries() {
+  const rows = LIBS.map((l) => `<div class="lib" onclick="openLib(${l.id},'access')">
+      <span class="ic">${ic(l.nas ? 'nas' : 'folder')}</span>
+      <div class="t"><b>${l.name}${l.problem && S.problem ? ` <span class="pill warn">${ic('warn')}${l.problem} unreadable</span>` : ''}</b>
+        <span class="mono">${l.root}</span>
+        <div class="meta"><span class="pill ${l.access === 'readOnly' ? '' : 'acc'}">${l.access === 'readOnly' ? ic('lock') : ''}${ACCESS[l.access][2]}</span>
+          <span class="pill">${l.meta === 'indexOnly' ? 'Saved in the index only' : 'Index + .3dhoarddeck files'}</span>
+          <span class="pill">${l.models} models</span></div></div>
+      ${S.scanning && l.id === 1 ? `<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="hint">Scanning 42%</span><div class="bar"><i style="width:42%"></i></div></div>` : `<span class="hint">${l.status}</span>`}
+      <button class="btn" onclick="event.stopPropagation();scan()">${ic('refresh')}Rescan</button>
+      <span class="go">${ic('chev')}</span></div>`).join('');
+  return `<div class="page">${head('Libraries', 'Folders 3D Hoard Deck indexes. Files stay where they are; each library decides what the app may change in it.', `<button class="btn primary" onclick="toast('Folder picker opens, then the first scan starts')">${ic('plus')}Add library folder</button>`)}
+    <div class="panel">${rows}</div>
+    <p class="hint">Open a library for its write access, collections and folder rules, and import or rebuild.</p></div>`;
+}
+
+function library() {
+  const l = LIBS.find((x) => x.id === S.lib);
+  const tabs = [['access', 'Access & storage'], ['collections', 'Collections & folder rules', '3'], ['import', 'Import & rebuild']];
+  let body = '';
+  if (S.libTab === 'access') {
+    body = `<div class="panel">
+      <div class="prow2 stack"><div class="t"><b>What 3D Hoard Deck may change</b></div><div class="radios">
+        ${Object.entries(ACCESS).map(([k, [t, d]]) => `<label class="radio"><input type="radio" name="acc" ${l.access === k ? 'checked' : ''} onchange="setAccess(${l.id},'${k}')"><div><b>${t}</b><span>${d}</span></div></label>`).join('')}
+      </div></div>
+      <div class="prow2 stack"><div class="t"><b>Where tags, notes and names are saved</b></div><div class="radios">
+        <label class="radio"><input type="radio" name="meta" ${l.meta === 'indexOnly' ? 'checked' : ''} onchange="setMeta(${l.id},'indexOnly')"><div><b>Only in the index</b><span>Nothing is written into the library folders. Back up the index folder to keep your work.</span></div></label>
+        <label class="radio"><input type="radio" name="meta" ${l.meta === 'indexAndSidecar' ? 'checked' : ''} ${l.access === 'readOnly' ? 'disabled' : ''} onchange="setMeta(${l.id},'indexAndSidecar')"><div><b>Index and a <span class="code">.3dhoarddeck</span> file beside each model</b><span>The whole index can then be rebuilt from the folders, on any computer. The file is updated whenever you change a model's name, tags, marks or notes.</span></div></label>
+      </div>${l.access === 'readOnly' ? `<div class="callout">${ic('db')}<span>Metadata files need write access: choose “Write metadata files only” above first.</span></div>` : ''}</div>
+    </div>`;
+  } else if (S.libTab === 'collections') {
+    body = `<h2>Suggested collections</h2><p class="lead">These folder layouts were found in this library. Using one groups every matching folder as a collection; models inside stay separate.</p>
+      <div class="panel"><div class="prow2"><div class="t"><b>Loot Studios releases · 48 folders</b><span>2024-03 - Oni Clan, 2024-04 - Sky Pirates, 2024-05 - Elven Court, …</span><span style="margin-top:4px"><span class="code">Miniatures/Loot Studios/*/*</span></span></div><button class="btn" onclick="toast('Collection rule added; folders regroup now')">Use</button></div></div>
+      <h2>Folder rules</h2><p class="lead">Marks from right-clicking a folder and accepted suggestions.</p>
+      <div class="panel">
+        ${[['Collection', 'Miniatures/Titan Forge/*'], ['One model', 'Makerworld/Benchy variants'], ['One model', 'Terrain/Modular Dungeon Set']].map(([r, p]) => `<div class="prow2"><div class="t"><b>${r}</b><span><span class="code">${p}</span></span></div><button class="btn ghost" onclick="this.closest('.prow2').remove();toast('Rule removed; folders regroup now')">Remove</button></div>`).join('')}
+      </div>`;
+  } else {
+    body = `<div class="panel">
+      <div class="prow2"><div class="t"><b>Rebuild from metadata files</b><span>Reads the .3dhoarddeck files in this library. Where a file is newer than the index, it replaces names, tags, marks, notes and folder rules. Useful after moving to a new computer. Only reads the folders.</span></div><button class="btn" ${l.meta === 'indexOnly' ? 'title="This library writes no metadata files yet; the rebuild still finds files from another computer."' : ''} onclick="toast('Restored 214 models. Restored 2 folder rules.')">Rebuild</button></div>
+      <div class="prow2"><div class="t"><b>Import from Orynt3D</b><span>Takes names, notes and tags from Orynt3D's config.orynt3d files. Only reads them; your own entries are kept, and running it again adds nothing twice.</span></div><button class="btn" onclick="toast('Imported Orynt3D data for 1,032 models.')">Import</button></div>
+    </div>
+    <h2>Danger zone</h2>
+    <div class="panel"><div class="prow2"><div class="t"><b>Remove this library</b><span>Removes it from the index with its names, tags and notes. Nothing in the folder is deleted.</span></div><button class="btn danger" onclick="toast('Asks for confirmation first')">Remove library…</button></div></div>`;
+  }
+  const problem = l.problem && S.problem ? `<div class="panel"><div class="prow2 stack"><div class="t"><b style="color:var(--warn)">${l.problem} folders or files could not be read</b><span>Their earlier index data is kept, and the next scan tries again. Each line names the path and the reason the system gave.</span></div>
+      <pre class="mono" style="margin:0;font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow:auto">Miniatures/Loot Studios/Fantasy/2024-03 - Oni Clan/resin/32mm/OniMage.stl: Permission denied (os error 13)
+Terrain/Ruins/Arch_02.stl: Input/output error (os error 5)
+Makerworld/Benchy.3mf: Invalid zip archive</pre>
+      <div class="actions"><button class="btn" onclick="toast('Copied')">Copy list</button><button class="btn ghost" onclick="S.problem=false;render()">Dismiss</button></div></div></div>` : '';
+  return `<div class="page"><div class="crumbs"><button onclick="go('libraries')">Libraries</button>${ic('chev')}<span>${l.name}</span></div>
+    ${head(l.name, `<span class="mono">${l.root}</span> · ${l.models} models · ${l.status}`, `<div class="actions"><button class="btn" onclick="scan()">${ic('refresh')}Rescan</button><button class="btn" title="Also re-reads folders that look unchanged, to catch files overwritten in place" onclick="scan()">Full rescan</button></div>`)}
+    ${problem}
+    <div class="subtabs">${tabs.map(([k, t, n]) => `<button class="${S.libTab === k ? 'on' : ''}" onclick="S.libTab='${k}';render()">${t}${n ? ` <span class="n">${n}</span>` : ''}</button>`).join('')}</div>
+    ${body}</div>`;
+}
+
+function changes() {
+  const rows = [
+    ['10:42', 'Renamed “oni mage 32mm” → “Oni Mage”', 'Workshop/Miniatures/Oni Mage'],
+    ['10:40', 'Moved 3 models to Terrain/Ruins', 'Workshop/Inbox → Workshop/Terrain/Ruins'],
+    ['Yesterday', 'Renamed 12 files (batch)', 'Workshop/Makerworld/Desk organizer'],
+    ['Yesterday', 'Renamed “benchy_v2” → “Benchy v2”', 'Workshop/Makerworld/Benchy v2'],
+    ['Nov 6', 'Moved “Dice tower” to Games', 'Workshop/Inbox → Workshop/Games'],
+  ];
+  return `<div class="page">${head('File changes', 'Renames and moves on disk in libraries that allow them. Undo puts the files and their names, tags and notes back.')}
+    <div class="panel">${rows.map(([w, t, p]) => `<div class="jrow"><span class="when">${w}</span><div class="what">${t}<span>${p}</span></div><button class="btn" onclick="this.closest('.jrow').style.opacity=.4;this.disabled=true;toast('Undone')">Undo</button></div>`).join('')}</div>
+    <p class="hint">Only shown when at least one library is set to “Metadata files, rename and move”.</p></div>`;
+}
+
+function tags() {
+  const tabs = [['rules', 'Tag rules', RULES.length], ['display', 'Display']];
+  let body;
+  if (S.tagTab === 'rules') {
+    body = `<p class="lead" style="margin-top:0">Tags from folder and file names, such as 32mm, presupported or the creator. Only whole words count, and nothing is written into your libraries. Rule tags are searchable like your tags, but never change them.</p>
+    <div class="panel">
+      <div class="rules-head"><span>On</span><span>Tag</span><span>Match</span><span>Words, expression or folders</span><span style="text-align:right">Models</span><span></span></div>
+      ${RULES.map((r, i) => `<div class="rrow ${r.on ? '' : 'off'}">
+        ${sw(r.on, `onchange="RULES[${i}].on=this.checked;dirty('tags')"`)}
+        <input class="inp" value="${r.tag}" oninput="dirty('tags')" aria-label="Tag">
+        <select class="sel" onchange="dirty('tags')">${Object.entries(KINDS).map(([k, v]) => `<option ${k === r.kind ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <input class="inp ${r.kind === 'regex' ? 'mono' : ''}" value="${r.pat}" oninput="dirty('tags')" aria-label="Pattern">
+        <span class="cnt">${r.n.toLocaleString('en')}</span>
+        <span class="btns"><button class="x" onclick="RULES[${i}].open=!RULES[${i}].open;render()" title="Options: unless, only own name">${ic('gen')}</button><button class="x" onclick="RULES.splice(${i},1);dirty('tags');render()" title="Remove rule">${ic('x')}</button></span>
+        ${r.open ? '' : `<div class="rsum">${r.unless ? `<span class="pill">unless ${r.unless}</span>` : ''}${r.nameOnly ? '<span class="pill">own name only</span>' : ''}</div>`}
+        ${!r.open ? '' : `<div class="rmore"><label>Unless <input class="inp" value="${r.unless}" placeholder="words that cancel the rule" oninput="dirty('tags')"></label>
+          ${r.kind !== 'folder' ? `<label class="chk"><input type="checkbox" ${r.nameOnly ? 'checked' : ''} onchange="dirty('tags')">Only the model's own name and files</label>` : ''}
+          ${r.kind === 'regex' ? '<span class="hint">{1} in the tag is the part in ( ).</span>' : r.kind === 'folder' ? '<span class="hint">{1} in the tag is the folder\'s name.</span>' : ''}</div>`}
+      </div>`).join('')}
+      <div class="actions" style="padding:10px 14px">
+        <button class="btn" onclick="RULES.push({on:true,tag:'',kind:'any',pat:'',n:0,unless:'',nameOnly:false});dirty('tags');render()">${ic('plus')}Add rule</button>
+        <button class="btn ghost" onclick="toast('Counted matches with the unsaved rules')">${ic('search')}Count matches</button>
+        <button class="btn ghost" onclick="toast('2 suggested rules added')">${ic('plus')}Add suggested rules (2)</button>
+      </div>
+    </div>
+    <h2>Try a path</h2>
+    <div class="panel"><div class="tester"><span class="hint">A model folder inside a library, starting below the library folder. Uses the rules above, saved or not.</span>
+      <input class="inp" value="Miniatures/Loot Studios/Fantasy/resin/32mm/OniMage_32mm_Supported">
+      <div class="chips"><span class="chip auto">presupported</span><span class="chip auto">32mm</span><span class="chip auto">Loot Studios</span></div></div></div>`;
+  } else {
+    body = `<div class="panel">
+      <div class="prow2"><div class="t"><b>Show pinned tags in the sidebar</b><span>Pin tags in the tag browser; they then appear below the folders.</span></div>${sw(true)}</div>
+      <div class="prow2"><div class="t"><b>Tag bar above the grid</b><span>The most used tags of the current view, for quick filtering.</span></div>${sw(true)}</div>
+      <div class="prow2"><div class="t"><b>Tag groups and colours</b><span>Rename, merge, group and pin tags in the tag browser.</span></div><button class="btn" onclick="toast('Opens the tag browser')">${ic('open')}Open tag browser</button></div>
+    </div><p class="hint">“Tag bar” is shown as a suggestion: the approved tags redesign has it always on; a switch is optional.</p>`;
+  }
+  return `<div class="page">${head('Tags & rules', 'Automatic tags from names, and how tags show up in the app.')}
+    <div class="subtabs">${tabs.map(([k, t, n]) => `<button class="${S.tagTab === k ? 'on' : ''}" onclick="S.tagTab='${k}';render()">${t}${n ? ` <span class="n">${n}</span>` : ''}</button>`).join('')}</div>
+    ${body}</div>${savebar('tags', 'Tag rules', 'Saving regroups tags from the index in the background. Libraries are not touched.')}`;
+}
+
+function ai() {
+  if (!S.ai) {
+    return `<div class="page">${head('AI suggestions', 'Tag suggestions from a picture of the model and its name.')}
+      <div class="panel"><div class="empty"><span class="big">${ic('ai')}</span><div class="t"><b>AI suggestions are off</b><p>The app shows no AI feature and sends nothing anywhere. When on, it looks at the preview picture and the name and suggests tags; you keep or dismiss each one.</p></div></div>
+      <div class="provs">${[['LM Studio', 'Local · localhost:1234'], ['Ollama', 'Local · localhost:11434'], ['OpenAI', 'Cloud · needs a key'], ['Anthropic (Claude)', 'Cloud · needs a key'], ['Other server', 'OpenAI-compatible']].map(([n, d]) => `<button class="prov" onclick="S.ai=true;dirty('ai');render()">${n}<span>${d}</span></button>`).join('')}</div></div></div>`;
+  }
+  return `<div class="page">${head('AI suggestions', 'Tag suggestions from a picture of the model and its name. It only suggests; you keep or dismiss.', `<button class="btn ghost" onclick="S.ai=false;S.dirty.ai=false;render();toast('AI turned off. No AI feature is shown anywhere now.')">Turn off</button>`)}
+    <h2>Connection</h2>
+    <div class="panel"><div class="prow2 stack">
+      <div class="grid2"><label class="field">Service<select class="sel" onchange="dirty('ai')"><option>LM Studio</option><option>Ollama</option><option>OpenAI</option><option>Anthropic (Claude)</option><option>Other OpenAI-compatible server</option></select></label>
+        <label class="field">Server address<input class="inp" value="http://localhost:1234/v1" oninput="dirty('ai')"></label></div>
+      <label class="field">Model<input class="inp" value="qwen2.5-vl-7b-instruct" oninput="dirty('ai')"></label>
+      ${S.aiTested ? `<div class="chips"><span class="chip on">qwen2.5-vl-7b-instruct</span><span class="chip">llava-1.6-mistral-7b</span><span class="chip">gemma-3-12b-it</span></div>` : ''}
+      <label class="field">API key (only if the server needs one)<input class="inp" type="password" placeholder="" oninput="dirty('ai')"></label>
+      <span class="hint">Keys are stored in the system keychain and never shown again.</span>
+      <div class="actions"><button class="btn" onclick="S.aiTested=true;render()">${ic('search')}Test connection</button>
+        ${S.aiTested ? `<span class="pill ok">${ic('check')}qwen2.5-vl-7b-instruct answered in 2.4 s · “Red dragon bust”: dragon, bust, fantasy</span>` : ''}</div>
+    </div></div>
+    <h2>What is sent</h2>
+    <div class="panel"><div class="prow2 stack">
+      <label class="chk"><input type="checkbox" checked onchange="dirty('ai')">Send the preview picture (a small JPEG)</label>
+      <label class="chk"><input type="checkbox" onchange="dirty('ai')">Send the folder path</label>
+      <span class="hint">Local server: nothing leaves this computer. For a cloud service a warning shows here: preview pictures and model names are sent, model files never are.</span>
+    </div>
+    <div class="prow2 stack"><details><summary style="cursor:pointer;font-size:13px">Advanced: tags per model, timeout, own instructions</summary>
+      <div class="grid2" style="margin-top:10px"><label class="field">Tags per model<input class="inp" type="number" value="5" oninput="dirty('ai')"></label><label class="field">Timeout (seconds)<input class="inp" type="number" value="60" oninput="dirty('ai')"></label></div>
+      <label class="field" style="margin-top:10px">Own instructions<textarea placeholder="Empty: the built-in instructions. {max}, {tags}, {name} and {path} are filled in." oninput="dirty('ai')"></textarea></label></details></div></div>
+    <h2>Suggest tags now</h2>
+    <div class="panel">${S.dirty.ai ? `<div class="prow2"><div class="t"><span>Save the settings first to start suggestions.</span></div></div>` : LIBS.map((l) => `<div class="prow2"><div class="t"><b>Models without tags in ${l.name}</b><span>Asks about every model without own tags or suggestions. Locally this takes a few seconds per model, so start it on a folder first.</span></div><button class="btn" onclick="toast('Asking about 812 models. Progress is in the status bar.')">${ic('tag')}Suggest tags</button></div>`).join('')}</div>
+  </div>${savebar('ai', 'AI settings', 'Test the connection before saving if you changed the server.')}`;
+}
+
+function slicers() {
+  return `<div class="page">${head('Slicers', '“Open in” uses the first slicer that opens the files; the others are in its menu. Drag to change the order.')}
+    <div class="panel">${SLICERS.map((s, i) => `<div class="prow2"><span class="handle" title="Drag to reorder">${ic('grip')}</span>
+      <div class="t"><b>${s.name} ${i === 0 ? '<span class="pill ok">Default</span>' : ''}</b><span class="mono">${s.prog}</span></div>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px">File types<input class="inp mono" style="width:160px" value="${s.ext}"></label>
+      ${i > 0 ? `<button class="btn" onclick="SLICERS.unshift(...SLICERS.splice(${i},1));render()">Make default</button>` : '<span style="width:108px"></span>'}
+      <button class="btn ghost" onclick="SLICERS.splice(${i},1);render()">Remove</button></div>`).join('')}</div>
+    <div class="actions"><button class="btn" onclick="toast('Program picker opens')">${ic('plus')}Add slicer…</button><button class="btn ghost" onclick="toast('Found Bambu Studio, OrcaSlicer, Lychee Slicer')">${ic('search')}Find installed slicers</button></div></div>`;
+}
+
+function general() {
+  return `<div class="page">${head('General', 'Language and look of the app.')}
+    <div class="panel">
+      <div class="prow2"><div class="t"><b>Language of the app</b><span>The app restarts its window to switch.</span></div><select class="sel"><option>Like the system</option><option>English</option><option>Deutsch</option></select></div>
+      <div class="prow2"><div class="t"><b>Theme</b><span>The sun/moon button in the title bar switches between light and dark.</span></div>
+        <div class="seg"><button class="${S.theme === 'light' ? 'on' : ''}" onclick="setTheme('light')">${ic('sun')}Light</button><button class="${S.theme === 'dark' ? 'on' : ''}" onclick="setTheme('dark')">${ic('moon')}Dark</button><button onclick="toast('System: follows the OS setting (optional, new)')">System</button></div></div>
+    </div></div>`;
+}
+
+function index() {
+  return `<div class="page">${head('Index & storage', 'Where 3D Hoard Deck keeps its own data. Your libraries are never stored here.')}
+    <div class="panel">
+      <div class="prow2"><div class="t"><b>Index folder</b><span class="mono">/Users/ragin/.3dhoarddeck</span><span>Holds the database and the search index. Default is .3dhoarddeck in your home folder. Pick a folder on a local disk: network shares and cloud-sync folders are refused because they damage the database.</span></div>
+        <div class="actions"><button class="btn ghost" onclick="toast('Shows the folder in Finder')">${ic('open')}Show</button><button class="btn" onclick="toast('Folder picker opens; the app moves the index and restarts')">Choose folder…</button></div></div>
+      <div class="prow2"><div class="t"><b>What is inside</b><span>Database 96 MB · Search index 61 MB · Thumbnails 255 MB</span></div><span class="hint">optional</span></div>
+    </div>
+    <div class="callout">${ic('db')}<span>Libraries set to “Only in the index” keep their names, tags and notes only here. Back up this folder to keep your work.</span></div></div>`;
+}
+
+function updates() {
+  let result = '';
+  if (S.checking) result = '<span class="hint">Checking GitHub…</span>';
+  else if (S.update && !S.skipped) result = '';
+  else if (S.checked) result = `<span class="pill ok">${ic('check')}You have the newest version</span>`;
+  const avail = S.update && !S.skipped ? `<div class="panel"><div class="prow2 stack">
+      <div style="display:flex;gap:12px;align-items:center"><span class="pill acc">New</span><b style="font-size:15px">Version 0.3.0</b><span class="hint">Released Nov 8, 2026</span></div>
+      <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:13px"><li>Tag browser with groups, pinning and merge</li><li>AI tag suggestions with LM Studio, Ollama and cloud services</li><li>Settings with pages and an overview</li></ul>
+      <div class="actions"><button class="btn primary" onclick="toast('Downloads, installs and restarts (from the update plan)')">Update now</button><button class="btn" onclick="toast('Opens the release page')">${ic('open')}All changes</button><button class="btn ghost" onclick="S.skipped=true;render()">Skip this version</button></div>
+    </div></div>` : '';
+  return `<div class="page">${head('Updates', 'New versions come from the published releases on GitHub. Nothing is installed without you pressing “Update now”.')}
+    ${avail}
+    <div class="panel">
+      <div class="prow2"><div class="t"><b>Installed version</b><span class="mono">0.2.1 · macOS Apple Silicon</span></div><div class="actions">${result}<button class="btn" onclick="check()">${ic('refresh')}Check now</button></div></div>
+      <div class="prow2"><div class="t"><b>Check for updates on start</b><span>A few seconds after start, in the background. No network: nothing happens.</span></div>${sw(true)}</div>
+      ${S.skipped ? `<div class="prow2"><div class="t"><b>Version 0.3.0 skipped</b><span>The hint comes back when a newer version than 0.3.0 exists.</span></div><button class="btn ghost" onclick="S.skipped=false;render()">Show again</button></div>` : ''}
+    </div></div>`;
+}
+
+function savebar(key, what, note) {
+  return `<div class="savebar ${S.dirty[key] ? 'show' : ''}" id="sb-${key}"><i class="d"></i><div class="grow"><b>${what}: unsaved changes</b> <span>· ${note}</span></div>
+    <button class="btn ghost" onclick="S.dirty.${key}=false;render();toast('Changes discarded')">Discard</button>
+    <button class="btn primary" onclick="S.dirty.${key}=false;render();toast('${what} saved')">Save</button></div>`;
+}
+
+/* ---------- actions ---------- */
+function go(page) { S.page = page; if (page !== 'library') S.lib = null; S.find = ''; render(); $('#main').scrollTop = 0; }
+function openLib(id, tab) { S.page = 'library'; S.lib = id; S.libTab = tab; S.find = ''; render(); $('#main').scrollTop = 0; }
+function jump(where) {
+  const [page, sub] = where.split(':');
+  if (page === 'lib') openLib(1, sub);
+  else { if (page === 'tags') S.tagTab = sub || 'rules'; go(page); }
+  const p = document.querySelector('.page > .panel, .page > .cards');
+  if (p) { p.classList.remove('hl'); void p.offsetWidth; p.classList.add('hl'); }
+}
+function dirty(key) {
+  if (S.dirty[key]) return;
+  S.dirty[key] = true;
+  document.getElementById('sb-' + key)?.classList.add('show');
+  side();
+}
+function setAccess(id, a) { const l = LIBS.find((x) => x.id === id); l.access = a; if (a === 'readOnly') l.meta = 'indexOnly'; render(); toast('Saved'); }
+function setMeta(id, m) { LIBS.find((x) => x.id === id).meta = m; render(); toast('Saved'); }
+function scan() { S.scanning = true; $('#stat').textContent = 'Scanning 3D Print… 42%'; render(); setTimeout(() => { S.scanning = false; $('#stat').textContent = 'Up to date'; render(); }, 2500); }
+function check() { S.checking = true; render(); setTimeout(() => { S.checking = false; S.checked = true; render(); }, 900); }
+let tt;
+function toast(text) { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2200); }
+
+function render() {
+  if (S.page === 'changes' && !S.managed) S.page = 'libraries';
+  proto(); titlebar(); side();
+  const pages = { overview, libraries, library, changes, tags, ai, slicers, general, index, updates };
+  $('#main').innerHTML = pages[S.page]();
+  if (S.page === 'library') document.querySelectorAll('.nav').forEach((n) => { if (n.textContent.startsWith('Libraries')) n.classList.add('on'); });
+}
+render();
+</script>
+</body>
+</html>

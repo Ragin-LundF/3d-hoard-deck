@@ -7,7 +7,14 @@ export type Route =
   | { view: "collection"; id: number }
   | { view: "duplicates" }
   | { view: "tags"; library: number }
-  | { view: "settings" };
+  | { view: "settings"; tab: SettingsTab; lib: number | null; sub: string };
+
+/** The pages of Settings; `library` is one library's detail (`lib`), `sub` a tab inside a page. */
+export const SETTINGS_TABS = ["overview", "libraries", "library", "files", "tags", "ai", "slicers", "general", "index", "updates"] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number];
+export type SettingsRoute = Extract<Route, { view: "settings" }>;
+
+export const settingsRoute = (tab: SettingsTab = "overview", lib: number | null = null, sub = ""): SettingsRoute => ({ view: "settings", tab, lib, sub });
 
 export type LibraryRoute = Extract<Route, { view: "library" }>;
 
@@ -16,7 +23,11 @@ export const HOME: LibraryRoute = { view: "library", library: null, folder: "", 
 export function parseRoute(hash: string): Route {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const view = params.get("view");
-  if (view === "settings") return { view: "settings" };
+  if (view === "settings") {
+    const tab = SETTINGS_TABS.find((name) => name === params.get("tab")) ?? "overview";
+    const lib = Number(params.get("lib"));
+    return settingsRoute(tab, Number.isInteger(lib) && lib > 0 ? lib : null, params.get("sub") ?? "");
+  }
   if (view === "duplicates") return { view: "duplicates" };
   const tagsLibrary = Number(params.get("lib"));
   if (view === "tags" && Number.isInteger(tagsLibrary) && tagsLibrary > 0) return { view: "tags", library: tagsLibrary };
@@ -37,6 +48,11 @@ export function formatRoute(route: Route): string {
   const params = new URLSearchParams({ view: route.view });
   if (route.view === "model" || route.view === "collection") params.set("id", String(route.id));
   if (route.view === "tags") params.set("lib", String(route.library));
+  if (route.view === "settings") {
+    if (route.tab !== "overview") params.set("tab", route.tab);
+    if (route.lib !== null) params.set("lib", String(route.lib));
+    if (route.sub) params.set("sub", route.sub);
+  }
   if (route.view === "library") {
     if (route.library !== null) params.set("lib", String(route.library));
     if (route.folder) params.set("folder", route.folder);

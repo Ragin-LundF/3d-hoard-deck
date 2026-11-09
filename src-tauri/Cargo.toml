@@ -20,9 +20,12 @@ hoarddeck-infra-fs.workspace = true
 hoarddeck-infra-mesh.workspace = true
 hoarddeck-infra-thumbs.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+ureq = "3"
 percent-encoding = "2"
 tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
 specta = { version = "=2.0.0-rc.26", features = ["derive"] }

@@ -30,6 +30,15 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
   changes anything by itself. Ask for one model on its page, for a folder with **Suggest tags**, or for all models
   without tags. Keep or dismiss suggestions per model, or for many models at once in the tag browser. The API key is
   kept in the system keychain. Model files are never sent. As long as AI is off, the app shows no AI feature at all.
+- **Update check.** A few seconds after start the app asks GitHub whether a newer version is out. If so, a small
+  **Update** pill appears in the title bar: see what's new, then **Update now** (downloads, installs and restarts),
+  **Later** or **Skip this version**. On Linux with a `.deb` or `.rpm` package the new package is saved to Downloads.
+  Settings › Updates shows the installed version, can check right away, and can turn the check off.
+- **Settings in pages.** Settings now have their own sidebar (Overview, Libraries, Tags & rules, AI suggestions,
+  Slicers, General, Index & storage, Updates) instead of one long page. The overview shows at a glance what needs
+  attention, each library has its own page with tabs, **Find a setting** jumps to any option, unsaved tag rule and AI
+  changes wait in a bar at the bottom (and survive switching pages), slicers can be reordered by dragging, and the
+  theme can be chosen under General.
 
 ### Faster
 - **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion

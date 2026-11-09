@@ -26,7 +26,9 @@ const PATHS: Record<string, ReactElement> = {
   tag: <><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><path d="M7.5 7.5h.01" /></>,
 };
 
-export function Icon({ name, label }: { name: keyof typeof PATHS; label?: string }) {
+export type IconName = keyof typeof PATHS;
+
+export function Icon({ name, label }: { name: IconName; label?: string }) {
   return (
     <svg className="i" viewBox="0 0 24 24" aria-hidden={label ? undefined : true} aria-label={label} role={label ? "img" : undefined}>
       {PATHS[name]}

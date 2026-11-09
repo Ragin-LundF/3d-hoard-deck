@@ -22,6 +22,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(specta.invoke_handler())
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
         .setup(move |tauri_app| {
@@ -81,6 +82,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::tags::list_tag_groups,
             commands::tags::save_tag_group,
             commands::tags::delete_tag_group,
+            commands::update::check_for_update,
+            commands::update::install_update,
+            commands::update::download_update_package,
+            commands::update::open_release_page,
             commands::ai::ai_settings,
             commands::ai::save_ai_settings,
             commands::ai::test_ai_connection,
@@ -116,7 +121,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .events(collect_events![
             events::ScanProgressEvent,
             events::DuplicatesProgressEvent,
-            events::SuggestProgressEvent
+            events::SuggestProgressEvent,
+            commands::update::UpdateProgressEvent
         ])
 }
 
