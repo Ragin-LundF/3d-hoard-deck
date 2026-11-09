@@ -10,11 +10,11 @@ mod protocol;
 use std::sync::Arc;
 
 use hoarddeck_app::App;
-use hoarddeck_infra_thumbs::ThumbnailCache;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
-/// Parallel folder reads; modest because the main library sits on a network share.
+/// Parallel folder reads. Network shares answer several requests at once, so a scan waits less on each one;
+/// still modest, so a NAS stays usable for others meanwhile.
 const SCAN_THREADS: usize = 6;
 
 fn main() {
@@ -22,6 +22,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(specta.invoke_handler())
         .register_asynchronous_uri_scheme_protocol(protocol::SCHEME, protocol::handle)
         .setup(move |tauri_app| {
@@ -29,7 +30,7 @@ fn main() {
             let index_dir = hoarddeck_infra_fs::resolve_index_dir()?;
             let events = Arc::new(events::TauriEvents::new(tauri_app.handle().clone()));
             let app = App::open(&index_dir, SCAN_THREADS, events)?;
-            tauri_app.manage(Arc::new(ThumbnailCache::new(app.index_dir.join("thumbnails"))));
+            tauri_app.manage(app.thumbnails.clone());
             let auto_rescan = Arc::clone(&app.auto_rescan);
             std::thread::spawn(move || {
                 loop {
@@ -72,7 +73,46 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::collections::move_in_collection,
             commands::collections::collection_models,
             commands::organize::update_model_meta,
-            commands::organize::list_tags,
+            commands::tags::list_tags,
+            commands::tags::tag_facets,
+            commands::tags::rename_tags,
+            commands::tags::delete_tags,
+            commands::tags::set_tags_group,
+            commands::tags::set_tags_pinned,
+            commands::tags::list_tag_groups,
+            commands::tags::save_tag_group,
+            commands::tags::delete_tag_group,
+            commands::tags::batch_update_tags,
+            commands::tags::undo_tag_batch,
+            commands::tags::check_tag,
+            commands::tags::selection_tags,
+            commands::update::check_for_update,
+            commands::update::install_update,
+            commands::update::open_release_page,
+            commands::ai::ai_settings,
+            commands::ai::save_ai_settings,
+            commands::ai::test_ai_connection,
+            commands::ai::suggest_tags,
+            commands::ai::tag_suggestions,
+            commands::ai::resolve_tag_suggestion,
+            commands::ai::start_tag_suggestions,
+            commands::ai::cancel_tag_suggestions,
+            commands::ai::count_tag_suggestions,
+            commands::ai::review_suggestions,
+            commands::ai::pending_suggestions,
+            commands::ai::decide_suggestions,
+            commands::ai::undo_suggestions,
+            commands::ai::ai_folders,
+            commands::ai::save_ai_folders,
+            commands::ai::count_ai_folders,
+            commands::ai::start_ai_folders,
+            commands::ai::suggested_tag_counts,
+            commands::ai::resolve_suggested_tag,
+            commands::tag_rules::tag_rules,
+            commands::tag_rules::tag_rule_presets,
+            commands::tag_rules::save_tag_rules,
+            commands::tag_rules::test_tag_rules,
+            commands::tag_rules::count_tag_rules,
             commands::organize::rebuild_from_sidecars,
             commands::organize::import_orynt3d,
             commands::organize::find_duplicates,
@@ -82,15 +122,27 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::files::undo_file_operation,
             commands::files::file_journal,
             commands::files::save_screenshot,
+            commands::files::render_source,
+            commands::files::store_rendered_preview,
+            commands::files::keep_rendered_previews,
+            commands::files::skip_rendered_previews,
+            commands::files::reset_rendered_previews,
             commands::rules::folder_rules,
             commands::rules::remove_folder_rule,
+            commands::rules::parent_covers,
+            commands::rules::set_parent_covers,
             commands::rules::propose_presets,
             commands::rules::accept_preset,
             commands::slicers::save_slicers,
             commands::slicers::detect_slicers,
             commands::slicers::open_in_slicer,
         ])
-        .events(collect_events![events::ScanProgressEvent, events::DuplicatesProgressEvent])
+        .events(collect_events![
+            events::ScanProgressEvent,
+            events::DuplicatesProgressEvent,
+            events::SuggestProgressEvent,
+            commands::update::UpdateProgressEvent
+        ])
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { commands, describeError, unwrap, type IpcFailure, type LibraryDto } from "./ipc";
 import { FolderMenu, useFolderMenu } from "./features/folders/folder-menu";
 import { FolderTree } from "./features/folders/folder-tree";
 import { LibraryNav } from "./features/organize/library-nav";
+import { PinnedTags } from "./features/tags/pinned-tags";
+import { TagBrowser } from "./features/tags/tag-browser";
 import { CollectionsNav } from "./features/collections/collections-nav";
 import { CollectionView } from "./features/collections/collection-view";
 import { DuplicatesView } from "./features/duplicates/duplicates-view";
@@ -14,18 +16,43 @@ import { ModelPage } from "./features/model/model-page";
 import { SearchBox } from "./features/search/search-box";
 import { SettingsView, useAddLibrary } from "./features/settings/settings-view";
 import { Icon, Logo } from "./shared/icons";
-import { HOME, useRoute } from "./shared/route";
+import { HOME, reviewRoute, settingsRoute, useRoute, type Route } from "./shared/route";
 import { useTheme } from "./shared/use-theme";
+import { SuggestStatus } from "./features/ai/suggest-status";
+import { UpdatePill } from "./features/update/update-pill";
+import { useUpdateCheck } from "./features/update/use-update";
+import { useSuggestProgressListener } from "./features/ai/queries";
+import { SettingsNav } from "./features/settings/settings-nav";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { confirmDiscard, useHasUnsavedChanges } from "./features/settings/drafts";
+import { ReviewView } from "./features/ai/review/review-view";
+import { CheckView } from "./features/batch/check-view";
+import { UndoToast } from "./features/batch/undo-toast";
+import { useRenderQueue } from "./features/render/render-queue";
 import { t, plural } from "./shared/i18n";
 
 export function App() {
   const [route, navigate] = useRoute();
-  const [theme, toggleTheme] = useTheme();
+  const [theme, toggleTheme, setTheme] = useTheme();
   const [toast, setToast] = useState<string | null>(null);
   const [shown, setShown] = useState(0);
   const libraries = useLibraries();
   const onScanFailed = useCallback((error: IpcFailure) => setToast(describeError(error)), []);
   const scans = useScanStatus(onScanFailed);
+  useSuggestProgressListener();
+  useUpdateCheck();
+  useRenderQueue();
+  // Where "Back to library" returns to: the last screen outside Settings, however many settings pages were opened.
+  const outside = useRef<Route>(HOME);
+  if (route.view !== "settings") outside.current = route;
+  const unsaved = useHasUnsavedChanges();
+  useEffect(() => {
+    // Closing the window would lose unsaved tag rules or AI settings, so ask first.
+    const stop = getCurrentWindow().onCloseRequested(async (event) => {
+      if (!(await confirmDiscard())) event.preventDefault();
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, []);
   const menu = useFolderMenu();
   const addLibrary = useAddLibrary(setToast);
 
@@ -50,19 +77,23 @@ export function App() {
         <div className="brand"><Logo /><span><b>3D</b> Hoard Deck</span></div>
         <SearchBox value={libraryRoute?.q ?? ""} onSearch={onSearch} />
         <div className="title-actions">
+          <UpdatePill scanning={list.some((item) => isScanning(scans[item.id]))} />
           <button className="tbtn" onClick={toggleTheme} aria-label={theme === "dark" ? t("Switch to light theme") : t("Switch to dark theme")} title={t("Light / dark theme")}>
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
           <button className="tbtn" onClick={() => library && void rescan(library)} disabled={!library || isScanning(scans[library.id])} aria-label={t("Scan for changes")} title={t("Scan for changes")}>
             <Icon name="refresh" />
           </button>
-          <button className="tbtn" onClick={() => navigate({ view: "settings" })} aria-label={t("Settings")} title={t("Settings")}>
-            <Icon name="settings" />
+          <button className="tbtn" onClick={() => navigate(settingsRoute())} aria-label={unsaved ? t("Settings (unsaved changes)") : t("Settings")} title={unsaved ? t("Settings (unsaved changes)") : t("Settings")}>
+            <Icon name="settings" />{unsaved && <span className="tdot" />}
           </button>
         </div>
       </header>
 
       <aside className="side" aria-label={t("Sidebar")}>
+        {route.view === "settings" ? (
+          <SettingsNav route={route} libraries={list} scans={scans} onNavigate={navigate} onBack={() => navigate(outside.current)} />
+        ) : (
         <div className="side-scroll">
           {list.map((item) => (
             <div className="sec" key={item.id}>
@@ -71,6 +102,10 @@ export function App() {
                 library={item.id}
                 route={libraryRoute && item.id === library?.id ? libraryRoute : null}
                 onNavigate={(patch) => navigate({ ...HOME, library: item.id, ...patch })}
+                onTags={() => navigate({ view: "tags", library: item.id })}
+                onReview={() => navigate(reviewRoute(item.id))}
+                reviewOpen={route.view === "review" && route.library === item.id}
+                tagsOpen={route.view === "tags" && route.library === item.id}
               />
               <h4 className="subhead">{t("Folders")}</h4>
               <FolderTree
@@ -78,6 +113,11 @@ export function App() {
                 current={libraryRoute && item.id === library?.id ? libraryRoute.folder : null}
                 onOpen={(folder) => navigate({ ...HOME, library: item.id, folder })}
                 onMenu={(folder) => menu.open(item.id, folder.path, folder.isCollection)}
+              />
+              <PinnedTags
+                library={item.id}
+                query={libraryRoute && item.id === library?.id ? libraryRoute.q : null}
+                onSearch={(q) => navigate({ ...HOME, ...(libraryRoute && item.id === library?.id ? libraryRoute : {}), library: item.id, q, view: "library" })}
               />
             </div>
           ))}
@@ -88,14 +128,26 @@ export function App() {
             </button>
           </div>
         </div>
-        {library && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate({ view: "settings" })} />}
+        )}
+        {library && route.view !== "settings" && <SourceCard library={library} scan={scans[library.id]} onSettings={() => navigate(settingsRoute("library", library.id, "access"))} />}
       </aside>
 
       <main className="main">
         {libraries.isError ? (
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
-          <SettingsView libraries={list} scans={scans} onError={setToast} />
+          <SettingsView route={route} navigate={navigate} libraries={list} scans={scans} theme={theme} onTheme={setTheme} onTags={(id) => navigate({ view: "tags", library: id })} onError={setToast} />
+        ) : route.view === "check" ? (
+          <CheckView library={route.library} tag={route.tag} folder={route.folder} navigate={navigate} onMessage={setToast} />
+        ) : route.view === "review" ? (
+          <ReviewView route={route} libraryName={list.find((item) => item.id === route.library)?.name ?? ""} navigate={(next) => navigate(next, { replace: true })} onMessage={setToast} />
+        ) : route.view === "tags" ? (
+          <TagBrowser
+            library={route.library}
+            libraryName={list.find((item) => item.id === route.library)?.name ?? ""}
+            onSearch={(q) => navigate({ ...HOME, library: route.library, q })}
+            onMessage={setToast}
+          />
         ) : route.view === "duplicates" ? (
           <DuplicatesView libraries={list} onOpenModel={(id) => navigate({ view: "model", id })} />
         ) : route.view === "collection" ? (
@@ -126,10 +178,11 @@ export function App() {
       <footer className="status">
         {route.view === "library" && <span>{t("{count} shown", { count: shown })}</span>}
         <span>{plural(list.length, "{count} library", "{count} libraries")}</span>
+        <SuggestStatus />
       </footer>
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {toast ? <div className="toast" role="status">{toast}</div> : <UndoToast onMessage={setToast} />}
     </div>
   );
 }

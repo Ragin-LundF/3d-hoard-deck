@@ -51,7 +51,74 @@ export const commands = {
 	collectionModels: (id: number, offset: number, limit: number) => typedError<SearchResultDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("collection_models", { id, offset, limit })),
 	/**  Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it. */
 	updateModelMeta: (id: number, meta: ModelMetaDto_Deserialize) => typedError<ModelDetailDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("update_model_meta", { id, meta })),
-	listTags: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("list_tags", { library })),
+	/**  Every tag in use, most used first, with group and pin. */
+	listTags: (library: number) => typedError<TagInfoDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("list_tags", { library })),
+	/**  The most used tags of what is shown: `folder` (and below), narrowed by the search `query` when it is not empty. */
+	tagFacets: (library: number, folder: string, query: string, limit: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_facets", { library, folder, query, limit })),
+	/**  Renames tags, or merges several into one. Returns how many models changed. */
+	renameTags: (library: number, from: string[], to: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("rename_tags", { library, from, to })),
+	/**  Removes tags from every model. Returns how many models changed. */
+	deleteTags: (library: number, tags: string[]) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("delete_tags", { library, tags })),
+	setTagsGroup: (library: number, tags: string[], group: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_tags_group", { library, tags, group })),
+	setTagsPinned: (library: number, tags: string[], pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_tags_pinned", { library, tags, pinned })),
+	listTagGroups: (library: number) => typedError<TagGroupDto[], IpcError_Serialize>(__TAURI_INVOKE("list_tag_groups", { library })),
+	/**  Creates a group (`id` empty) or renames and recolours one. Returns its id. */
+	saveTagGroup: (library: number, id: number | null, name: string, color: string) => typedError<number | null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_group", { library, id, name, color })),
+	deleteTagGroup: (library: number, id: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_tag_group", { library, id })),
+	/**
+	 *  Adds and removes tags on the picked models (`ids`) or on every result of a search (`query` in `folder`), in one
+	 *  go. Returns the number of models and a token for `undo_tag_batch`.
+	 */
+	batchUpdateTags: (library: number, ids: number[] | null, query: string | null, folder: string, add: string[], remove: string[]) => typedError<BatchResultDto, IpcError_Serialize>(__TAURI_INVOKE("batch_update_tags", { library, ids, query, folder, add, remove })),
+	undoTagBatch: (token: number) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("undo_tag_batch", { token })),
+	/**  The models in `folder` carrying `tag_name`, with where the tag comes from. */
+	checkTag: (library: number, tagName: string, folder: string) => typedError<CheckItemDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("check_tag", { library, tagName, folder })),
+	/**  Tags of the picked models with how many of them carry each, for "Remove tag". */
+	selectionTags: (library: number, ids: number[]) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("selection_tags", { library, ids })),
+	/**  A newer published release, or `None`. Errors (no network, GitHub down) are for the log and "Check now" only. */
+	checkForUpdate: () => typedError<UpdateInfoDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("check_for_update")),
+	/**  Downloads, checks the signature, installs and restarts. Progress comes as [`UpdateProgressEvent`]. */
+	installUpdate: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("install_update")),
+	/**  Opens the release page of `version` in the browser. */
+	openReleasePage: (version: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("open_release_page", { version })),
+	aiSettings: () => typedError<AiViewDto, IpcError_Serialize>(__TAURI_INVOKE("ai_settings")),
+	/**  `key`: `None` keeps the stored key, an empty text removes it. */
+	saveAiSettings: (settings: AiSettingsDto, key: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_ai_settings", { settings, key })),
+	/**  Lists the server's models and asks one question; `key` is a typed key not saved yet. */
+	testAiConnection: (settings: AiSettingsDto, key: string | null) => typedError<AiTestDto, IpcError_Serialize>(__TAURI_INVOKE("test_ai_connection", { settings, key })),
+	suggestTags: (id: number) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("suggest_tags", { id })),
+	tagSuggestions: (id: number) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("tag_suggestions", { id })),
+	/**  Keeps a suggested tag as a normal tag, or dismisses it. */
+	resolveTagSuggestion: (id: number, tagName: string, keep: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("resolve_tag_suggestion", { id, tagName, keep })),
+	/**  Starts suggesting tags for the models in `folder` in the background. Returns how many models it asks about. */
+	startTagSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("start_tag_suggestions", { library, folder })),
+	cancelTagSuggestions: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_tag_suggestions")),
+	/**  How many models a run over `folder` would ask about. */
+	countTagSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("count_tag_suggestions", { library, folder })),
+	/**  Models in `folder` with suggestions waiting, optionally only those suggested `tag_name`. */
+	reviewSuggestions: (library: number, folder: string, tagName: string | null) => typedError<ReviewItemDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("review_suggestions", { library, folder, tagName })),
+	pendingSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("pending_suggestions", { library, folder })),
+	/**  Keeps and drops suggested tags on many models in one go. Returns what undo needs. */
+	decideSuggestions: (library: number, decisions: DecisionDto[]) => typedError<ResolutionDto[], IpcError_Serialize>(__TAURI_INVOKE("decide_suggestions", { library, decisions })),
+	undoSuggestions: (library: number, resolutions: ResolutionDto[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("undo_suggestions", { library, resolutions })),
+	aiFolders: (library: number) => typedError<AiFoldersDto, IpcError_Serialize>(__TAURI_INVOKE("ai_folders", { library })),
+	saveAiFolders: (library: number, settings: AiFoldersDto) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_ai_folders", { library, settings })),
+	/**  How many models a run over these (unsaved) AI folders would ask about. */
+	countAiFolders: (library: number, settings: AiFoldersDto) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("count_ai_folders", { library, settings })),
+	/**  Starts a run over the saved AI folders of a library. Returns how many models it asks about. */
+	startAiFolders: (library: number) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("start_ai_folders", { library })),
+	/**  Suggested tags of a library with the number of models, for the review. */
+	suggestedTagCounts: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("suggested_tag_counts", { library })),
+	/**  Keeps (`keep`) or dismisses one suggested tag on every model it was suggested for. Returns the number of models. */
+	resolveSuggestedTag: (library: number, tagName: string, keep: boolean) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("resolve_suggested_tag", { library, tagName, keep })),
+	tagRules: () => typedError<TagRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_rules")),
+	tagRulePresets: () => typedError<TagRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_rule_presets")),
+	/**  Saves the rules; every library is regrouped in the background from the index alone. */
+	saveTagRules: (list: TagRuleDto[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_rules", { list })),
+	/**  The tags the (unsaved) rules give a typed path. */
+	testTagRules: (list: TagRuleDto[], path: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("test_tag_rules", { list, path })),
+	/**  How many models each (unsaved) rule would tag, in all libraries. */
+	countTagRules: (list: TagRuleDto[]) => typedError<number[], IpcError_Serialize>(__TAURI_INVOKE("count_tag_rules", { list })),
 	/**  Restores names, tags, marks and notes from the library's `.3dhoarddeck` files (reads only). */
 	rebuildFromSidecars: (library: number) => typedError<RebuildReportDto, IpcError_Serialize>(__TAURI_INVOKE("rebuild_from_sidecars", { library })),
 	/**  Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again). */
@@ -78,8 +145,19 @@ export const commands = {
 	 *  JSON number array, fine for a screenshot of a few MB.
 	 */
 	saveScreenshot: (id: number, file: string, png: number[]) => typedError<ScreenshotDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("save_screenshot", { id, file, png })),
+	renderSource: (id: number) => typedError<RenderSourceDto | null, IpcError_Serialize>(__TAURI_INVOKE("render_source", { id })),
+	/**  Stores a preview rendered in the app (in the app's folder, never the library). */
+	storeRenderedPreview: (id: number, png: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("store_rendered_preview", { id, png })),
+	/**  Keeps rendered previews: written into the model folder where allowed, else kept in the index. */
+	keepRenderedPreviews: (ids: number[]) => typedError<KeptDto, IpcError_Serialize>(__TAURI_INVOKE("keep_rendered_previews", { ids })),
+	skipRenderedPreviews: (ids: number[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("skip_rendered_previews", { ids })),
+	/**  Sets rendered previews back to `state` (`cached`, or none to render again): undo of skip and of keeping in the index. */
+	resetRenderedPreviews: (ids: number[], state: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("reset_rendered_previews", { ids, state })),
 	folderRules: (library: number) => typedError<FolderRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("folder_rules", { library })),
 	removeFolderRule: (library: number, pattern: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("remove_folder_rule", { library, pattern })),
+	parentCovers: (library: number) => typedError<boolean, IpcError_Serialize>(__TAURI_INVOKE("parent_covers", { library })),
+	/**  Models without a picture borrow one from the folder above; regrouped in the background. */
+	setParentCovers: (library: number, on: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_parent_covers", { library, on })),
 	/**  Collection presets that match this library's folders and are not in use yet. */
 	proposePresets: (library: number) => typedError<PresetProposalDto[], IpcError_Serialize>(__TAURI_INVOKE("propose_presets", { library })),
 	acceptPreset: (library: number, id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("accept_preset", { library, id })),
@@ -97,17 +175,65 @@ export const commands = {
 export const events = {
 	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
+	suggestProgressEvent: makeEvent<SuggestProgressEvent, SuggestProgressEvent>("suggest-progress-event"),
+	updateProgressEvent: makeEvent<UpdateProgressEvent, UpdateProgressEvent>("update-progress-event"),
 };
 
 /* Types */
 /**  What the app may write into the library. */
 export type AccessModeDto = "readOnly" | "metadataWrite" | "managed";
 
+export type AiFoldersDto = {
+	included: string[],
+	excluded: string[],
+	onlyUntagged: boolean,
+	afterScan: boolean,
+	skipWithoutPreview: boolean,
+};
+
+export type AiProviderDto = "off" | "lmStudio" | "ollama" | "openAi" | "anthropic" | "custom";
+
+export type AiSettingsDto = {
+	provider: AiProviderDto,
+	baseUrl: string,
+	model: string,
+	sendImage: boolean,
+	sendPath: boolean,
+	maxTags: number,
+	timeoutSeconds: number,
+	prompt: string,
+};
+
+export type AiTestDto = {
+	models: string[],
+	model: string,
+	tags: string[],
+	millis: number,
+};
+
+/**  The settings plus what the UI may know about the key: whether one is stored, never the key itself. */
+export type AiViewDto = {
+	/**  AI is on when `settings.provider` is not `off`. */
+	settings: AiSettingsDto,
+	hasKey: boolean,
+	keyFromEnvironment: boolean,
+	/**  Pictures and names go to another computer. */
+	remote: boolean,
+	/**  The address used when the field is empty. */
+	defaultUrl: string,
+};
+
 /**  A file inside a ZIP archive. */
 export type ArchiveEntryDto = {
 	/**  Path inside the archive, with `/`. */
 	name: string,
 	size: number | null,
+};
+
+/**  How many models a batch changed, and the token to undo it. */
+export type BatchResultDto = {
+	changed: number,
+	token: number,
 };
 
 export type BrowseRequestDto = BrowseRequestDto_Serialize | BrowseRequestDto_Deserialize;
@@ -128,6 +254,26 @@ export type BrowseRequestDto_Serialize = {
 	sort: SortDto,
 	cursor: CursorDto | null,
 	limit: number,
+};
+
+export type CheckItemDto = CheckItemDto_Serialize | CheckItemDto_Deserialize;
+
+export type CheckItemDto_Deserialize = {
+	id: number,
+	title: string,
+	path: string,
+	folder: string,
+	cover?: string | null,
+	source: TagSourceDto,
+};
+
+export type CheckItemDto_Serialize = {
+	id: number,
+	title: string,
+	path: string,
+	folder: string,
+	cover: string | null,
+	source: TagSourceDto,
 };
 
 export type CollectionDto = CollectionDto_Serialize | CollectionDto_Deserialize;
@@ -159,6 +305,13 @@ export type CollectionDto_Serialize = {
 export type CursorDto = {
 	key: string,
 	id: number,
+};
+
+/**  Suggested tags to keep and to drop on one model. */
+export type DecisionDto = {
+	id: number,
+	keep: string[],
+	dismiss: string[],
 };
 
 export type DuplicateFileDto = DuplicateFileDto_Serialize | DuplicateFileDto_Deserialize;
@@ -308,6 +461,11 @@ export type JournalEntryDto = {
 	status: string,
 };
 
+export type KeptDto = {
+	written: number,
+	kept: number,
+};
+
 export type LibraryDto = {
 	id: number,
 	name: string,
@@ -327,6 +485,8 @@ export type ModelDetailDto_Deserialize = {
 	/**  Name derived from the folder or file, shown next to a display name. */
 	originalTitle: string,
 	meta: ModelMetaDto_Deserialize,
+	/**  Tags from tag rules, including the ones hidden in `meta.hiddenTags`. */
+	autoTags: string[],
 };
 
 export type ModelDetailDto_Serialize = {
@@ -335,6 +495,8 @@ export type ModelDetailDto_Serialize = {
 	/**  Name derived from the folder or file, shown next to a display name. */
 	originalTitle: string,
 	meta: ModelMetaDto_Serialize,
+	/**  Tags from tag rules, including the ones hidden in `meta.hiddenTags`. */
+	autoTags: string[],
 };
 
 export type ModelFileDto = ModelFileDto_Serialize | ModelFileDto_Deserialize;
@@ -365,6 +527,8 @@ export type ModelMetaDto_Deserialize = {
 	notes: string,
 	/**  An image path of the model picked as cover, or `None` for the detected one. */
 	cover?: string | null,
+	/**  Tags from tag rules the user does not want on this model. */
+	hiddenTags?: string[],
 };
 
 export type ModelMetaDto_Serialize = {
@@ -375,6 +539,8 @@ export type ModelMetaDto_Serialize = {
 	notes: string,
 	/**  An image path of the model picked as cover, or `None` for the detected one. */
 	cover: string | null,
+	/**  Tags from tag rules the user does not want on this model. */
+	hiddenTags: string[],
 };
 
 export type ModelSummaryDto = ModelSummaryDto_Serialize | ModelSummaryDto_Deserialize;
@@ -391,6 +557,12 @@ export type ModelSummaryDto_Deserialize = {
 	printed: boolean,
 	released?: string | null,
 	cover?: string | null,
+	/**  `own`, `embedded` (the preview inside its 3MF) or `parent` (borrowed from the folder above). */
+	coverSource: string,
+	/**  The folder picture to show when an `embedded` cover turns out to have no preview inside. */
+	fallbackCover?: string | null,
+	/**  A preview rendered in the app: `cached` (waiting for the user), `kept` or `skipped`. */
+	rendered?: string | null,
 	/**  Folder path of the collection the model belongs to. */
 	collection?: string | null,
 	/**  The user marked this model's folder as one model; offer "detect automatically". */
@@ -412,6 +584,12 @@ export type ModelSummaryDto_Serialize = {
 	printed: boolean,
 	released: string | null,
 	cover: string | null,
+	/**  `own`, `embedded` (the preview inside its 3MF) or `parent` (borrowed from the folder above). */
+	coverSource: string,
+	/**  The folder picture to show when an `embedded` cover turns out to have no preview inside. */
+	fallbackCover: string | null,
+	/**  A preview rendered in the app: `cached` (waiting for the user), `kept` or `skipped`. */
+	rendered: string | null,
 	/**  Folder path of the collection the model belongs to. */
 	collection: string | null,
 	/**  The user marked this model's folder as one model; offer "detect automatically". */
@@ -435,6 +613,44 @@ export type RebuildReportDto = {
 	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
 	rulesRestored: number,
 };
+
+/**  The main mesh of a model to render a preview from, with its size in bytes. */
+export type RenderSourceDto = {
+	path: string,
+	size: number | null,
+};
+
+/**  What a decision changed; sent back as is to undo it. */
+export type ResolutionDto = {
+	path: string,
+	added: string[],
+	removed: string[],
+};
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto = ReviewItemDto_Serialize | ReviewItemDto_Deserialize;
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto_Deserialize = {
+	id: number,
+	title: string,
+	path: string,
+	cover?: string | null,
+	suggested: string[],
+	own: string[],
+};
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto_Serialize = {
+	id: number,
+	title: string,
+	path: string,
+	cover: string | null,
+	suggested: string[],
+	own: string[],
+};
+
+export type RuleKindDto = "any" | "all" | "regex" | "folder";
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
 export type ScanProgressEvent = ScanProgressEvent_Serialize | ScanProgressEvent_Deserialize;
@@ -528,9 +744,100 @@ export type SlicerDto = {
 
 export type SortDto = "name" | "added" | "released";
 
+/**  Pushed while an AI suggests tags: `done` of `total` models asked, `failed` without an answer. */
+export type SuggestProgressEvent = {
+	library: number,
+	done: number,
+	total: number,
+	failed: number,
+	running: boolean,
+};
+
 export type TagCountDto = {
 	name: string,
 	count: number,
+};
+
+export type TagGroupDto = {
+	id: number | null,
+	name: string,
+	color: string,
+};
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto = TagInfoDto_Serialize | TagInfoDto_Deserialize;
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto_Deserialize = {
+	name: string,
+	count: number,
+	group?: number | null,
+	pinned: boolean,
+	/**  When a model carrying it last changed, seconds since 1970. */
+	recent: number | null,
+};
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto_Serialize = {
+	name: string,
+	count: number,
+	group: number | null,
+	pinned: boolean,
+	/**  When a model carrying it last changed, seconds since 1970. */
+	recent: number | null,
+};
+
+/**
+ *  A tag rule: `tag` is added to models whose path matches `pattern` (see `kind`), unless it contains a word of
+ *  `unless`.
+ */
+export type TagRuleDto = {
+	tag: string,
+	kind: RuleKindDto,
+	pattern: string,
+	unless: string,
+	nameOnly: boolean,
+	enabled: boolean,
+};
+
+/**  Where a model's tag comes from, for the RULE / YOU labels when checking a tag. */
+export type TagSourceDto = "own" | "rule" | "both";
+
+export type UpdateInfoDto = UpdateInfoDto_Serialize | UpdateInfoDto_Deserialize;
+
+export type UpdateInfoDto_Deserialize = {
+	version: string,
+	current: string,
+	/**  Release notes (Markdown), possibly empty. */
+	notes: string,
+	/**  `YYYY-MM-DD`, when the release says. */
+	date?: string | null,
+	method: UpdateMethod,
+	page: string,
+};
+
+export type UpdateInfoDto_Serialize = {
+	version: string,
+	current: string,
+	/**  Release notes (Markdown), possibly empty. */
+	notes: string,
+	/**  `YYYY-MM-DD`, when the release says. */
+	date: string | null,
+	method: UpdateMethod,
+	page: string,
+};
+
+/**  How this installation can take an update. */
+export type UpdateMethod = 
+/**  The app downloads, checks, installs and restarts itself. */
+"install" | 
+/**  Only the release page can help: this build has no updater key. */
+"page";
+
+/**  Pushed while an update downloads: `done` of `total` bytes (`total` is 0 when unknown). */
+export type UpdateProgressEvent = {
+	done: number,
+	total: number,
 };
 
 /* Tauri Specta runtime */

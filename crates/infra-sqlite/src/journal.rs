@@ -50,15 +50,18 @@ impl FileJournal for SqliteIndex {
         library: LibraryId,
         from: &RelPath,
         to: &RelPath,
-        rules: &ScanRules,
         status: JournalStatus,
     ) -> Result<(), IndexError> {
-        let rules = serde_json::to_string(rules).map_err(|error| IndexError(error.to_string()))?;
         self.write(|connection| {
             let transaction = connection.transaction()?;
             for statement in MOVE_DATA {
                 transaction.execute(statement, params![library.0, from.as_str(), to.as_str()])?;
             }
+            let stored: String =
+                transaction
+                    .query_row("SELECT scan_rules FROM libraries WHERE id = ?1", [library.0], |row| row.get(0))?;
+            let rules: ScanRules = crate::rows::converted(0, serde_json::from_str(&stored))?;
+            let rules = crate::rows::converted(0, serde_json::to_string(&rules.moved(from, to)))?;
             transaction.execute("UPDATE libraries SET scan_rules = ?2 WHERE id = ?1", params![library.0, rules])?;
             let undone_at = (status == JournalStatus::Undone).then(now);
             transaction.execute(

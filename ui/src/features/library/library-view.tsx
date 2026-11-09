@@ -8,8 +8,14 @@ import { NameInput } from "../collections/name-input";
 import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
 import { FolderPictures } from "./folder-pictures";
+import { TagBar } from "../tags/tag-bar";
 import { useFolderPage, useSearch } from "./queries";
 import { VirtualGrid } from "./virtual-grid";
+import { SuggestFolderButton } from "../ai/suggest-folder-button";
+import { SelectionBar } from "../batch/selection-bar";
+import { RenderedStrip } from "../render/rendered-strip";
+import { useBatchTags } from "../batch/batch";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { t, plural } from "../../shared/i18n";
 
 type Item = { kind: "folder"; folder: FolderDto_Serialize } | { kind: "model"; model: ModelSummaryDto_Serialize };
@@ -55,7 +61,51 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const openFolder = (folder: string) => navigate({ ...route, folder, q: "" });
+  // Like the sidebar: a folder always opens in folder view; "Everything inside" is chosen per folder.
+  const openFolder = (folder: string) => navigate({ ...route, folder, q: "", all: false });
+
+  const batch = useBatchTags(library.id, onError);
+  const removeEverywhere = async (tag: string) => {
+    const count = total ?? 0;
+    const yes = await ask(t("Remove “{tag}” from all {count} models shown here? Tags from a tag rule are hidden on them; the rule stays.", { tag, count }), {
+      title: t("Remove tag"), kind: "warning", okLabel: t("Remove"), cancelLabel: t("Cancel"),
+    });
+    if (yes) batch.mutate({ target: { query: route.q, folder: route.folder }, add: [], remove: [tag] });
+  };
+
+  // Multi-select for batch tag changes: ⌘/Ctrl-click toggles, ⇧-click selects a range, ⌘A all loaded, Esc clears.
+  const modelIds = useMemo(() => items.flatMap((item) => (item.kind === "model" ? [item.model.id] : [])), [items]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [allResults, setAllResults] = useState(false);
+  const [anchor, setAnchor] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const selecting = selectMode || selected.size > 0;
+  const clearSelection = useCallback(() => { setSelected(new Set()); setAllResults(false); setSelectMode(false); }, []);
+  useEffect(() => clearSelection(), [route.folder, route.q, route.all, clearSelection]);
+  useEffect(() => {
+    const keys = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "Escape" && selecting) clearSelection();
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a" && modelIds.length > 0) {
+        event.preventDefault();
+        setSelected(new Set(modelIds));
+      }
+    };
+    window.addEventListener("keydown", keys);
+    return () => window.removeEventListener("keydown", keys);
+  }, [selecting, modelIds, clearSelection]);
+  const select = (id: number) => (event: MouseEvent) => {
+    const next = new Set(selected);
+    const index = modelIds.indexOf(id);
+    if (event.shiftKey && anchor !== null) {
+      const [from, to] = [Math.min(anchor, index), Math.max(anchor, index)];
+      modelIds.slice(from, to + 1).forEach((modelId) => next.add(modelId));
+    } else if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+    setAllResults(false);
+    setAnchor(index);
+  };
   const title = folderName(route.folder) || library.name;
 
   return (
@@ -77,6 +127,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
               <Icon name="refresh" />{t("Scan this folder")}
             </button>
           )}
+          {!searching && route.folder && <SuggestFolderButton library={library.id} folder={route.folder} onMessage={onError} />}
           {!searching && (
             <div className="seg" role="group" aria-label={t("Folder display")}>
               <button className={route.all ? "" : "on"} aria-pressed={!route.all} onClick={() => navigate({ ...route, all: false })}>
@@ -101,6 +152,11 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
             </span>
           )}
           <span className="spacer" />
+          {modelIds.length > 0 && (
+            <button className={`btn ghost${selecting ? " on" : ""}`} onClick={() => (selecting ? clearSelection() : setSelectMode(true))} title={t("Select models to add or remove tags on all of them")}>
+              <Icon name="check" />{selecting ? t("Done") : t("Select")}
+            </button>
+          )}
           {!searching && (
             <select className="sel" aria-label={t("Sort by")} value={sort} onChange={(event) => setSort(event.target.value as SortDto)}>
               <option value="name">{t("Name A–Z")}</option>
@@ -112,7 +168,20 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
             <input type="range" min={150} max={320} value={cardWidth} aria-label={t("Card size")} onChange={(event) => setCardWidth(Number(event.target.value))} />
           </label>
         </div>
+        <TagBar
+          library={library.id}
+          folder={route.folder}
+          query={route.q}
+          onQuery={(q) => navigate({ ...route, q })}
+          onCheck={(tag) => navigate({ view: "check", library: library.id, tag, folder: route.folder })}
+          onRemoveAll={(tag) => void removeEverywhere(tag)}
+        />
       </div>
+      <RenderedStrip
+        library={library}
+        ids={items.flatMap((item) => (item.kind === "model" && !item.model.cover && item.model.rendered === "cached" ? [item.model.id] : []))}
+        onMessage={onError}
+      />
       {!searching && !route.all && <FolderPictures library={library.id} images={browse.data?.pages[0]?.images ?? []} />}
       {active.isError ? (
         <div className="empty err">{describeError(active.error)}</div>
@@ -135,9 +204,20 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
                 onMenu={onFolderMenu(item.folder)}
               />
             ) : (
-              <ModelCard model={item.model} onOpen={() => navigate({ view: "model", id: item.model.id })} />
+              <ModelCard model={item.model} onOpen={() => navigate({ view: "model", id: item.model.id })} selected={allResults || selected.has(item.model.id)} selecting={selecting} onSelect={select(item.model.id)} canWrite={library.access !== "readOnly"} onMessage={onError} />
             )
           }
+        />
+      )}
+      {(selected.size > 0 || allResults) && (
+        <SelectionBar
+          library={library.id}
+          ids={[...selected]}
+          search={searching && total !== undefined ? { query: route.q, folder: route.folder, total } : null}
+          all={allResults}
+          onSelectAll={() => { setAllResults(true); setSelected(new Set(modelIds)); }}
+          onClear={clearSelection}
+          onMessage={onError}
         />
       )}
     </>

@@ -3,6 +3,92 @@
 All notable changes to 3D Hoard Deck are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [1.1.0] - 2026-11-09
+
+This release is about tags without typing and pictures for every card: tag rules and optional AI suggestions,
+fixing many tags at once, and covers borrowed from the folder above, read from 3MF files or rendered from the model.
+
+### New
+- **A new way to work with tags.** The sidebar keeps your folders in view however many tags you have: one **Tags**
+  entry opens the tag browser, and the few tags you pin appear below the folders.
+- **Tag bar above the grid.** It shows the most common tags of what you are looking at. Click a tag to see only
+  models with it, ⌥-click (Alt-click) to hide models with it, and switch between "All" and "Any" when you pick
+  several. **All tags…** finds any tag by typing. The search box shows the filter, so you can save it as a smart
+  collection.
+- **Tag browser.** Filter, sort by use, name or recent use, list or cloud view, and jump by letter. Select several
+  tags to merge, rename, pin, delete or put them into groups such as Scale or Genre. Tags that look alike (Sci-Fi and
+  SciFi, Dragon and Dragons) are offered for merging. Only the app's index (and metadata files, if on) change, never
+  your model files.
+- Search understands `-tag:bust` (without a tag) and `tag:32mm|28mm` (any of these tags).
+- **Tags without typing: tag rules.** Settings › Tags › Tag rules turns folder and file names into tags, such as
+  `32mm`, `presupported`, `resin`, `bust` or the creator's folder. Add the suggested rules or write your own (any of
+  these words, all of them, a regular expression, or the folder below a given folder). Only whole words count
+  (`bust` never matches "Robust"), words like "unsupported" can stop a rule, and the usual miniature scales are the
+  only sizes. **Count matches** and **Try a path** show what a rule does before you save it. Rule tags are searchable
+  and appear in the tag bar, but they are kept apart from your own tags: changing a rule never touches what you typed,
+  and nothing is written into your libraries.
+- On a model page, rule tags appear under your tags: keep one as a normal tag, or hide it on that model.
+- **Tag suggestions from an AI (optional).** Under Settings › AI choose LM Studio, Ollama, OpenAI, Anthropic or another
+  OpenAI-compatible server. The AI looks at the model's preview picture and name and suggests a few tags; it never
+  changes anything by itself. Ask for one model on its page, for a folder with **Suggest tags**, or for all models
+  without tags. Keep or dismiss suggestions per model, or for many models at once in the tag browser. The API key is
+  kept in the system keychain. Model files are never sent. As long as AI is off, the app shows no AI feature at all.
+- **Update check.** A few seconds after start the app asks GitHub whether a newer version is out. If so, a small
+  **Update** pill appears in the title bar: see what's new, then **Update now** (downloads, installs and restarts),
+  **Later** or **Skip this version**. Every download is checked against the project's signature before it is installed.
+  Settings › Updates shows the installed version, can check right away, and can turn the check off.
+- **Settings in pages.** Settings now have their own sidebar (Overview, Libraries, Tags & rules, AI suggestions,
+  Slicers, General, Index & storage, Updates) instead of one long page. The overview shows at a glance what needs
+  attention, each library has its own page with tabs, **Find a setting** jumps to any option, unsaved tag rule and AI
+  changes wait in a bar at the bottom (and survive switching pages), slicers can be reordered by dragging, and the
+  theme can be chosen under General.
+- **Review AI tags.** A new screen (sidebar › Review AI tags, only while AI is set up) shows the AI's suggestions with
+  the model pictures. **By tag:** pick a suggested tag, see every model it was suggested for, switch it off where it
+  doesn't fit (⇧-click for a range), then keep it on the rest in one go. **By model:** all suggestions of each model,
+  keep the rest or dismiss, also for several models at once. Every step can be undone, also later from **Reviewed**.
+- **AI folders.** Choose per library which folders the AI works on (untick subfolders to leave them out), only models
+  without own tags, whether new models get suggestions after each scan, and whether models without a picture are
+  skipped. The screen shows how many models that is and about how long it takes.
+- **Fix many tags at once.** Click **Select** (or ⌘/Ctrl-click, ⇧-click for a range, ⌘A) and use **Add tag** or
+  **Remove tag** on all selected models; in a search, **Select all** covers every result, also those not loaded yet.
+- **Check a tag.** The ▾ on an active tag in the tag bar opens **Check this tag…**: every model with it, grouped by
+  folder, with where it comes from (tag rule or added by you). Mark the wrong ones, or a whole folder, and remove
+  the tag from them in one go. If many come from a tag rule, the app points you to the rule. **Remove from all
+  here…** does it for everything shown. Every batch can be undone.
+- Removing a tag that a tag rule gives hides it on those models, so it doesn't come back with the next scan.
+- **Far fewer cards without a picture.** A model without a picture of its own now borrows one from the folder above
+  (or the one above that, never the library root), marked **from folder** on the card. 3MF files from Bambu Studio
+  and OrcaSlicer show the preview picture stored inside them. Borrowing from the folder above is **on by default**;
+  turn it off per library under Settings › Libraries › (library) › Collections & folder rules.
+- **Rendered previews.** Models that still have no picture get a preview rendered from their 3D file: grey on light
+  grey, with a dashed frame and a **rendered** badge, so it is never mistaken for a photo. Only cards on screen are
+  rendered, one at a time; files over 50 MB only when you ask. Hover a card to **Save** it (written as
+  `preview_<file>.png` into the model folder) or, in a read-only library, **Keep** it in the app; ✕ skips the model
+  for good. **Save all** / **Keep all** above the grid does it for all of them. Keep and skip can be undone.
+  Settings › General chooses whether previews render for models on screen, only when you ask, or never.
+- **Scroll through a model's pictures with the mouse.** The picture strip on the model page has arrows on the left
+  and right when there are more pictures than fit.
+
+### Improved
+- **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion
+  or removing a rule now take effect at once; the models are regrouped in the background. Marking several folders
+  in a row regroups only once, and a running scan is simply waited for.
+- **Regrouping is about four times faster.** Only the models that actually change are updated, instead of all of
+  them. In a library with about 45,000 models this takes about half a second instead of more than two.
+- **Scans write far less.** Folders that did not change cost no work in the app's index any more, which saves
+  several seconds per scan in big libraries, and the app now asks the NAS for more folders at the same time.
+- **Pictures load quickly during a scan.** Pictures and 3D files now go first: while you wait for one, a running scan
+  steps back for a moment, so browsing stays smooth while the library is being read.
+- The first start after the update takes a few seconds longer once while the app prepares its index.
+
+### Fixed
+- Clicking a folder in the path at the top sometimes opened "Everything inside" instead of the folder, depending on
+  where you came from. It now always opens the folder, like the sidebar.
+- "Treat as one model" and the other folder choices did nothing while a scan was running. They now take effect
+  during the scan.
+
 ## [1.0.0] - 2026-11-08
 
 3D Hoard Deck is ready for everyday use. This release is about finding your models faster, giving every folder a
@@ -105,5 +191,7 @@ never writes into a library unless you allow it.
 - Some messages from deep inside the app, such as rare file-system errors, are still shown in English.
 - There are no automatic updates yet.
 
+[Unreleased]: https://github.com/Ragin-LundF/3d-hoard-deck/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Ragin-LundF/3d-hoard-deck/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Ragin-LundF/3d-hoard-deck/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/Ragin-LundF/3d-hoard-deck/releases/tag/v0.1.0

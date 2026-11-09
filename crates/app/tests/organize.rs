@@ -68,7 +68,7 @@ fn user_metadata_is_searchable_and_reaches_sidecars_only_when_allowed() {
     let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
     assert_eq!((report.restored, report.unreadable), (1, 0));
     assert_eq!(search("wyrm")[0].id, dragon, "restored from the file");
-    assert_eq!(app.list_tags.execute(library.id).expect("tags")[0].0.as_str(), "Resin");
+    assert_eq!(app.tags.list(library.id).expect("tags")[0].name.as_str(), "Resin");
 }
 
 #[test]
@@ -366,4 +366,211 @@ fn scanning_a_folder_that_was_deleted_outside_the_app_removes_it() {
     };
     assert_eq!(found("gone"), 0, "the deleted folder's model is removed");
     assert_eq!(found("kept"), 1, "the rest of the library stays");
+}
+
+/// Counts the "done" events of background regroups.
+struct DoneCounter(std::sync::atomic::AtomicUsize);
+
+impl EventSink for DoneCounter {
+    fn scan_progress(&self, progress: &ScanProgress) {
+        if progress.partial && progress.phase == hoarddeck_application::scan::ScanPhase::Done {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+#[test]
+fn several_folder_marks_in_a_row_return_at_once_and_regroup_once() {
+    use hoarddeck_application::scan::FolderRole;
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["A/x/a.stl", "B/x/b.stl", "C/x/c.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let counter = Arc::new(DoneCounter(std::sync::atomic::AtomicUsize::new(0)));
+    let app = App::open(index_dir.path(), 2, counter.clone()).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    for folder in ["A", "B", "C"] {
+        let folder = RelPath::new(folder).expect("valid");
+        app.set_folder_role.queue(library.id, &folder, Some(FolderRole::Model)).expect("queued");
+    }
+    assert_eq!(app.folder_rules.list(library.id).expect("rules").len(), 3, "the rules are saved at once");
+    assert!(app.folder_rules.editor.wait_for_regroups(std::time::Duration::from_secs(10)));
+    assert_eq!(counter.0.load(std::sync::atomic::Ordering::SeqCst), 1, "three marks, one regroup");
+    let page = app
+        .browse_folder
+        .execute(&hoarddeck_application::browse::BrowseRequest {
+            library: library.id,
+            folder: RelPath::root(),
+            recursive: false,
+            sort: hoarddeck_application::browse::Sort::Name,
+            cursor: None,
+            limit: 10,
+        })
+        .expect("browse");
+    assert_eq!(page.page.models.len(), 3, "A, B and C are models now");
+}
+
+#[test]
+fn tags_are_counted_per_view_merged_deleted_grouped_and_pinned() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Minis/Orc/orc.stl", "Minis/Elf/elf.stl", "Tools/Clip/clip.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Lib", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let id_of = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models[0].id
+    };
+    let tag = |names: &[&str]| ModelMeta {
+        tags: names.iter().map(|name| TagName::new(name).expect("valid")).collect(),
+        ..ModelMeta::default()
+    };
+    app.update_model_meta.execute(id_of("orc"), tag(&["Sci-Fi", "Ärger"])).expect("orc");
+    app.update_model_meta.execute(id_of("elf"), tag(&["SciFi", "ärger"])).expect("elf");
+    app.update_model_meta.execute(id_of("clip"), tag(&["Functional"])).expect("clip");
+
+    let minis = RelPath::new("Minis").expect("valid");
+    let facets = app.tags.facets(library.id, &minis, "", 10).expect("facets");
+    let names: Vec<&str> = facets.iter().map(|(name, _)| name.as_str()).collect();
+    assert!(!names.contains(&"Functional"), "only what is in Minis: {names:?}");
+    let searched = app.tags.facets(library.id, &RelPath::root(), "clip", 10).expect("facets of a search");
+    assert_eq!(searched.iter().map(|(name, count)| (name.as_str(), *count)).collect::<Vec<_>>(), [("Functional", 1)]);
+
+    let sci_fi = TagName::new("Sci-Fi").expect("valid");
+    app.tags.set_pinned(library.id, &[TagName::new("SciFi").expect("valid")], true).expect("pin");
+    let merged =
+        app.tags.rename(library.id, &[TagName::new("SciFi").expect("valid"), sci_fi.clone()], &sci_fi).expect("merge");
+    assert_eq!(merged, 2);
+    let request = SearchRequest { text: "tag:sci-fi".to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+    assert_eq!(app.search_models.execute(&request).expect("search").total, 2, "the search index follows the merge");
+    let list = app.tags.list(library.id).expect("tags");
+    let merged_tag = list.iter().find(|info| info.name == sci_fi).expect("merged tag");
+    assert_eq!(merged_tag.count, 2);
+    assert!(merged_tag.pinned, "the pin moved to the merged tag");
+    assert!(!list.iter().any(|info| info.name.as_str() == "SciFi"));
+    assert_eq!(
+        list.iter().find(|info| info.name.key() == "ärger").map(|info| info.count),
+        Some(2),
+        "umlauts count together"
+    );
+
+    let group = app.tags.save_group(library.id, None, "Genre", "#4f8cff").expect("group");
+    app.tags.set_group(library.id, std::slice::from_ref(&sci_fi), Some(group)).expect("move to group");
+    assert_eq!(
+        app.tags.list(library.id).expect("tags").iter().find(|info| info.name == sci_fi).and_then(|info| info.group),
+        Some(group)
+    );
+    app.tags.delete_group(library.id, group).expect("delete group");
+    assert_eq!(
+        app.tags.list(library.id).expect("tags").iter().find(|info| info.name == sci_fi).and_then(|info| info.group),
+        None
+    );
+
+    assert_eq!(app.tags.delete(library.id, &[sci_fi]).expect("delete"), 2);
+    assert_eq!(app.search_models.execute(&request).expect("search").total, 0);
+}
+
+#[test]
+fn renaming_a_tag_rewrites_the_metadata_file_of_every_model() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let names: Vec<String> = (0..9).map(|index| format!("Minis/Model {index}")).collect();
+    for name in &names {
+        write_stl(library_dir.path(), &format!("{name}/model.stl"));
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Minis", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexAndSidecar)
+        .expect("allow metadata files");
+    let request = SearchRequest { text: "model".to_owned(), library: None, scope: None, offset: 0, limit: 20 };
+    for model in app.search_models.execute(&request).expect("search").models {
+        let meta =
+            ModelMeta { tags: [TagName::new("SciFi").expect("valid")].into_iter().collect(), ..ModelMeta::default() };
+        app.update_model_meta.execute(model.id, meta).expect("tag");
+    }
+
+    let renamed =
+        app.tags.rename(library.id, &[TagName::new("SciFi").expect("valid")], &TagName::new("Sci-Fi").expect("valid"));
+    assert_eq!(renamed.expect("rename"), 9);
+    for name in &names {
+        let file = fs::read_to_string(library_dir.path().join(name).join(".3dhoarddeck")).expect("metadata file");
+        let json: serde_json::Value = serde_json::from_str(&file).expect("json");
+        assert_eq!(json["tags"], serde_json::json!(["Sci-Fi"]), "{name}");
+    }
+}
+
+#[test]
+fn rendered_previews_wait_in_the_app_folder_until_kept_or_skipped() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    write_stl(library_dir.path(), "Parts/Knob/knob_v2.stl");
+    write_stl(library_dir.path(), "Parts/Clip/clip.stl");
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Parts", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let find = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 1 };
+        app.search_models.execute(&request).expect("search").models.remove(0)
+    };
+    let (knob, clip) = (find("knob").id, find("clip").id);
+    let png = {
+        let mut bytes = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+        bytes.extend_from_slice(&[0; 16]);
+        bytes
+    };
+    assert_eq!(
+        app.rendered.source(knob).expect("source").map(|(path, _)| path.as_str().to_owned()).as_deref(),
+        Some("Parts/Knob/knob_v2.stl")
+    );
+    assert!(app.rendered.store(knob, b"not a png").is_err());
+    app.rendered.store(knob, &png).expect("store knob");
+    app.rendered.store(clip, &png).expect("store clip");
+    assert_eq!(find("knob").rendered.as_deref(), Some("cached"));
+    assert!(
+        !library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists(),
+        "nothing in the library before keeping"
+    );
+
+    let kept = app.rendered.keep(&[knob]).expect("keep in a read-only library");
+    assert_eq!(
+        (kept.written, kept.kept, find("knob").rendered.as_deref()),
+        (0, 1, Some("kept")),
+        "kept in the index only"
+    );
+    assert!(!library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists());
+    app.rendered.reset(&[knob], Some("cached")).expect("undo");
+    app.update_library_settings
+        .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexOnly)
+        .expect("allow files");
+    let kept = app.rendered.keep(&[knob, clip]).expect("save all");
+    assert_eq!((kept.written, kept.kept), (2, 0));
+    assert!(library_dir.path().join("Parts/Knob/preview_knob_v2.png").exists());
+    let (knob_now, clip_now) = (find("knob"), find("clip"));
+    assert_eq!(
+        (knob_now.rendered, knob_now.cover.map(String::from), clip_now.cover.map(String::from)),
+        (None, Some("Parts/Knob/preview_knob_v2.png".to_owned()), Some("Parts/Clip/preview_clip.png".to_owned())),
+        "both folders are in the index after one update"
+    );
+
+    app.rendered.store(clip, &png).expect("render again");
+    app.rendered.skip(&[clip]).expect("skip");
+    assert_eq!(find("clip").rendered.as_deref(), Some("skipped"));
+    app.rendered.reset(&[clip], Some("cached")).expect("undo skip");
+    assert_eq!(find("clip").rendered.as_deref(), Some("cached"));
 }

@@ -30,9 +30,14 @@ pub fn handle<R: Runtime>(context: UriSchemeContext<'_, R>, request: Request<Vec
     let app = handle.state::<Arc<App>>().inner().clone();
     let thumbnails = handle.state::<Arc<ThumbnailCache>>().inner().clone();
     let path = request.uri().path().to_owned();
+    // While the user waits for a picture or 3D file from the library, a running scan steps back. Covers already in the
+    // thumbnail cache need no library read, so they take the guard only when the thumbnail has to be made.
+    let local = ["thumb/", "rendered/"].iter().any(|prefix| path.trim_start_matches('/').starts_with(prefix));
+    let foreground = (!local).then(|| app.io_priority.foreground());
     pool::run(
         lane(&path),
         Box::new(move |dropped| {
+            let _foreground = foreground;
             // A request dropped from a full queue still gets an answer, so the webview never waits forever.
             if dropped {
                 return responder.respond(status(StatusCode::SERVICE_UNAVAILABLE));
@@ -63,6 +68,13 @@ fn route(app: &App, thumbnails: &ThumbnailCache, uri_path: &str) -> Routed {
     let Some(decoded) = percent_decode_str(uri_path.trim_start_matches('/')).decode_utf8().ok() else {
         return Routed::Now(status(StatusCode::BAD_REQUEST));
     };
+    if let Some(id) = decoded.strip_prefix("rendered/") {
+        // Previews rendered in the app live in its own folder; only a model id is accepted, never a path.
+        return Routed::Now(match id.parse::<i64>() {
+            Ok(id) => read(&thumbnails.rendered_path(hoarddeck_domain::ModelId(id)), "image/png", "no-cache"),
+            Err(_) => status(StatusCode::BAD_REQUEST),
+        });
+    }
     if let Some(rest) = decoded.strip_prefix("thumb/") {
         return Routed::Now(serve_thumbnail(app, thumbnails, rest));
     }
@@ -91,10 +103,13 @@ fn serve_file(app: &App, path: &str) -> Routed {
 
 /// Covers in the grid: decoded and scaled once, then served from the cache folder.
 fn serve_thumbnail(app: &App, thumbnails: &ThumbnailCache, path: &str) -> Response<Vec<u8>> {
-    let Some(file) = resolve(app, path).filter(|file| file.kind == Kind::Image) else {
+    // A 3MF stands for the preview picture inside it.
+    let Some(file) = resolve(app, path).filter(|file| matches!(file.kind, Kind::Image | Kind::ThreeMf)) else {
         return status(StatusCode::NOT_FOUND);
     };
-    match thumbnails.get_or_create(&file.path) {
+    let cached = thumbnails.cached(&file.path).ok().flatten();
+    let _foreground = cached.is_none().then(|| app.io_priority.foreground());
+    match cached.map_or_else(|| thumbnails.get_or_create(&file.path), Ok) {
         // The URL names only the source, not its version: keep browser caching short so a replaced cover shows up.
         Ok(thumbnail) => read(&thumbnail, "image/jpeg", "max-age=60"),
         Err(_) => status(StatusCode::UNPROCESSABLE_ENTITY),

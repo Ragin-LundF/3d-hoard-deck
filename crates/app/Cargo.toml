@@ -12,6 +12,8 @@ hoarddeck-infra-mesh.workspace = true
 hoarddeck-infra-sqlite.workspace = true
 hoarddeck-infra-tantivy.workspace = true
 hoarddeck-infra-platform.workspace = true
+hoarddeck-infra-ai.workspace = true
+hoarddeck-infra-thumbs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

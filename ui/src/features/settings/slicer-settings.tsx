@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, describeError, unwrap, type SlicerDto } from "../../ipc";
@@ -19,6 +20,19 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
   });
   const list = slicers.data ?? [];
   const update = (next: SlicerDto[]) => save.mutate(next);
+  const [dragged, setDragged] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const move = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= list.length) return;
+    const next = list.filter((_, i) => i !== from);
+    next.splice(to, 0, list[from]!);
+    update(next);
+  };
+  const drop = (target: number) => {
+    if (dragged !== null) move(dragged, target);
+    setDragged(null);
+    setOver(null);
+  };
 
   const add = async () => {
     const program = await open({ directory: false, title: t("Choose the slicer program") });
@@ -34,7 +48,17 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
           <div className="prow2"><div className="t"><b>{t("No slicers yet")}</b><span>{t("Find installed ones or add a program yourself.")}</span></div></div>
         )}
         {list.map((slicer, index) => (
-          <div className="prow2" key={slicer.program}>
+          <div
+            className={`prow2 slicer-row${over === index ? " drop" : ""}`}
+            key={slicer.program}
+            draggable
+            onDragStart={() => setDragged(index)}
+            onDragOver={(event) => { event.preventDefault(); setOver(index); }}
+            onDragLeave={() => setOver(null)}
+            onDrop={() => drop(index)}
+            onDragEnd={() => { setDragged(null); setOver(null); }}
+          >
+            <span className="grip" aria-hidden="true">⋮⋮</span>
             <div className="t">
               <b>{slicer.name} {index === 0 && <span className="pill ok-pill">{t("Default")}</span>}</b>
               <span className="mono">{slicer.program}</span>
@@ -51,7 +75,9 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
                 />
               </label>
             </div>
-            {index > 0 && <button className="btn" onClick={() => update([slicer, ...list.filter((_, i) => i !== index)])}>{t("Make default")}</button>}
+            <button className="btn ghost" disabled={index === 0} onClick={() => move(index, index - 1)} aria-label={t("Move {name} up", { name: slicer.name })} title={t("Move up")}>↑</button>
+            <button className="btn ghost" disabled={index === list.length - 1} onClick={() => move(index, index + 1)} aria-label={t("Move {name} down", { name: slicer.name })} title={t("Move down")}>↓</button>
+            {index > 0 && <button className="btn" onClick={() => move(index, 0)}>{t("Make default")}</button>}
             <button className="btn ghost" onClick={() => update(list.filter((_, i) => i !== index))} aria-label={t("Remove {name}", { name: slicer.name })}>{t("Remove")}</button>
           </div>
         ))}

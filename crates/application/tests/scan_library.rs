@@ -4,15 +4,17 @@ use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Mutex};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
+use hoarddeck_application::ports::TagRuleStore;
 use hoarddeck_application::ports::{
-    EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
+    CatalogChange, EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
 };
 use hoarddeck_application::scan::{
     CompiledRules, Generation, KnownDirs, LibraryLocks, ScanItem, ScanLibrary, ScanMode, ScanProgress, ScanRules,
 };
 use hoarddeck_application::search::{SearchDocument, SearchHits, SearchQuery};
+use hoarddeck_application::tagging::{TagRule, TagRuleBook};
 use hoarddeck_application::{AppError, IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
-use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, RelPath};
+use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, ModelKind, RelPath};
 
 #[derive(Default)]
 struct Store {
@@ -41,8 +43,12 @@ impl LibraryRepository for Store {
     fn save_settings(&self, _: LibraryId, _: LibrarySettings) -> Result<(), IndexError> {
         Ok(())
     }
-    fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
-        Ok(())
+    fn update_scan_rules(
+        &self,
+        _: LibraryId,
+        _: &mut dyn FnMut(&mut ScanRules) -> bool,
+    ) -> Result<Option<ScanRules>, IndexError> {
+        Ok(None)
     }
     fn last_scan_at(&self, _: LibraryId) -> Result<Option<i64>, IndexError> {
         Ok(None)
@@ -60,7 +66,17 @@ impl EntryStore for Store {
         *self.finished.lock().expect("lock") = true;
         Ok(0)
     }
-    fn finish_folder_scan(&self, library: LibraryId, generation: Generation, _: &RelPath) -> Result<u64, IndexError> {
+    fn remove_folders(&self, _: LibraryId, _: &[RelPath]) -> Result<u64, IndexError> {
+        Ok(0)
+    }
+
+    fn finish_folder_scan(
+        &self,
+        library: LibraryId,
+        generation: Generation,
+        _: &RelPath,
+        _: bool,
+    ) -> Result<u64, IndexError> {
         self.finish_scan(library, generation)
     }
     fn folders(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
@@ -75,9 +91,21 @@ impl EntryStore for Store {
 }
 
 impl ModelRepository for Store {
-    fn replace_catalog(&self, _: LibraryId, _: &Catalog) -> Result<(), IndexError> {
-        *self.replaced.lock().expect("lock") = true;
+    fn models_at(&self, _: LibraryId, _: &[RelPath]) -> Result<Vec<(RelPath, ModelId, ModelKind)>, IndexError> {
+        Ok(Vec::new())
+    }
+
+    fn search_pending(&self, _: LibraryId) -> Result<bool, IndexError> {
+        Ok(false)
+    }
+
+    fn set_search_pending(&self, _: LibraryId, _: bool) -> Result<(), IndexError> {
         Ok(())
+    }
+
+    fn replace_catalog(&self, _: LibraryId, _: &Catalog) -> Result<CatalogChange, IndexError> {
+        *self.replaced.lock().expect("lock") = true;
+        Ok(CatalogChange::default())
     }
     fn search_documents(&self, _: LibraryId) -> Result<Vec<SearchDocument>, IndexError> {
         Ok(Vec::new())
@@ -114,6 +142,9 @@ impl SearchIndex for NoSearch {
     fn update_documents(&self, _: &[SearchDocument]) -> Result<(), SearchError> {
         Ok(())
     }
+    fn apply_changes(&self, _: &[SearchDocument], _: &[ModelId]) -> Result<(), SearchError> {
+        Ok(())
+    }
     fn search(&self, _: &SearchQuery) -> Result<SearchHits, SearchError> {
         Ok(SearchHits::default())
     }
@@ -132,6 +163,10 @@ struct ScriptedScanner {
 }
 
 impl LibraryScanner for ScriptedScanner {
+    fn exists(&self, _: &str, _: &RelPath) -> Result<bool, String> {
+        Ok(false)
+    }
+
     fn scan(
         &self,
         _: &str,
@@ -147,6 +182,18 @@ impl LibraryScanner for ScriptedScanner {
     }
 }
 
+struct NoTagRules;
+
+impl TagRuleStore for NoTagRules {
+    fn load_tag_rules(&self) -> Result<Vec<TagRule>, IndexError> {
+        Ok(Vec::new())
+    }
+
+    fn save_tag_rules(&self, _rules: &[TagRule]) -> Result<(), IndexError> {
+        Ok(())
+    }
+}
+
 fn scan_with(scanner: ScriptedScanner) -> (Arc<Store>, Result<(), AppError>) {
     let store = Arc::new(Store::default());
     let use_case = ScanLibrary::new(
@@ -157,6 +204,7 @@ fn scan_with(scanner: ScriptedScanner) -> (Arc<Store>, Result<(), AppError>) {
         Arc::new(scanner),
         Arc::new(Silent),
         Arc::new(LibraryLocks::default()),
+        Arc::new(TagRuleBook::new(Arc::new(NoTagRules))),
     );
     let result = use_case.execute(LibraryId(1), ScanMode::Incremental).map(|_| ());
     (store, result)

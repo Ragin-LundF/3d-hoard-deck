@@ -30,9 +30,15 @@ pub trait LibraryRepository: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn save_settings(&self, id: LibraryId, settings: LibrarySettings) -> Result<(), IndexError>;
+    /// Reads, changes and saves the rules in one transaction, so a move finishing at the same time is not overwritten.
+    /// `change` returns false to save nothing. Returns the saved rules.
     /// # Errors
-    /// Fails when the index cannot be written.
-    fn save_scan_rules(&self, id: LibraryId, rules: &ScanRules) -> Result<(), IndexError>;
+    /// Fails when the index cannot be read or written.
+    fn update_scan_rules(
+        &self,
+        id: LibraryId,
+        change: &mut dyn FnMut(&mut ScanRules) -> bool,
+    ) -> Result<Option<ScanRules>, IndexError>;
     /// When the last complete scan finished, in seconds since 1970.
     /// # Errors
     /// Fails when the index cannot be read.
@@ -57,7 +63,8 @@ pub trait EntryStore: Send + Sync {
     /// Fails when the index cannot be written.
     fn finish_scan(&self, library: LibraryId, generation: Generation) -> Result<u64, IndexError>;
     /// Like [`Self::finish_scan`] after scanning only `folder` and what is below it: removes unseen entries there and
-    /// leaves the rest of the library alone.
+    /// leaves the rest of the library alone. `visited` is false when the scan reported nothing for `folder` itself,
+    /// because it no longer exists; then it is removed with everything below it.
     /// # Errors
     /// Fails when the index cannot be written.
     fn finish_folder_scan(
@@ -65,11 +72,16 @@ pub trait EntryStore: Send + Sync {
         library: LibraryId,
         generation: Generation,
         folder: &RelPath,
+        visited: bool,
     ) -> Result<u64, IndexError>;
     /// All stored folder paths of a library (the root excluded).
     /// # Errors
     /// Fails when the index cannot be read.
     fn folders(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError>;
+    /// Removes `folders` and everything below them, e.g. folders an ignore rule now hides. Returns the entries removed.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn remove_folders(&self, library: LibraryId, folders: &[RelPath]) -> Result<u64, IndexError>;
     /// Model files (meshes, slicer projects, archives) of at least `min_size` bytes that share their size with another
     /// such file in any library, grouped by size, largest first.
     /// # Errors
@@ -82,10 +94,11 @@ pub trait EntryStore: Send + Sync {
 }
 
 pub trait ModelRepository: Send + Sync {
-    /// Replaces folders and models of a library, keeping ids of models whose path did not change.
+    /// Replaces folders and models of a library, keeping ids of models whose path did not change. Only what differs
+    /// is written; the result names the models that are new or changed, and those that are gone.
     /// # Errors
     /// Fails when the index cannot be written.
-    fn replace_catalog(&self, library: LibraryId, catalog: &Catalog) -> Result<(), IndexError>;
+    fn replace_catalog(&self, library: LibraryId, catalog: &Catalog) -> Result<CatalogChange, IndexError>;
     /// # Errors
     /// Fails when the index cannot be read.
     fn search_documents(&self, library: LibraryId) -> Result<Vec<SearchDocument>, IndexError>;
@@ -114,6 +127,30 @@ pub trait ModelRepository: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be read.
     fn loose_images(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<RelPath>, IndexError>;
+    /// Set before models are written and cleared once the search index has them; still set at the next regroup
+    /// (search failed, or the app stopped in between) means the search index must be rebuilt.
+    /// # Errors
+    /// Fails when the index cannot be read or written.
+    fn search_pending(&self, library: LibraryId) -> Result<bool, IndexError>;
+    /// Id and kind of the models at `paths` (unknown paths are left out); cheap compared to loading every document.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn models_at(
+        &self,
+        library: LibraryId,
+        paths: &[RelPath],
+    ) -> Result<Vec<(RelPath, ModelId, ModelKind)>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_search_pending(&self, library: LibraryId, pending: bool) -> Result<(), IndexError>;
+}
+
+/// What a [`ModelRepository::replace_catalog`] changed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CatalogChange {
+    /// New models and models whose files, title, cover or grouping changed.
+    pub changed: Vec<ModelId>,
+    pub removed: Vec<ModelId>,
 }
 
 pub trait SearchIndex: Send + Sync {
@@ -125,6 +162,10 @@ pub trait SearchIndex: Send + Sync {
     /// # Errors
     /// Fails when the search index cannot be written.
     fn update_documents(&self, docs: &[SearchDocument]) -> Result<(), SearchError>;
+    /// Replaces `docs` and drops the `removed` models, in one commit.
+    /// # Errors
+    /// Fails when the search index cannot be written.
+    fn apply_changes(&self, docs: &[SearchDocument], removed: &[ModelId]) -> Result<(), SearchError>;
     /// # Errors
     /// Fails when the search index cannot be read.
     fn search(&self, query: &SearchQuery) -> Result<SearchHits, SearchError>;
@@ -146,6 +187,10 @@ pub trait LibraryScanner: Send + Sync {
         rules: &CompiledRules,
         out: &SyncSender<ScanItem>,
     ) -> Result<(), ScanError>;
+    /// Whether `path` exists below `root`, asked again before a folder that seems gone is removed from the index.
+    /// # Errors
+    /// A readable reason when the answer is unknown (share offline, no permission).
+    fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String>;
 }
 
 /// Tags, names, marks and notes, kept per model path so they survive regrouping.
@@ -158,14 +203,84 @@ pub trait MetaStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be written.
     fn save_meta(&self, library: LibraryId, path: &RelPath, meta: &ModelMeta) -> Result<(), IndexError>;
+    /// Like [`Self::save_meta`] for many models, in one transaction.
+    /// # Errors
+    /// Fails when the index cannot be written; then nothing is changed.
+    fn save_metas(&self, library: LibraryId, metas: &[(RelPath, ModelMeta)]) -> Result<(), IndexError>;
     /// When the metadata was last saved (seconds since 1970); `None` when there is none.
     /// # Errors
     /// Fails when the index cannot be read.
     fn meta_updated_at(&self, library: LibraryId, path: &RelPath) -> Result<Option<i64>, IndexError>;
-    /// Every tag in use with the number of models carrying it, most used first.
+}
+
+/// A tag in use, with how it is shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagInfo {
+    pub name: TagName,
+    /// Models carrying it.
+    pub count: u32,
+    pub group: Option<i64>,
+    pub pinned: bool,
+    /// When a model carrying it was last changed (seconds since 1970), for "recently used".
+    pub recent: i64,
+}
+
+/// A user-made group of tags, such as Scale or Genre.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagGroup {
+    pub id: i64,
+    pub name: String,
+    /// A CSS colour, such as `#4f8cff`.
+    pub color: String,
+}
+
+/// Which models a tag count covers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagScope {
+    /// Models in the folder and below it (the root: the whole library).
+    Folder(RelPath),
+    Models(Vec<ModelId>),
+}
+
+/// Tag groups, pins and counts. The tags themselves live in each model's metadata.
+pub trait TagStore: Send + Sync {
+    /// Every tag in use, most used first.
     /// # Errors
     /// Fails when the index cannot be read.
-    fn tags(&self, library: LibraryId) -> Result<Vec<(TagName, u32)>, IndexError>;
+    fn tag_infos(&self, library: LibraryId) -> Result<Vec<TagInfo>, IndexError>;
+    /// The most used tags among the models in `scope`.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn tag_counts(&self, library: LibraryId, scope: &TagScope, limit: usize)
+    -> Result<Vec<(TagName, u32)>, IndexError>;
+    /// Model paths carrying any of the tags (compared without case).
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn paths_with_tags(&self, library: LibraryId, tags: &[TagName]) -> Result<Vec<RelPath>, IndexError>;
+    /// After a rename or merge: the group and pin of the first old tag move to `to`, unless it has its own.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn move_tag_info(&self, library: LibraryId, from: &[TagName], to: &TagName) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn forget_tags(&self, library: LibraryId, tags: &[TagName]) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_tag_group(&self, library: LibraryId, tags: &[TagName], group: Option<i64>) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_tag_pinned(&self, library: LibraryId, tags: &[TagName], pinned: bool) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn tag_groups(&self, library: LibraryId) -> Result<Vec<TagGroup>, IndexError>;
+    /// Creates a group (`id` = `None`) or renames and recolours one. Returns its id.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_tag_group(&self, library: LibraryId, id: Option<i64>, name: &str, color: &str) -> Result<i64, IndexError>;
+    /// Its tags become ungrouped.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn delete_tag_group(&self, library: LibraryId, id: i64) -> Result<(), IndexError>;
 }
 
 /// Hand-made and smart collections. Members are kept by library and path, so they survive regrouping.
@@ -323,7 +438,8 @@ pub trait FileJournal: Send + Sync {
     /// Fails when the index cannot be written.
     fn set_status(&self, id: i64, status: JournalStatus) -> Result<(), IndexError>;
     /// In one transaction: moves names, tags, marks, notes, picked cover, collection membership and smart-collection
-    /// scopes from `from` to `to`, saves `rules` (already rewritten for the new path) and sets `status`.
+    /// scopes from `from` to `to`, rewrites the folder rules for the new path (read in the same transaction, so a rule
+    /// edit at the same moment is not lost) and sets `status`.
     /// # Errors
     /// Fails when the index cannot be written; then nothing is changed.
     fn finish(
@@ -332,7 +448,6 @@ pub trait FileJournal: Send + Sync {
         library: LibraryId,
         from: &RelPath,
         to: &RelPath,
-        rules: &ScanRules,
         status: JournalStatus,
     ) -> Result<(), IndexError>;
     /// # Errors
@@ -469,6 +584,132 @@ pub trait IndexLocationStore: Send + Sync {
 }
 
 /// The user's slicer list, kept with the index.
+/// The tag rules, kept with the app settings (they apply to every library).
+pub trait TagRuleStore: Send + Sync {
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn load_tag_rules(&self) -> Result<Vec<crate::tagging::TagRule>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_tag_rules(&self, rules: &[crate::tagging::TagRule]) -> Result<(), IndexError>;
+}
+
+/// One question to an AI: instructions, the model's name and folder, and its preview picture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestRequest {
+    pub system: String,
+    pub text: String,
+    pub image_jpeg: Option<Vec<u8>>,
+}
+
+/// The tags as the AI wrote them, and the model that answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiAnswer {
+    pub tags: Vec<String>,
+    pub model: String,
+}
+
+/// An AI server: `OpenAI`-compatible (LM Studio, Ollama, `OpenAI`, others) or Anthropic.
+pub trait TagSuggester: Send + Sync {
+    /// The models the server offers, for choosing one.
+    /// # Errors
+    /// A readable reason when the server cannot be reached or refuses.
+    fn models(&self, settings: &crate::ai::AiSettings, key: Option<&str>) -> Result<Vec<String>, String>;
+    /// # Errors
+    /// A readable reason when the server cannot be reached, refuses, or answers with no tags.
+    fn suggest(
+        &self,
+        settings: &crate::ai::AiSettings,
+        key: Option<&str>,
+        request: &SuggestRequest,
+    ) -> Result<AiAnswer, String>;
+}
+
+/// Secrets in the system's keychain (macOS Keychain, Windows Credential Manager, Secret Service on Linux).
+pub trait SecretStore: Send + Sync {
+    /// # Errors
+    /// A readable reason when the keychain cannot be used.
+    fn secret(&self, name: &str) -> Result<Option<String>, String>;
+    /// `None` removes it.
+    /// # Errors
+    /// A readable reason when the keychain cannot be used.
+    fn set_secret(&self, name: &str, value: Option<&str>) -> Result<(), String>;
+}
+
+/// A small JPEG of an image file, from the thumbnail cache.
+pub trait PreviewImages: Send + Sync {
+    /// # Errors
+    /// A readable reason when the image cannot be read.
+    fn preview_jpeg(&self, file: &Path) -> Result<Vec<u8>, String>;
+}
+
+/// AI settings and the tags an AI suggested, per model path, until the user keeps or dismisses them.
+pub trait AiStore: Send + Sync {
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn load_ai_settings(&self) -> Result<crate::ai::AiSettings, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_ai_settings(&self, settings: &crate::ai::AiSettings) -> Result<(), IndexError>;
+    /// The suggested tags and which AI suggested them (`provider:model`).
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn suggestion(&self, library: LibraryId, path: &RelPath) -> Result<Option<(Vec<TagName>, String)>, IndexError>;
+    /// Also stores an empty answer, so a run that resumes skips the model.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_suggestion(
+        &self,
+        library: LibraryId,
+        path: &RelPath,
+        tags: &[TagName],
+        source: &str,
+    ) -> Result<(), IndexError>;
+    /// Takes `tags` out of the suggestions of `paths`.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn remove_suggested(&self, library: LibraryId, paths: &[RelPath], tags: &[TagName]) -> Result<(), IndexError>;
+    /// Every suggested tag with the number of models it is suggested for, most first.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn suggestion_counts(&self, library: LibraryId) -> Result<Vec<(TagName, u32)>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn paths_with_suggestion(&self, library: LibraryId, tag: &TagName) -> Result<Vec<RelPath>, IndexError>;
+    /// Every model path with suggested tags still waiting, and those tags.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn pending_suggestions(&self, library: LibraryId) -> Result<Vec<(RelPath, Vec<TagName>)>, IndexError>;
+    /// Puts `tags` back into the suggestions of `path` (undo).
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn restore_suggested(&self, library: LibraryId, path: &RelPath, tags: &[TagName]) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn ai_folders(&self, library: LibraryId) -> Result<crate::ai::AiFolders, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_ai_folders(&self, library: LibraryId, folders: &crate::ai::AiFolders) -> Result<(), IndexError>;
+}
+
+/// Previews rendered in the app: their state in the index, keyed by model path.
+pub trait RenderedStore: Send + Sync {
+    /// `None` forgets the state (the model is a render candidate again).
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_rendered(&self, library: LibraryId, paths: &[RelPath], state: Option<&str>) -> Result<(), IndexError>;
+}
+
+/// The rendered pictures themselves, in the app's own folder (never in a library).
+pub trait RenderedCache: Send + Sync {
+    /// # Errors
+    /// A readable reason when the picture cannot be written.
+    fn save_rendered(&self, id: ModelId, png: &[u8]) -> Result<(), String>;
+    /// # Errors
+    /// A readable reason when there is no such picture.
+    fn rendered(&self, id: ModelId) -> Result<Vec<u8>, String>;
+}
+
 pub trait SlicerStore: Send + Sync {
     /// `None` until the list was saved once (first start: detect installed slicers).
     /// # Errors
@@ -495,4 +736,6 @@ pub trait EventSink: Send + Sync {
     fn scan_progress(&self, progress: &ScanProgress);
     /// `done` of `total` groups of same-size files compared.
     fn duplicates_progress(&self, _done: usize, _total: usize) {}
+    /// Tag suggestions: `done` of `total` models asked, `failed` of them without an answer; `running` is false at the end.
+    fn suggest_progress(&self, _library: LibraryId, _done: usize, _total: usize, _failed: usize, _running: bool) {}
 }

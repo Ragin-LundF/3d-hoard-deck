@@ -5,15 +5,19 @@ use hoarddeck_domain::{FileFormat, RelPath};
 pub struct ParsedQuery {
     pub words: Vec<String>,
     pub formats: Vec<FileFormat>,
-    /// Lower-case tag names from `tag:` filters.
+    /// Lower-case tag names from `tag:` filters; every one must be present.
     pub tags: Vec<String>,
+    /// From `tag:a|b`: at least one of them must be present.
+    pub any_tags: Vec<String>,
+    /// From `-tag:` filters: none of them may be present.
+    pub excluded_tags: Vec<String>,
     pub favorite: bool,
     pub printed: bool,
     pub scope: Option<RelPath>,
 }
 
-/// Parses `dragon type:3mf tag:resin is:favorite in:"Miniatures/Wild Life"`. Unknown filters and invalid values
-/// are searched as words.
+/// Parses `dragon type:3mf tag:resin -tag:bust tag:32mm|28mm is:favorite in:"Miniatures/Wild Life"`. Unknown
+/// filters and invalid values are searched as words.
 #[must_use]
 pub fn parse_query(input: &str) -> ParsedQuery {
     let mut parsed = ParsedQuery::default();
@@ -24,7 +28,11 @@ pub fn parse_query(input: &str) -> ParsedQuery {
                 Ok(format) => parsed.formats.push(format),
                 Err(_) => parsed.words.push(token),
             },
+            Some(("tag", value)) if value.contains('|') => {
+                parsed.any_tags.extend(value.split('|').filter(|tag| !tag.is_empty()).map(str::to_lowercase));
+            }
             Some(("tag", value)) => parsed.tags.push(value.to_lowercase()),
+            Some(("-tag", value)) => parsed.excluded_tags.push(value.to_lowercase()),
             Some(("is", "favorite" | "favourite" | "fav")) => parsed.favorite = true,
             Some(("is", "printed")) => parsed.printed = true,
             Some(("in", value)) => match RelPath::new(value.trim_matches('/')) {
@@ -69,6 +77,15 @@ mod tests {
         assert_eq!(parsed.words, vec!["red", "dragon"]);
         assert_eq!(parsed.formats, vec![FileFormat::ThreeMf]);
         assert_eq!(parsed.scope, Some(RelPath::new("Miniatures/Wild Life").expect("valid path")));
+    }
+
+    #[test]
+    fn tags_can_be_excluded_or_alternatives() {
+        let parsed = parse_query(r#"-tag:bust tag:"32mm|28 mm" tag:resin"#);
+        assert_eq!(parsed.excluded_tags, vec!["bust"]);
+        assert_eq!(parsed.any_tags, vec!["32mm", "28 mm"]);
+        assert_eq!(parsed.tags, vec!["resin"]);
+        assert_eq!(parsed.words, Vec::<String>::new());
     }
 
     #[test]

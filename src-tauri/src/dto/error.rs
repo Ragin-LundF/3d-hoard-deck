@@ -41,6 +41,7 @@ impl From<AppError> for IpcError {
             AppError::LaunchFailed(_) => "launch_failed",
             AppError::LibraryBusy(_) => "library_busy",
             AppError::Cancelled => "cancelled",
+            AppError::Ai(_) => "ai_failed",
             AppError::Refused(refusal) => match refusal {
                 Refusal::AlreadyExists(_) => "already_exists",
                 Refusal::EmptyName(_) => "empty_name",

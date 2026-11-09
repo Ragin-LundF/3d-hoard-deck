@@ -20,7 +20,9 @@ allow it.
   can stay inside the current folder.
 - **Covers without effort.** Images from the model folder (or an image next to it with the same name) become
   the cover, resized once and cached so the grid stays fast, even over a network share. Folders without a picture
-  borrow one from their subfolders, like a movie library, and you can pick a folder's picture yourself.
+  borrow one from their subfolders, like a movie library, and you can pick a folder's picture yourself. Models
+  without a picture take the one from the folder above or the preview inside their 3MF; if there is none, the app
+  renders a grey preview that you can save as the cover.
 - **Make your own cover.** Turn a model in the 3D preview until it looks right and press **Screenshot**; the image
   is saved next to the file and becomes the cover of a folder without pictures.
 - **Look at the model in 3D.** Rotate, zoom and pan STL, 3MF and OBJ files, with size in millimetres and the
@@ -49,14 +51,32 @@ allow it.
 
 ![Searching for gears](docs/screenshots/search.png)
 
+## How to install
+
+Download the installer for your system from the [Releases page](https://github.com/Ragin-LundF/3d-hoard-deck/releases).
+The builds are not signed with a developer certificate yet, so your system asks once before the first start.
+
+- **macOS** (Apple Silicon or Intel): the `.dmg`. Open it and drag the app into Applications. On the first start
+  macOS blocks it; allow it under System Settings › Privacy & Security › **Open Anyway**.
+- **Windows**: the `.exe` installer (or the `.msi`). If SmartScreen warns, choose **More info** › **Run anyway**.
+- **Linux**: the `.AppImage` (make it executable and start it), or the `.deb` / `.rpm` package for your
+  distribution.
+
+You can also build the app yourself as described in [docs/developer.md](docs/developer.md#build-an-installer).
+
+### Install with Homebrew (macOS)
+
+```bash
+brew install --cask ragin-lundf/tap/3d-hoard-deck
+```
+
+Because the app is not signed yet, allow it once under System Settings › Privacy & Security › **Open Anyway**
+after the first start. `brew upgrade --cask 3d-hoard-deck` gets a
+new version; the app's own update check works as well.
+
 ## Getting started
 
-1. **Install the app.** Download the installer for your system from the
-   [Releases page](https://github.com/Ragin-LundF/3d-hoard-deck/releases): `.dmg` for macOS (Apple Silicon or
-   Intel), `.exe` or `.msi` for Windows, `.AppImage`, `.deb` or `.rpm` for Linux. The builds are not signed with a
-   developer certificate yet, so the system asks once: on macOS allow the app under System Settings › Privacy &
-   Security › **Open Anyway**; on Windows choose **More info** › **Run anyway**. You can also build it yourself as
-   described in [docs/developer.md](docs/developer.md#build-an-installer).
+1. **Install the app** as described in [How to install](#how-to-install).
 2. **Add your library.** On first start choose **Add library folder** and pick the folder with your models,
    for example a folder on your NAS. The first scan starts right away; large libraries on a network share take
    a few minutes, and you can keep browsing meanwhile.
@@ -71,6 +91,8 @@ allow it.
 | `red dragon` | models matching both words |
 | `type:3mf` or `format:stl` | only models with that file type |
 | `tag:resin` or `tag:"sci fi"` | only models with that tag |
+| `-tag:bust` | models without that tag |
+| `tag:32mm\|28mm` | models with at least one of these tags |
 | `is:favorite`, `is:printed` | only favorites, only printed models |
 | `in:"Miniatures/Forge Masters"` | only models inside that folder |
 
@@ -89,6 +111,17 @@ a layout is unusual, right-click the folder in the sidebar or grid:
 
 All roles and accepted suggestions are listed under **Settings › Libraries**, where each one can be removed.
 Changing a role regroups the library within seconds; the folders are not read again.
+
+### Tags without typing
+
+- **Tag rules** (Settings › Tags › Tag rules) turn folder and file names into tags: `32mm`, `presupported`,
+  `resin`, the creator's folder and whatever you define. Only whole words count, and words such as
+  "unsupported" can stop a rule. **Count matches** and **Try a path** show the effect before saving. Rule tags are
+  kept apart from your own tags; on a model page you can keep one as a normal tag or hide it there.
+- **AI suggestions** (Settings › AI, off by default) use a local server such as LM Studio or Ollama, or OpenAI or
+  Anthropic. The AI sees the preview picture (a small JPEG), the name and, if allowed, the folder path, never the
+  model files. It only suggests; you keep or dismiss on the model page or for many models in the tag browser.
+  The API key stays in the system keychain (`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` also work).
 
 ## Your files are safe
 

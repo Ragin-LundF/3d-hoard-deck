@@ -21,6 +21,17 @@ pub(crate) fn build(query: &SearchQuery, fields: Fields, analyzer: &mut TextAnal
     for tag in &query.tags {
         clauses.push((Occur::Must, term(Term::from_field_text(fields.tag, &nfc(tag)))));
     }
+    if !query.any_tags.is_empty() {
+        let any = query
+            .any_tags
+            .iter()
+            .map(|tag| (Occur::Should, term(Term::from_field_text(fields.tag, &nfc(tag)))))
+            .collect();
+        clauses.push((Occur::Must, Box::new(BooleanQuery::new(any))));
+    }
+    for tag in &query.excluded_tags {
+        clauses.push((Occur::MustNot, term(Term::from_field_text(fields.tag, &nfc(tag)))));
+    }
     for (wanted, flag) in [(query.favorite, "favorite"), (query.printed, "printed")] {
         if wanted {
             clauses.push((Occur::Must, term(Term::from_field_text(fields.flag, flag))));
@@ -36,6 +47,10 @@ pub(crate) fn build(query: &SearchQuery, fields: Fields, analyzer: &mut TextAnal
     }
     if clauses.is_empty() {
         return Box::new(AllQuery);
+    }
+    // Only exclusions: they need something to exclude from.
+    if clauses.iter().all(|(occur, _)| *occur == Occur::MustNot) {
+        clauses.push((Occur::Must, Box::new(AllQuery)));
     }
     Box::new(BooleanQuery::new(clauses))
 }

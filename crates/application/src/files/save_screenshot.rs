@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hoarddeck_domain::{AccessMode, Entry, EntryKind, FileKind, ModelId, RelPath};
+use hoarddeck_domain::{AccessMode, Entry, EntryKind, FileKind, LibraryId, ModelId, RelPath};
 
 use crate::ports::{FileError, FileOperations, LibraryRepository, ModelRepository};
 use crate::scan::{LibraryLocks, ScanLibrary, model_stem};
@@ -38,6 +38,20 @@ impl SaveScreenshot {
     /// Fails for an unknown model, a file that is not part of it, a read-only library, data that is not a PNG, or when
     /// the file cannot be written.
     pub fn execute(&self, id: ModelId, file: &RelPath, png: &[u8]) -> Result<Screenshot, AppError> {
+        let (library, entry) = self.write(id, file, png)?;
+        let path = entry.path.clone();
+        let warning =
+            self.scan.add_files(library, &path.parent().unwrap_or_default(), vec![entry]).err().map(|error| {
+                format!("The screenshot was saved, but the index could not be updated ({error}). Rescan the library.")
+            });
+        Ok(Screenshot { path, warning })
+    }
+
+    /// Writes the picture without updating the index; the caller adds the returned entry (see
+    /// [`ScanLibrary::add_files_in`]), so many pictures cost one regroup.
+    /// # Errors
+    /// As [`Self::execute`].
+    pub fn write(&self, id: ModelId, file: &RelPath, png: &[u8]) -> Result<(LibraryId, Entry), AppError> {
         if png.len() > MAX_BYTES || !png.starts_with(&PNG_SIGNATURE) {
             return Err(AppError::InvalidInput("the screenshot is not a PNG image".to_owned()));
         }
@@ -66,18 +80,14 @@ impl SaveScreenshot {
             written.ok_or_else(|| AppError::InvalidInput("no free name for the screenshot".to_owned()))?
         };
         let entry = Entry {
-            path: path.clone(),
+            path,
             kind: EntryKind::File(FileKind::Image),
             size: png.len() as u64,
             mtime: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0)),
         };
-        let warning =
-            self.scan.add_files(library.id, &path.parent().unwrap_or_default(), vec![entry]).err().map(|error| {
-                format!("The screenshot was saved, but the index could not be updated ({error}). Rescan the library.")
-            });
-        Ok(Screenshot { path, warning })
+        Ok((library.id, entry))
     }
 }
 

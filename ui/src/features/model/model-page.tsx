@@ -55,7 +55,8 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
   const images = files.filter((file) => file.kind === "image");
   const firstMesh = firstViewable(files);
   // Folder images first; models without any image open straight in 3D.
-  const cover = summary.cover ?? images[0]?.path ?? null;
+  // A 3MF's preview is only for cards; here the model opens in 3D.
+  const cover = (summary.coverSource === "embedded" ? null : summary.cover) ?? images[0]?.path ?? null;
   const view: StageView = picked ?? (cover || !firstMesh ? { kind: "image", path: cover } : { kind: "mesh", ...firstMesh });
   const reveal = (path: string) => library && void revealItemInDir(absolutePath(library.root, path));
   const viewing = view.kind === "mesh" ? view.path : null;

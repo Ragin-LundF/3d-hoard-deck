@@ -75,3 +75,72 @@ fn invalid(message: &str) -> IpcError {
 fn internal(error: &tauri::Error) -> IpcError {
     IpcError { code: "internal".to_owned(), message: error.to_string(), details: None }
 }
+
+/// The main mesh of a model to render a preview from, with its size in bytes.
+#[derive(Debug, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderSourceDto {
+    pub path: String,
+    pub size: f64,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn render_source(app: AppState<'_>, id: u32) -> Result<Option<RenderSourceDto>, IpcError> {
+    #[allow(clippy::cast_precision_loss)] // file sizes stay far below 2^53
+    Ok(app
+        .rendered
+        .source(ModelId(i64::from(id)))?
+        .map(|(path, size)| RenderSourceDto { path: path.into(), size: size as f64 }))
+}
+
+/// Stores a preview rendered in the app (in the app's folder, never the library).
+#[tauri::command]
+#[specta::specta]
+pub async fn store_rendered_preview(app: AppState<'_>, id: u32, png: Vec<u8>) -> Result<(), IpcError> {
+    let app = Arc::clone(&app);
+    tauri::async_runtime::spawn_blocking(move || app.rendered.store(ModelId(i64::from(id)), &png))
+        .await
+        .map_err(|error| internal(&error))??;
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptDto {
+    pub written: u32,
+    pub kept: u32,
+}
+
+/// Keeps rendered previews: written into the model folder where allowed, else kept in the index.
+#[tauri::command]
+#[specta::specta]
+pub async fn keep_rendered_previews(app: AppState<'_>, ids: Vec<u32>) -> Result<KeptDto, IpcError> {
+    let app = Arc::clone(&app);
+    let ids: Vec<ModelId> = ids.into_iter().map(|id| ModelId(i64::from(id))).collect();
+    let kept = tauri::async_runtime::spawn_blocking(move || app.rendered.keep(&ids))
+        .await
+        .map_err(|error| internal(&error))??;
+    let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+    Ok(KeptDto { written: count(kept.written), kept: count(kept.kept) })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn skip_rendered_previews(app: AppState<'_>, ids: Vec<u32>) -> Result<(), IpcError> {
+    let ids: Vec<ModelId> = ids.into_iter().map(|id| ModelId(i64::from(id))).collect();
+    Ok(app.rendered.skip(&ids)?)
+}
+
+/// Sets rendered previews back to `state` (`cached`, or none to render again): undo of skip and of keeping in the index.
+#[tauri::command]
+#[specta::specta]
+pub async fn reset_rendered_previews(app: AppState<'_>, ids: Vec<u32>, state: Option<String>) -> Result<(), IpcError> {
+    let ids: Vec<ModelId> = ids.into_iter().map(|id| ModelId(i64::from(id))).collect();
+    let state = match state.as_deref() {
+        None => None,
+        Some("cached") => Some("cached"),
+        Some(_) => return Err(hoarddeck_application::AppError::InvalidInput("unknown state".to_owned()).into()),
+    };
+    Ok(app.rendered.reset(&ids, state)?)
+}

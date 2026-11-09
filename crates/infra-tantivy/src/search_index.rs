@@ -69,13 +69,14 @@ impl SearchIndex for TantivySearchIndex {
     }
 
     fn update_documents(&self, docs: &[SearchDocument]) -> Result<(), SearchError> {
+        self.apply_changes(docs, &[])
+    }
+
+    fn apply_changes(&self, docs: &[SearchDocument], removed: &[ModelId]) -> Result<(), SearchError> {
         let mut writer = self.writer.lock().map_err(|_| SearchError("writer lock poisoned".to_owned()))?;
         let result = (|| {
-            for document in docs {
-                writer.delete_term(Term::from_field_u64(
-                    self.fields.model_id,
-                    u64::try_from(document.id.0).unwrap_or_default(),
-                ));
+            for id in docs.iter().map(|document| document.id).chain(removed.iter().copied()) {
+                writer.delete_term(Term::from_field_u64(self.fields.model_id, u64::try_from(id.0).unwrap_or_default()));
             }
             self.add_documents(&mut writer, docs)?;
             writer.commit().map_err(search_error)?;

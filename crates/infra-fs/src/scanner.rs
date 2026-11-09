@@ -1,11 +1,13 @@
 use std::fs::{self, File, Metadata};
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 
+use crate::IoPriority;
 use hoarddeck_application::ScanError;
 use hoarddeck_application::ports::LibraryScanner;
 use hoarddeck_application::scan::{CompiledRules, KnownDirs, ScanItem};
@@ -15,13 +17,15 @@ use hoarddeck_domain::{Entry, EntryKind, FileKind, RelPath, SNIFF_LEN, Sniff, cl
 /// so a rescan of an unchanged network library only stats folders.
 pub struct FsLibraryScanner {
     threads: usize,
+    priority: Arc<IoPriority>,
 }
 
 impl FsLibraryScanner {
     /// `threads`: parallel folder reads; keep it low for network volumes to avoid thrashing the NAS.
     #[must_use]
-    pub fn new(threads: usize) -> Self {
-        Self { threads: threads.max(1) }
+    /// `priority`: the scan pauses briefly while the user waits for a picture or 3D file.
+    pub fn new(threads: usize, priority: Arc<IoPriority>) -> Self {
+        Self { threads: threads.max(1), priority }
     }
 }
 
@@ -31,9 +35,18 @@ struct Walk<'a> {
     rules: &'a CompiledRules,
     out: &'a SyncSender<ScanItem>,
     stopped: AtomicBool,
+    priority: &'a IoPriority,
 }
 
 impl LibraryScanner for FsLibraryScanner {
+    fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String> {
+        match fs::symlink_metadata(Path::new(root).join(path.as_str())) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
     fn scan(
         &self,
         root: &str,
@@ -52,7 +65,7 @@ impl LibraryScanner for FsLibraryScanner {
             .num_threads(self.threads)
             .build()
             .map_err(|error| ScanError::Aborted(error.to_string()))?;
-        let walk = Walk { root, known, rules, out, stopped: AtomicBool::new(false) };
+        let walk = Walk { root, known, rules, out, stopped: AtomicBool::new(false), priority: &self.priority };
         pool.scope(|scope| visit(scope, &walk, from.clone()));
         if walk.stopped.load(Ordering::Relaxed) {
             return Err(ScanError::Aborted("the index writer stopped".to_owned()));
@@ -65,6 +78,7 @@ fn visit<'s>(scope: &rayon::Scope<'s>, walk: &'s Walk<'s>, dir: RelPath) {
     if walk.stopped.load(Ordering::Relaxed) {
         return;
     }
+    walk.priority.yield_to_foreground();
     let absolute = walk.absolute(&dir);
     let mtime = match with_retries(|| fs::metadata(&absolute)) {
         Ok(metadata) => mtime_millis(&metadata),

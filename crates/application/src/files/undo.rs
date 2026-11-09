@@ -30,9 +30,8 @@ impl UndoFileOperation {
         require_managed(&library)?;
         {
             let _busy = self.locks.lock(library.id)?;
-            let rules = self.libraries.scan_rules(library.id)?;
             self.journal.set_status(id, JournalStatus::Undoing)?;
-            apply(self.files.as_ref(), self.journal.as_ref(), &library.root, &entry, &rules, false)?;
+            apply(self.files.as_ref(), self.journal.as_ref(), &library.root, &entry, false)?;
             save_rules_file(self.sidecars.as_ref(), &library, &self.libraries.scan_rules(library.id)?);
         }
         Ok(FileChange { journal: id, warning: rescan(&self.scan, library.id) })

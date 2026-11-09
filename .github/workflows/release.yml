@@ -45,7 +45,10 @@ jobs:
             exit 1
           fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "3D Hoard Deck $tag" --notes-file - <<'NOTES'
+            # What's new comes from this version's CHANGELOG section; the app's update hint shows it too.
+            changes=$(awk -v v="## [$version]" 'index($0, v) == 1 { on = 1; next } /^## \[/ { on = 0 } on' CHANGELOG.md)
+            { printf '%s\n\n' "$changes"; cat; } <<'NOTES' | gh release create "$tag" --draft --target "$GITHUB_SHA" --title "3D Hoard Deck $tag" --notes-file -
+          ---
           Installers for macOS (Apple Silicon and Intel), Windows and Linux are attached below.
 
           The builds are not signed with a developer certificate yet, so the system asks once before the first start:
@@ -116,9 +119,15 @@ jobs:
 
       # macOS builds are signed ad hoc ("signingIdentity": "-" in tauri.conf.json), so Apple Silicon does not
       # report them as damaged.
+      # With the updater key (secrets TAURI_SIGNING_PRIVATE_KEY and ..._PASSWORD, see docs/developer.md) the builds also
+      # get signed update files and a latest.json, which the app's update check reads. Without the key they build as
+      # before and the app can only point to the release page.
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.id }}
-          args: --target ${{ matrix.target }}
+          updaterJsonPreferNsis: true
+          args: --target ${{ matrix.target }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--config src-tauri/tauri.updater.conf.json' || '' }}

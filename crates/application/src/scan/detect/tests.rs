@@ -210,3 +210,88 @@ fn a_folder_without_any_cover_borrows_a_picture_from_below() {
     let creator = catalog.folders.iter().find(|folder| folder.path == path("Creator")).expect("folder");
     assert_eq!(creator.cover, Some(path("Creator/Orc/Renders/Final/orc_front.jpg")));
 }
+
+fn covers(catalog: &Catalog) -> Vec<(String, Option<String>)> {
+    catalog
+        .models
+        .iter()
+        .map(|m| (m.path.as_str().to_owned(), m.cover.as_ref().map(|c| c.as_str().to_owned())))
+        .collect()
+}
+
+#[test]
+fn models_without_a_picture_borrow_the_pack_picture_from_the_folder_above() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Bases/Diorama Bases/overview.jpg", 50),
+            file("Bases/Diorama Bases/300x50/base.stl", 10),
+            file("Bases/Diorama Bases/Base/base.stl", 10),
+        ],
+    );
+    for (path, cover) in covers(&catalog) {
+        assert_eq!(cover.as_deref(), Some("Bases/Diorama Bases/overview.jpg"), "{path}");
+    }
+    assert!(catalog.models.iter().all(|m| m.cover_source == hoarddeck_domain::CoverSource::Parent));
+    assert!(catalog.models.iter().all(|m| m.files.len() == 1), "a borrowed picture is not one of the model's files");
+}
+
+#[test]
+fn pack_pictures_in_an_images_folder_and_loose_files_in_a_split_folder_are_used() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Packs/Orcs/images/orcs.jpg", 50),
+            file("Packs/Orcs/Warrior/warrior.stl", 10),
+            file("Packs/Elves/overview.png", 40),
+            file("Packs/Elves/archer.stl", 10),
+            file("Packs/Elves/mage.stl", 10),
+            file("Packs/Elves/Ranger/ranger.stl", 10),
+        ],
+    );
+    let found: std::collections::HashMap<_, _> = covers(&catalog).into_iter().collect();
+    assert_eq!(found["Packs/Orcs/Warrior"].as_deref(), Some("Packs/Orcs/images/orcs.jpg"));
+    assert_eq!(found["Packs/Elves/archer.stl"].as_deref(), Some("Packs/Elves/overview.png"));
+    assert_eq!(found["Packs/Elves/mage.stl"].as_deref(), Some("Packs/Elves/overview.png"));
+}
+
+#[test]
+fn borrowing_respects_other_models_pictures_depth_and_the_root() {
+    let catalog = detect_with(
+        &ScanRules::default(),
+        &[
+            file("Set/B.jpg", 50),
+            file("Set/A/a.stl", 10),
+            file("Set/B/b.stl", 10),
+            file("Deep/pack.jpg", 50),
+            file("Deep/L1/L2/model/m.stl", 10),
+            file("Near/pack.jpg", 50),
+            file("Near/L1/model/m.stl", 10),
+            file("root.jpg", 50),
+            file("Lone/model/m.stl", 10),
+        ],
+    );
+    let found: std::collections::HashMap<_, _> = covers(&catalog).into_iter().collect();
+    assert_eq!(found["Set/A"], None, "B.jpg belongs to B/");
+    assert_eq!(found["Set/B"].as_deref(), Some("Set/B.jpg"));
+    assert_eq!(found["Deep/L1/L2/model"], None, "never three levels up");
+    assert_eq!(found["Near/L1/model"].as_deref(), Some("Near/pack.jpg"), "two levels when the first has none");
+    assert_eq!(found["Lone/model"], None, "never the library root");
+
+    let off = ScanRules { parent_covers: false, ..ScanRules::default() };
+    let catalog = detect_with(&off, &[file("Near/pack.jpg", 50), file("Near/L1/model/m.stl", 10)]);
+    assert_eq!(catalog.models[0].cover, None, "switched off: as before");
+}
+
+#[test]
+fn a_3mf_without_a_picture_shows_its_own_preview() {
+    let catalog =
+        detect_with(&ScanRules::default(), &[file("Prints/Holder/holder.3mf", 10), file("Prints/pack.jpg", 5)]);
+    assert_eq!(catalog.models[0].cover, Some(path("Prints/Holder/holder.3mf")));
+    assert_eq!(catalog.models[0].cover_source, hoarddeck_domain::CoverSource::Embedded);
+    assert_eq!(catalog.models[0].fallback_cover, Some(path("Prints/pack.jpg")), "for a 3MF without a preview inside");
+
+    let off = ScanRules { parent_covers: false, ..ScanRules::default() };
+    let catalog = detect_with(&off, &[file("Prints/Holder/holder.3mf", 10), file("Prints/pack.jpg", 5)]);
+    assert_eq!(catalog.models[0].fallback_cover, None, "folder pictures switched off");
+}

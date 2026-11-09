@@ -12,10 +12,23 @@ export function LibraryRules({ library, onError }: Props) {
   const refresh = () => queryClient.invalidateQueries();
   const accept = useMutation({ mutationFn: (id: string) => unwrap(commands.acceptPreset(library, id)), onSuccess: refresh, onError: (e) => onError(describeError(e)) });
   const remove = useMutation({ mutationFn: (pattern: string) => unwrap(commands.removeFolderRule(library, pattern)), onSuccess: refresh, onError: (e) => onError(describeError(e)) });
+  const parentCovers = useQuery({ queryKey: ["parentCovers", library], queryFn: () => unwrap(commands.parentCovers(library)) });
+  const setParentCovers = useMutation({
+    mutationFn: (on: boolean) => unwrap(commands.setParentCovers(library, on)),
+    onSuccess: refresh,
+    onError: (e) => onError(describeError(e)),
+  });
   const busy = accept.isPending || remove.isPending;
 
   return (
     <>
+      <label className="prow2">
+        <div className="t">
+          <b>{t("Pictures from the folder above")}</b>
+          <span>{t("Models without a picture of their own show one from the folder above (two levels if the first has none, never the library folder itself). They get a “from folder” mark. 3MF files show the preview stored inside them.")}</span>
+        </div>
+        <input type="checkbox" checked={parentCovers.data ?? true} disabled={setParentCovers.isPending} onChange={(event) => setParentCovers.mutate(event.target.checked)} />
+      </label>
       {(proposals.data?.length ?? 0) > 0 && (
         <div className="prow2 stack">
           <div className="t">

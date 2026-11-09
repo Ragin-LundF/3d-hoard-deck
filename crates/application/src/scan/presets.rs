@@ -84,7 +84,8 @@ impl CollectionPresets {
             .iter()
             .find(|preset| preset.id == id)
             .ok_or_else(|| AppError::InvalidInput(format!("unknown preset {id}")))?;
-        self.editor.edit(library, |rules| {
+        // The regroup follows in the background; accepting several suggestions in a row regroups once.
+        self.editor.edit_soon(library, |rules| {
             if !rules.folder_rules.iter().any(|rule| rule.pattern == preset.pattern) {
                 rules
                     .folder_rules

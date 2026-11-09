@@ -61,6 +61,9 @@ pub enum AppError {
     Refused(#[from] Refusal),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    /// The AI server could not be reached, refused, or gave no usable answer; the reason is readable.
+    #[error("AI: {0}")]
+    Ai(String),
     #[error(transparent)]
     Domain(#[from] DomainError),
     #[error(transparent)]

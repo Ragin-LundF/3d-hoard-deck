@@ -111,3 +111,26 @@ fn release_and_added_sorts_page_newest_first() {
     assert_eq!(all_pages(Sort::Released), vec!["R/d", "R/c", "R/a", "R/b"], "same month: newer id first; undated last");
     assert_eq!(all_pages(Sort::Added), vec!["R/d", "R/c", "R/b", "R/a"]);
 }
+
+#[test]
+fn a_second_replacement_reports_only_what_changed() {
+    let (_dir, index, id) = open();
+    let catalog =
+        Catalog { folders: Vec::new(), models: vec![model("Minis/Alpha", "Alpha"), model("Minis/Bravo", "Bravo")] };
+    let first = index.replace_catalog(id, &catalog).expect("first");
+    assert_eq!(first.changed.len(), 2, "everything is new");
+
+    let unchanged = index.replace_catalog(id, &catalog).expect("same again");
+    assert_eq!((unchanged.changed.len(), unchanged.removed.len()), (0, 0), "nothing to write");
+
+    let mut renamed = model("Minis/Alpha", "Alpha the Great");
+    renamed.cover = Some(path("Minis/Alpha/cover.png"));
+    let next = Catalog { folders: Vec::new(), models: vec![renamed, model("Minis/Charlie", "Charlie")] };
+    let change = index.replace_catalog(id, &next).expect("changed");
+    assert_eq!(change.changed.len(), 2, "Alpha changed, Charlie is new");
+    assert_eq!(change.removed.len(), 1, "Bravo is gone");
+    assert!(change.changed.contains(&first.changed[0]), "Alpha keeps its id");
+    let titles: Vec<String> =
+        index.summaries(&change.changed).expect("summaries").into_iter().map(|summary| summary.title).collect();
+    assert!(titles.contains(&"Alpha the Great".to_owned()));
+}

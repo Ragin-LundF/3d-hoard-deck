@@ -15,9 +15,24 @@ const ACCESS: { value: AccessModeDto; title: string; text: string }[] = [
 /** Appended to a report: how many files could not be read, if any. */
 const unreadable = (count: number) => (count > 0 ? " " + t("{count} files could not be read.", { count }) : "");
 
-type Props = { library: LibraryDto; scan: ScanStatus | undefined; onError: (message: string) => void };
+export const ACCESS_LABELS: Record<AccessModeDto, string> = {
+  readOnly: t("Read-only"),
+  metadataWrite: t("Metadata files"),
+  managed: t("Rename and move"),
+};
 
-export function LibrarySettings({ library, scan, onError }: Props) {
+export type LibrarySub = "access" | "rules" | "import";
+
+type Props = {
+  library: LibraryDto;
+  scan: ScanStatus | undefined;
+  sub: LibrarySub;
+  onSub: (sub: LibrarySub) => void;
+  onError: (message: string) => void;
+};
+
+/** One library in Settings: rescans and scan problems, then tabs for access, folder rules, and import/rebuild. */
+export function LibrarySettings({ library, scan, sub, onSub, onError }: Props) {
   const queryClient = useQueryClient();
   const save = useMutation({
     mutationFn: (settings: { access: AccessModeDto; metadata: MetadataStorageDto }) =>
@@ -61,13 +76,14 @@ export function LibrarySettings({ library, scan, onError }: Props) {
   const setAccess = (access: AccessModeDto) =>
     save.mutate({ access, metadata: access === "readOnly" ? "indexOnly" : library.metadata });
   const name = `library-${library.id}`;
+  const [dismissed, setDismissed] = useState(false);
 
   return (
-    <div className="panel">
-      <div className="prow2">
+    <>
+      <div className="phead">
         <div className="t">
-          <b>{library.name}</b>
-          <span className="mono">{library.root}</span>
+          <h1>{library.name}</h1>
+          <p className="mono">{library.root}</p>
         </div>
         <button className="btn" disabled={scanning} onClick={() => void rescan(false)}>
           <Icon name="refresh" />{t("Rescan")}
@@ -76,8 +92,8 @@ export function LibrarySettings({ library, scan, onError }: Props) {
           {t("Full rescan")}
         </button>
       </div>
-      {!scanning && scan && scan.unreadable > 0 && (
-        <div className="prow2 stack">
+      {!scanning && !dismissed && scan && scan.unreadable > 0 && (
+        <div className="panel"><div className="prow2 stack">
           <div className="t">
             <b className="err">{plural(scan.unreadable, "{count} folder or file could not be read", "{count} folders or files could not be read")}</b>
             <span>{t("Their earlier index data is kept, and the next scan tries again. Each line names the path and the reason the system gave.")}</span>
@@ -87,9 +103,16 @@ export function LibrarySettings({ library, scan, onError }: Props) {
             <button className="btn" onClick={() => void navigator.clipboard.writeText(scan.unreadableExamples.join("\n")).then(() => setCopied(true))}>
               {copied ? t("Copied") : t("Copy list")}
             </button>
+            <button className="btn ghost" onClick={() => setDismissed(true)}>{t("Dismiss")}</button>
           </div>
-        </div>
+        </div></div>
       )}
+      <div className="subtabs" role="tablist">
+        {([["access", t("Access & storage")], ["rules", t("Collections & folder rules")], ["import", t("Import & rebuild")]] as const).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={sub === id} className={sub === id ? "on" : ""} onClick={() => onSub(id)}>{label}</button>
+        ))}
+      </div>
+      {sub === "access" && <div className="panel">
       <div className="prow2 stack">
         <div className="t"><b>{t("What 3D Hoard Deck may change")}</b></div>
         <div className="radios" role="radiogroup" aria-label={t("Write access")}>
@@ -129,6 +152,8 @@ export function LibrarySettings({ library, scan, onError }: Props) {
           </div>
         )}
       </div>
+      </div>}
+      {sub === "import" && <div className="panel">
       <div className="prow2">
         <div className="t">
           <b>{t("Rebuild from metadata files")}</b>
@@ -146,7 +171,8 @@ export function LibrarySettings({ library, scan, onError }: Props) {
         </div>
         <button className="btn" disabled={importOrynt3d.isPending} onClick={() => importOrynt3d.mutate()}>{t("Import")}</button>
       </div>
-      <LibraryRules library={library.id} onError={onError} />
-    </div>
+      </div>}
+      {sub === "rules" && <div className="panel"><LibraryRules library={library.id} onError={onError} /></div>}
+    </>
   );
 }

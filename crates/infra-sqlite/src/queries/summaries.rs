@@ -22,9 +22,17 @@ pub(crate) fn summaries(connection: &Connection, ids: &[ModelId]) -> rusqlite::R
 }
 
 pub(crate) fn detail(connection: &Connection, id: ModelId) -> rusqlite::Result<Option<ModelDetail>> {
-    let sql = format!("SELECT {SUMMARY_COLUMNS}, m.title FROM {SUMMARY_FROM} WHERE m.id = ?1");
-    let Some((summary, original_title)) =
-        connection.query_row(&sql, [id.0], |row| Ok((summary(row)?, row.get::<_, String>(15)?))).optional()?
+    let sql = format!("SELECT {SUMMARY_COLUMNS}, m.title, m.auto_tags FROM {SUMMARY_FROM} WHERE m.id = ?1");
+    let Some((summary, original_title, auto_tags)) = connection
+        .query_row(&sql, [id.0], |row| {
+            Ok((
+                summary(row)?,
+                // The summary takes columns 0 to 16.
+                row.get::<_, String>(18)?,
+                converted(19, serde_json::from_str(&row.get::<_, String>(19)?))?,
+            ))
+        })
+        .optional()?
     else {
         return Ok(None);
     };
@@ -41,5 +49,5 @@ pub(crate) fn detail(connection: &Connection, id: ModelId) -> rusqlite::Result<O
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
-    Ok(Some(ModelDetail { summary, files, original_title, meta }))
+    Ok(Some(ModelDetail { summary, files, original_title, meta, auto_tags }))
 }

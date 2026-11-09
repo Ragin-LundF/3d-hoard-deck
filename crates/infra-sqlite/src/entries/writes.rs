@@ -16,27 +16,19 @@ pub(super) fn apply_item(
         ScanItem::Listed { dir, mtime, children } => {
             transaction
                 .prepare_cached(
-                    "INSERT INTO entries (library_id, path, parent, is_dir, kind, size, mtime, listed_mtime, generation)
-                     VALUES (?1, ?2, ?3, 1, 'dir', 0, ?4, ?4, ?5)
+                    "INSERT INTO entries (library_id, path, parent, is_dir, kind, size, mtime, listed_mtime, generation, listed_gen)
+                     VALUES (?1, ?2, ?3, 1, 'dir', 0, ?4, ?4, ?5, ?5)
                      ON CONFLICT (library_id, path) DO UPDATE SET
-                        is_dir = 1, kind = 'dir', mtime = ?4, listed_mtime = ?4, generation = ?5",
+                        is_dir = 1, kind = 'dir', mtime = ?4, listed_mtime = ?4, generation = ?5, listed_gen = ?5",
                 )?
                 .execute(params![library.0, dir.as_str(), parent_of(dir), mtime, generation.0])?;
             for child in children {
                 upsert_child(transaction, library, generation, child)?;
             }
         }
-        ScanItem::Unchanged { dir } => {
-            // Two statements instead of an OR, each on its index; the planner skips entries_parent in UPDATEs unless told.
-            transaction
-                .prepare_cached("UPDATE entries SET generation = ?3 WHERE library_id = ?1 AND path = ?2")?
-                .execute(params![library.0, dir.as_str(), generation.0])?;
-            transaction
-                .prepare_cached(
-                    "UPDATE entries INDEXED BY entries_parent SET generation = ?3 WHERE library_id = ?1 AND parent = ?2 AND is_dir = 0",
-                )?
-                .execute(params![library.0, dir.as_str(), generation.0])?;
-        }
+        // Nothing to write: the end of the scan removes only what is missing in folders that were listed, and this one
+        // was not. On a big library this is most folders, so a scan without changes writes almost nothing.
+        ScanItem::Unchanged { .. } => {}
         ScanItem::Failed { dir, .. } => keep_subtree(transaction, library, generation, dir)?,
     }
     Ok(())
@@ -81,14 +73,21 @@ fn upsert_child(
                     listed_mtime = CASE WHEN is_dir = 1 THEN listed_mtime END, is_dir = 1, kind = 'dir', generation = ?5",
             )?
             .execute(params![library.0, child.path.as_str(), parent, child.mtime, generation.0])?,
-        EntryKind::File(kind) => transaction
+        EntryKind::File(kind) => {
+            // A folder replaced by a file of the same name: its old contents are listed nowhere any more.
+            let (low, high) = subtree_bounds(&child.path);
+            transaction
+                .prepare_cached("DELETE FROM entries WHERE library_id = ?1 AND path >= ?2 AND path < ?3")?
+                .execute(params![library.0, low, high])?;
+            transaction
             .prepare_cached(
                 "INSERT INTO entries (library_id, path, parent, is_dir, kind, size, mtime, listed_mtime, generation)
                  VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, NULL, ?7)
                  ON CONFLICT (library_id, path) DO UPDATE SET
                     is_dir = 0, kind = ?4, size = ?5, mtime = ?6, listed_mtime = NULL, generation = ?7",
             )?
-            .execute(params![library.0, child.path.as_str(), parent, kind.code(), to_i64(child.size), child.mtime, generation.0])?,
+            .execute(params![library.0, child.path.as_str(), parent, kind.code(), to_i64(child.size), child.mtime, generation.0])?
+        }
     };
     Ok(())
 }

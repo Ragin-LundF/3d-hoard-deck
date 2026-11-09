@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "src-tauri"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 rust-version = "1.88"
 
@@ -17,13 +17,15 @@ hoarddeck-app = { path = "crates/app" }
 hoarddeck-infra-mesh = { path = "crates/infra-mesh" }
 hoarddeck-infra-thumbs = { path = "crates/infra-thumbs" }
 hoarddeck-infra-platform = { path = "crates/infra-platform" }
+hoarddeck-infra-ai = { path = "crates/infra-ai" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled", "functions"] }
 tantivy = "0.27"
 rayon = "1.12"
 globset = "0.4"
+regex = "1.12"
 tempfile = "3"
 
 [workspace.lints.rust]
@@ -33,6 +35,11 @@ unsafe_code = "forbid"
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 module_name_repetitions = "allow"
+
+# `npm run dev` builds in this profile: light optimization keeps grouping a big library from taking seconds,
+# while compile times and debugging stay reasonable.
+[profile.dev]
+opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 2

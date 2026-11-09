@@ -54,10 +54,23 @@ impl LibraryRepository for SqliteIndex {
         })
     }
 
-    fn save_scan_rules(&self, id: LibraryId, rules: &ScanRules) -> Result<(), IndexError> {
-        let json = serde_json::to_string(rules).map_err(|error| IndexError(error.to_string()))?;
+    fn update_scan_rules(
+        &self,
+        id: LibraryId,
+        change: &mut dyn FnMut(&mut ScanRules) -> bool,
+    ) -> Result<Option<ScanRules>, IndexError> {
         self.write(|connection| {
-            connection.execute("UPDATE libraries SET scan_rules = ?2 WHERE id = ?1", params![id.0, json]).map(|_| ())
+            let transaction = connection.transaction()?;
+            let stored: String =
+                transaction.query_row("SELECT scan_rules FROM libraries WHERE id = ?1", [id.0], |row| row.get(0))?;
+            let mut rules: ScanRules = crate::rows::converted(0, serde_json::from_str(&stored))?;
+            if !change(&mut rules) {
+                return Ok(None);
+            }
+            let json = crate::rows::converted(0, serde_json::to_string(&rules))?;
+            transaction.execute("UPDATE libraries SET scan_rules = ?2 WHERE id = ?1", params![id.0, json])?;
+            transaction.commit()?;
+            Ok(Some(rules))
         })
     }
 

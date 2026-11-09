@@ -33,6 +33,10 @@ pub struct SearchQuery {
     pub formats: Vec<FileFormat>,
     /// Lower-case tags; every one must be present.
     pub tags: Vec<String>,
+    /// Lower-case tags; at least one must be present (when any are given).
+    pub any_tags: Vec<String>,
+    /// Lower-case tags; none may be present.
+    pub excluded_tags: Vec<String>,
     pub favorite: bool,
     pub printed: bool,
     /// Restricts results to one library, optionally to a folder inside it (recursive).

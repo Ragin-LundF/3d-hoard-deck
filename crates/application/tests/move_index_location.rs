@@ -40,7 +40,11 @@ impl LibraryRepository for Fakes {
     fn save_settings(&self, _: LibraryId, _: LibrarySettings) -> Result<(), IndexError> {
         unreachable!()
     }
-    fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
+    fn update_scan_rules(
+        &self,
+        _: LibraryId,
+        _: &mut dyn FnMut(&mut ScanRules) -> bool,
+    ) -> Result<Option<ScanRules>, IndexError> {
         unreachable!()
     }
     fn last_scan_at(&self, _: LibraryId) -> Result<Option<i64>, IndexError> {

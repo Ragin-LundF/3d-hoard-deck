@@ -22,7 +22,7 @@ fn binary_stl(triangles: u32) -> Vec<u8> {
 
 fn scan(root: &Path, known: &KnownDirs) -> Result<Vec<ScanItem>, ScanError> {
     let (sender, receiver) = sync_channel(16);
-    let scanner = FsLibraryScanner::new(4);
+    let scanner = FsLibraryScanner::new(4, std::sync::Arc::default());
     let root = root.to_str().expect("utf-8 temp path").to_owned();
     let known = known.clone();
     let walker = std::thread::spawn(move || {
