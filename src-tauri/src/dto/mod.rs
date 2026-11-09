@@ -1,5 +1,6 @@
 //! IPC shapes. Ids are `u32` and sizes `f64` so they stay exact as JavaScript numbers.
 
+mod ai;
 mod browse;
 mod collection;
 mod duplicates;
@@ -11,7 +12,10 @@ mod model;
 mod rules;
 mod search;
 mod slicer;
+mod tag_rules;
+mod tags;
 
+pub use ai::{AiSettingsDto, AiTestDto, AiViewDto};
 pub use browse::{ArchiveEntryDto, BrowseRequestDto, FolderPageDto, FolderRoleDto};
 pub use collection::CollectionDto;
 pub use duplicates::DuplicateGroupDto;
@@ -23,6 +27,8 @@ pub use model::ModelDetailDto;
 pub use rules::{FolderRuleDto, PresetProposalDto};
 pub use search::{SearchRequestDto, SearchResultDto};
 pub use slicer::SlicerDto;
+pub use tag_rules::TagRuleDto;
+pub use tags::{TagGroupDto, TagInfoDto};
 
 fn id32(id: i64) -> u32 {
     u32::try_from(id).unwrap_or(u32::MAX)

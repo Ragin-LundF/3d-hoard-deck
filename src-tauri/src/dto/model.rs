@@ -84,6 +84,8 @@ pub struct ModelDetailDto {
     /// Name derived from the folder or file, shown next to a display name.
     pub original_title: String,
     pub meta: ModelMetaDto,
+    /// Tags from tag rules, including the ones hidden in `meta.hiddenTags`.
+    pub auto_tags: Vec<String>,
 }
 
 impl From<ModelDetail> for ModelDetailDto {
@@ -93,6 +95,7 @@ impl From<ModelDetail> for ModelDetailDto {
             files: detail.files.into_iter().map(Into::into).collect(),
             original_title: detail.original_title,
             meta: detail.meta.into(),
+            auto_tags: detail.auto_tags.into_iter().map(String::from).collect(),
         }
     }
 }

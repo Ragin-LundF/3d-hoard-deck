@@ -7,6 +7,10 @@ describe("route", () => {
     expect(parseRoute(formatRoute(route))).toEqual(route);
   });
 
+  it("round-trips the tag browser", () => {
+    expect(parseRoute(formatRoute({ view: "tags", library: 3 }))).toEqual({ view: "tags", library: 3 });
+  });
+
   it("round-trips collections", () => {
     expect(parseRoute(formatRoute({ view: "collection", id: 7 }))).toEqual({ view: "collection", id: 7 });
   });

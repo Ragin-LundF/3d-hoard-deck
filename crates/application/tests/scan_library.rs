@@ -4,6 +4,7 @@ use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Mutex};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
+use hoarddeck_application::ports::TagRuleStore;
 use hoarddeck_application::ports::{
     CatalogChange, EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
 };
@@ -11,6 +12,7 @@ use hoarddeck_application::scan::{
     CompiledRules, Generation, KnownDirs, LibraryLocks, ScanItem, ScanLibrary, ScanMode, ScanProgress, ScanRules,
 };
 use hoarddeck_application::search::{SearchDocument, SearchHits, SearchQuery};
+use hoarddeck_application::tagging::{TagRule, TagRuleBook};
 use hoarddeck_application::{AppError, IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
 use hoarddeck_domain::{Catalog, Entry, Folder, Library, LibraryId, LibrarySettings, ModelId, RelPath};
 
@@ -156,6 +158,18 @@ impl LibraryScanner for ScriptedScanner {
     }
 }
 
+struct NoTagRules;
+
+impl TagRuleStore for NoTagRules {
+    fn load_tag_rules(&self) -> Result<Vec<TagRule>, IndexError> {
+        Ok(Vec::new())
+    }
+
+    fn save_tag_rules(&self, _rules: &[TagRule]) -> Result<(), IndexError> {
+        Ok(())
+    }
+}
+
 fn scan_with(scanner: ScriptedScanner) -> (Arc<Store>, Result<(), AppError>) {
     let store = Arc::new(Store::default());
     let use_case = ScanLibrary::new(
@@ -166,6 +180,7 @@ fn scan_with(scanner: ScriptedScanner) -> (Arc<Store>, Result<(), AppError>) {
         Arc::new(scanner),
         Arc::new(Silent),
         Arc::new(LibraryLocks::default()),
+        Arc::new(TagRuleBook::new(Arc::new(NoTagRules))),
     );
     let result = use_case.execute(LibraryId(1), ScanMode::Incremental).map(|_| ());
     (store, result)

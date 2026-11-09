@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::{DomainError, FileFormat, FileKind, RelPath, YearMonth};
+use crate::{DomainError, FileFormat, FileKind, RelPath, TagName, YearMonth};
 
 /// How a model was formed from the library layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,6 +56,8 @@ pub struct Model {
     /// The user marked this folder as one model; "detect automatically" undoes it.
     pub marked_by_user: bool,
     pub files: Vec<ModelFile>,
+    /// Tags from the user's tag rules, derived from the path; kept apart from the tags the user typed.
+    pub auto_tags: Vec<TagName>,
 }
 
 impl Model {

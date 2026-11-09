@@ -42,5 +42,6 @@ pub fn model(model_path: &str, title: &str) -> Model {
         cover: None,
         collection: None,
         marked_by_user: false,
+        auto_tags: Vec::new(),
     }
 }

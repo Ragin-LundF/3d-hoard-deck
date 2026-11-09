@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use hoarddeck_application::IndexError;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, functions::FunctionFlags};
 
 use crate::schema;
 
@@ -56,8 +56,22 @@ impl SqliteIndex {
         let connection = Connection::open_with_flags(&self.path, flags).map_err(db_error)?;
         connection.pragma_update(None, "mmap_size", 268_435_456).map_err(db_error)?;
         connection.busy_timeout(std::time::Duration::from_secs(5)).map_err(db_error)?;
+        register_functions(&connection)?;
         Ok(connection)
     }
+}
+
+/// `tag_key(text)`: lower case the way the app compares tags. SQLite's own `lower()` leaves letters like Ä alone, so
+/// "Ärger" and "ärger" would count as two tags.
+fn register_functions(connection: &Connection) -> Result<(), IndexError> {
+    connection
+        .create_scalar_function(
+            "tag_key",
+            1,
+            FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+            |context| Ok(context.get::<String>(0)?.to_lowercase()),
+        )
+        .map_err(db_error)
 }
 
 fn configure(connection: &Connection) -> Result<(), IndexError> {
@@ -69,7 +83,8 @@ fn configure(connection: &Connection) -> Result<(), IndexError> {
              PRAGMA mmap_size = 268435456;
              PRAGMA busy_timeout = 5000;",
         )
-        .map_err(db_error)
+        .map_err(db_error)?;
+    register_functions(connection)
 }
 
 #[allow(clippy::needless_pass_by_value)] // used as `map_err(db_error)`

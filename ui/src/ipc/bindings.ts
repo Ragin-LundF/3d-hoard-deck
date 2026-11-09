@@ -51,7 +51,44 @@ export const commands = {
 	collectionModels: (id: number, offset: number, limit: number) => typedError<SearchResultDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("collection_models", { id, offset, limit })),
 	/**  Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it. */
 	updateModelMeta: (id: number, meta: ModelMetaDto_Deserialize) => typedError<ModelDetailDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("update_model_meta", { id, meta })),
-	listTags: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("list_tags", { library })),
+	/**  Every tag in use, most used first, with group and pin. */
+	listTags: (library: number) => typedError<TagInfoDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("list_tags", { library })),
+	/**  The most used tags of what is shown: `folder` (and below), narrowed by the search `query` when it is not empty. */
+	tagFacets: (library: number, folder: string, query: string, limit: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_facets", { library, folder, query, limit })),
+	/**  Renames tags, or merges several into one. Returns how many models changed. */
+	renameTags: (library: number, from: string[], to: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("rename_tags", { library, from, to })),
+	/**  Removes tags from every model. Returns how many models changed. */
+	deleteTags: (library: number, tags: string[]) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("delete_tags", { library, tags })),
+	setTagsGroup: (library: number, tags: string[], group: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_tags_group", { library, tags, group })),
+	setTagsPinned: (library: number, tags: string[], pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("set_tags_pinned", { library, tags, pinned })),
+	listTagGroups: (library: number) => typedError<TagGroupDto[], IpcError_Serialize>(__TAURI_INVOKE("list_tag_groups", { library })),
+	/**  Creates a group (`id` empty) or renames and recolours one. Returns its id. */
+	saveTagGroup: (library: number, id: number | null, name: string, color: string) => typedError<number | null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_group", { library, id, name, color })),
+	deleteTagGroup: (library: number, id: number | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("delete_tag_group", { library, id })),
+	aiSettings: () => typedError<AiViewDto, IpcError_Serialize>(__TAURI_INVOKE("ai_settings")),
+	/**  `key`: `None` keeps the stored key, an empty text removes it. */
+	saveAiSettings: (settings: AiSettingsDto, key: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_ai_settings", { settings, key })),
+	/**  Lists the server's models and asks one question; `key` is a typed key not saved yet. */
+	testAiConnection: (settings: AiSettingsDto, key: string | null) => typedError<AiTestDto, IpcError_Serialize>(__TAURI_INVOKE("test_ai_connection", { settings, key })),
+	suggestTags: (id: number) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("suggest_tags", { id })),
+	tagSuggestions: (id: number) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("tag_suggestions", { id })),
+	/**  Keeps a suggested tag as a normal tag, or dismisses it. */
+	resolveTagSuggestion: (id: number, tagName: string, keep: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("resolve_tag_suggestion", { id, tagName, keep })),
+	/**  Starts suggesting tags for the models in `folder` in the background. Returns how many models it asks about. */
+	startTagSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("start_tag_suggestions", { library, folder })),
+	cancelTagSuggestions: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_tag_suggestions")),
+	/**  Suggested tags of a library with the number of models, for the review. */
+	suggestedTagCounts: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("suggested_tag_counts", { library })),
+	/**  Keeps (`keep`) or dismisses one suggested tag on every model it was suggested for. Returns the number of models. */
+	resolveSuggestedTag: (library: number, tagName: string, keep: boolean) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("resolve_suggested_tag", { library, tagName, keep })),
+	tagRules: () => typedError<TagRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_rules")),
+	tagRulePresets: () => typedError<TagRuleDto[], IpcError_Serialize>(__TAURI_INVOKE("tag_rule_presets")),
+	/**  Saves the rules; every library is regrouped in the background from the index alone. */
+	saveTagRules: (list: TagRuleDto[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_tag_rules", { list })),
+	/**  The tags the (unsaved) rules give a typed path. */
+	testTagRules: (list: TagRuleDto[], path: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("test_tag_rules", { list, path })),
+	/**  How many models each (unsaved) rule would tag, in all libraries. */
+	countTagRules: (list: TagRuleDto[]) => typedError<number[], IpcError_Serialize>(__TAURI_INVOKE("count_tag_rules", { list })),
 	/**  Restores names, tags, marks and notes from the library's `.3dhoarddeck` files (reads only). */
 	rebuildFromSidecars: (library: number) => typedError<RebuildReportDto, IpcError_Serialize>(__TAURI_INVOKE("rebuild_from_sidecars", { library })),
 	/**  Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again). */
@@ -97,11 +134,44 @@ export const commands = {
 export const events = {
 	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
+	suggestProgressEvent: makeEvent<SuggestProgressEvent, SuggestProgressEvent>("suggest-progress-event"),
 };
 
 /* Types */
 /**  What the app may write into the library. */
 export type AccessModeDto = "readOnly" | "metadataWrite" | "managed";
+
+export type AiProviderDto = "off" | "lmStudio" | "ollama" | "openAi" | "anthropic" | "custom";
+
+export type AiSettingsDto = {
+	provider: AiProviderDto,
+	baseUrl: string,
+	model: string,
+	sendImage: boolean,
+	sendPath: boolean,
+	maxTags: number,
+	timeoutSeconds: number,
+	prompt: string,
+};
+
+export type AiTestDto = {
+	models: string[],
+	model: string,
+	tags: string[],
+	millis: number,
+};
+
+/**  The settings plus what the UI may know about the key: whether one is stored, never the key itself. */
+export type AiViewDto = {
+	/**  AI is on when `settings.provider` is not `off`. */
+	settings: AiSettingsDto,
+	hasKey: boolean,
+	keyFromEnvironment: boolean,
+	/**  Pictures and names go to another computer. */
+	remote: boolean,
+	/**  The address used when the field is empty. */
+	defaultUrl: string,
+};
 
 /**  A file inside a ZIP archive. */
 export type ArchiveEntryDto = {
@@ -327,6 +397,8 @@ export type ModelDetailDto_Deserialize = {
 	/**  Name derived from the folder or file, shown next to a display name. */
 	originalTitle: string,
 	meta: ModelMetaDto_Deserialize,
+	/**  Tags from tag rules, including the ones hidden in `meta.hiddenTags`. */
+	autoTags: string[],
 };
 
 export type ModelDetailDto_Serialize = {
@@ -335,6 +407,8 @@ export type ModelDetailDto_Serialize = {
 	/**  Name derived from the folder or file, shown next to a display name. */
 	originalTitle: string,
 	meta: ModelMetaDto_Serialize,
+	/**  Tags from tag rules, including the ones hidden in `meta.hiddenTags`. */
+	autoTags: string[],
 };
 
 export type ModelFileDto = ModelFileDto_Serialize | ModelFileDto_Deserialize;
@@ -365,6 +439,8 @@ export type ModelMetaDto_Deserialize = {
 	notes: string,
 	/**  An image path of the model picked as cover, or `None` for the detected one. */
 	cover?: string | null,
+	/**  Tags from tag rules the user does not want on this model. */
+	hiddenTags?: string[],
 };
 
 export type ModelMetaDto_Serialize = {
@@ -375,6 +451,8 @@ export type ModelMetaDto_Serialize = {
 	notes: string,
 	/**  An image path of the model picked as cover, or `None` for the detected one. */
 	cover: string | null,
+	/**  Tags from tag rules the user does not want on this model. */
+	hiddenTags: string[],
 };
 
 export type ModelSummaryDto = ModelSummaryDto_Serialize | ModelSummaryDto_Deserialize;
@@ -435,6 +513,8 @@ export type RebuildReportDto = {
 	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
 	rulesRestored: number,
 };
+
+export type RuleKindDto = "any" | "all" | "regex" | "folder";
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
 export type ScanProgressEvent = ScanProgressEvent_Serialize | ScanProgressEvent_Deserialize;
@@ -528,9 +608,59 @@ export type SlicerDto = {
 
 export type SortDto = "name" | "added" | "released";
 
+/**  Pushed while an AI suggests tags: `done` of `total` models asked, `failed` without an answer. */
+export type SuggestProgressEvent = {
+	done: number,
+	total: number,
+	failed: number,
+	running: boolean,
+};
+
 export type TagCountDto = {
 	name: string,
 	count: number,
+};
+
+export type TagGroupDto = {
+	id: number | null,
+	name: string,
+	color: string,
+};
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto = TagInfoDto_Serialize | TagInfoDto_Deserialize;
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto_Deserialize = {
+	name: string,
+	count: number,
+	group?: number | null,
+	pinned: boolean,
+	/**  When a model carrying it last changed, seconds since 1970. */
+	recent: number | null,
+};
+
+/**  A tag in use, with its group and pin. */
+export type TagInfoDto_Serialize = {
+	name: string,
+	count: number,
+	group: number | null,
+	pinned: boolean,
+	/**  When a model carrying it last changed, seconds since 1970. */
+	recent: number | null,
+};
+
+/**
+ *  A tag rule: `tag` is added to models whose path matches `pattern` (see `kind`), unless it contains a word of
+ *  `unless`.
+ */
+export type TagRuleDto = {
+	tag: string,
+	kind: RuleKindDto,
+	pattern: string,
+	unless: string,
+	nameOnly: boolean,
+	enabled: boolean,
 };
 
 /* Tauri Specta runtime */

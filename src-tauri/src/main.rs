@@ -10,7 +10,6 @@ mod protocol;
 use std::sync::Arc;
 
 use hoarddeck_app::App;
-use hoarddeck_infra_thumbs::ThumbnailCache;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
@@ -30,7 +29,7 @@ fn main() {
             let index_dir = hoarddeck_infra_fs::resolve_index_dir()?;
             let events = Arc::new(events::TauriEvents::new(tauri_app.handle().clone()));
             let app = App::open(&index_dir, SCAN_THREADS, events)?;
-            tauri_app.manage(Arc::new(ThumbnailCache::new(app.index_dir.join("thumbnails"))));
+            tauri_app.manage(app.thumbnails.clone());
             let auto_rescan = Arc::clone(&app.auto_rescan);
             std::thread::spawn(move || {
                 loop {
@@ -73,7 +72,30 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::collections::move_in_collection,
             commands::collections::collection_models,
             commands::organize::update_model_meta,
-            commands::organize::list_tags,
+            commands::tags::list_tags,
+            commands::tags::tag_facets,
+            commands::tags::rename_tags,
+            commands::tags::delete_tags,
+            commands::tags::set_tags_group,
+            commands::tags::set_tags_pinned,
+            commands::tags::list_tag_groups,
+            commands::tags::save_tag_group,
+            commands::tags::delete_tag_group,
+            commands::ai::ai_settings,
+            commands::ai::save_ai_settings,
+            commands::ai::test_ai_connection,
+            commands::ai::suggest_tags,
+            commands::ai::tag_suggestions,
+            commands::ai::resolve_tag_suggestion,
+            commands::ai::start_tag_suggestions,
+            commands::ai::cancel_tag_suggestions,
+            commands::ai::suggested_tag_counts,
+            commands::ai::resolve_suggested_tag,
+            commands::tag_rules::tag_rules,
+            commands::tag_rules::tag_rule_presets,
+            commands::tag_rules::save_tag_rules,
+            commands::tag_rules::test_tag_rules,
+            commands::tag_rules::count_tag_rules,
             commands::organize::rebuild_from_sidecars,
             commands::organize::import_orynt3d,
             commands::organize::find_duplicates,
@@ -91,7 +113,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::slicers::detect_slicers,
             commands::slicers::open_in_slicer,
         ])
-        .events(collect_events![events::ScanProgressEvent, events::DuplicatesProgressEvent])
+        .events(collect_events![
+            events::ScanProgressEvent,
+            events::DuplicatesProgressEvent,
+            events::SuggestProgressEvent
+        ])
 }
 
 #[cfg(test)]

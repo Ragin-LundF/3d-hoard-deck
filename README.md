@@ -71,6 +71,8 @@ allow it.
 | `red dragon` | models matching both words |
 | `type:3mf` or `format:stl` | only models with that file type |
 | `tag:resin` or `tag:"sci fi"` | only models with that tag |
+| `-tag:bust` | models without that tag |
+| `tag:32mm\|28mm` | models with at least one of these tags |
 | `is:favorite`, `is:printed` | only favorites, only printed models |
 | `in:"Miniatures/Forge Masters"` | only models inside that folder |
 
@@ -89,6 +91,17 @@ a layout is unusual, right-click the folder in the sidebar or grid:
 
 All roles and accepted suggestions are listed under **Settings › Libraries**, where each one can be removed.
 Changing a role regroups the library within seconds; the folders are not read again.
+
+### Tags without typing
+
+- **Tag rules** (Settings › Tags › Tag rules) turn folder and file names into tags: `32mm`, `presupported`,
+  `resin`, the creator's folder and whatever you define. Only whole words count, and words such as
+  "unsupported" can stop a rule. **Count matches** and **Try a path** show the effect before saving. Rule tags are
+  kept apart from your own tags; on a model page you can keep one as a normal tag or hide it there.
+- **AI suggestions** (Settings › AI, off by default) use a local server such as LM Studio or Ollama, or OpenAI or
+  Anthropic. The AI sees the preview picture (a small JPEG), the name and, if allowed, the folder path, never the
+  model files. It only suggests; you keep or dismiss on the model page or for many models in the tag browser.
+  The API key stays in the system keychain (`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` also work).
 
 ## Your files are safe
 

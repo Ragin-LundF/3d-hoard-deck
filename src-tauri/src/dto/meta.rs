@@ -15,6 +15,9 @@ pub struct ModelMetaDto {
     pub notes: String,
     /// An image path of the model picked as cover, or `None` for the detected one.
     pub cover: Option<String>,
+    /// Tags from tag rules the user does not want on this model.
+    #[serde(default)]
+    pub hidden_tags: Vec<String>,
 }
 
 impl From<ModelMeta> for ModelMetaDto {
@@ -26,6 +29,7 @@ impl From<ModelMeta> for ModelMetaDto {
             printed: meta.printed,
             notes: meta.notes,
             cover: meta.cover.map(String::from),
+            hidden_tags: meta.hidden_tags.into_iter().map(String::from).collect(),
         }
     }
 }
@@ -46,6 +50,7 @@ impl TryFrom<ModelMetaDto> for ModelMeta {
                 .map(super::rel_path)
                 .transpose()
                 .map_err(|_| AppError::InvalidInput("invalid cover path".to_owned()))?,
+            hidden_tags: dto.hidden_tags.iter().map(|tag| TagName::new(tag)).collect::<Result<_, _>>()?,
         })
     }
 }

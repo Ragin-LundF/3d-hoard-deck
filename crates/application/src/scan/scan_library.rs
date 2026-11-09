@@ -6,6 +6,7 @@ use hoarddeck_domain::{Entry, Library, LibraryId, RelPath};
 
 use super::{CompiledRules, KnownDirs, LibraryLocks, ScanItem, ScanPhase, ScanProgress, regroup};
 use crate::ports::{EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex};
+use crate::tagging::TagRuleBook;
 use crate::{AppError, ScanError};
 
 /// Entries per index transaction while walking.
@@ -50,10 +51,12 @@ pub struct ScanLibrary {
     scanner: Arc<dyn LibraryScanner>,
     events: Arc<dyn EventSink>,
     locks: Arc<LibraryLocks>,
+    tag_rules: Arc<TagRuleBook>,
 }
 
 impl ScanLibrary {
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         libraries: Arc<dyn LibraryRepository>,
         entries: Arc<dyn EntryStore>,
@@ -62,8 +65,9 @@ impl ScanLibrary {
         scanner: Arc<dyn LibraryScanner>,
         events: Arc<dyn EventSink>,
         locks: Arc<LibraryLocks>,
+        tag_rules: Arc<TagRuleBook>,
     ) -> Self {
-        Self { libraries, entries, models, search, scanner, events, locks }
+        Self { libraries, entries, models, search, scanner, events, locks, tag_rules }
     }
 
     /// # Errors
@@ -95,8 +99,15 @@ impl ScanLibrary {
         let rules = CompiledRules::compile(&self.libraries.scan_rules(id)?)?;
         let mut report = self.walk(&library, &rules, from, mode, changed)?;
         self.progress(id, ScanPhase::Grouping, &report);
-        (report.models, report.folders) =
-            regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
+        (report.models, report.folders) = regroup(
+            self.entries.as_ref(),
+            self.models.as_ref(),
+            self.search.as_ref(),
+            &self.locks,
+            id,
+            &rules,
+            &self.tag_rules.current(),
+        )?;
         self.progress(id, ScanPhase::Done, &report);
         Ok(report)
     }
@@ -113,7 +124,15 @@ impl ScanLibrary {
         let folder = ScanItem::Listed { dir: dir.clone(), mtime: i64::MIN, children: files };
         self.entries.apply(id, generation, &[folder])?;
         // No progress events: a "done" would replace the last real scan's report (unreadable folders) in the UI.
-        regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, id, &rules)?;
+        regroup(
+            self.entries.as_ref(),
+            self.models.as_ref(),
+            self.search.as_ref(),
+            &self.locks,
+            id,
+            &rules,
+            &self.tag_rules.current(),
+        )?;
         Ok(())
     }
 

@@ -3,6 +3,7 @@ use hoarddeck_domain::LibraryId;
 use super::{CompiledRules, LibraryLocks, detect};
 use crate::AppError;
 use crate::ports::{EntryStore, ModelRepository, SearchIndex};
+use crate::tagging::CompiledTagRules;
 
 /// Changed models beyond this (or a quarter of the library) rebuild the search index instead of updating it.
 const FULL_REBUILD_ABOVE: usize = 2000;
@@ -16,8 +17,16 @@ pub(crate) fn regroup(
     locks: &LibraryLocks,
     library: LibraryId,
     rules: &CompiledRules,
+    tags: &CompiledTagRules,
 ) -> Result<(usize, usize), AppError> {
-    let catalog = detect(&entries.files(library)?, rules);
+    let mut catalog = detect(&entries.files(library)?, rules);
+    // Rule tags are part of the model row, so only models whose tags change are written and re-indexed.
+    if !tags.is_empty() {
+        let found = tags.tag_models(&catalog.models);
+        for (model, tags) in catalog.models.iter_mut().zip(found) {
+            model.auto_tags = tags;
+        }
+    }
     let change = models.replace_catalog(library, &catalog)?;
     let _sync = locks.search_sync();
     // Few changes: update just those documents. Many (the first regroup after an update, a big rescan): one rebuild

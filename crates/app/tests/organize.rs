@@ -68,7 +68,7 @@ fn user_metadata_is_searchable_and_reaches_sidecars_only_when_allowed() {
     let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
     assert_eq!((report.restored, report.unreadable), (1, 0));
     assert_eq!(search("wyrm")[0].id, dragon, "restored from the file");
-    assert_eq!(app.list_tags.execute(library.id).expect("tags")[0].0.as_str(), "Resin");
+    assert_eq!(app.tags.list(library.id).expect("tags")[0].name.as_str(), "Resin");
 }
 
 #[test]
@@ -415,4 +415,71 @@ fn several_folder_marks_in_a_row_return_at_once_and_regroup_once() {
         })
         .expect("browse");
     assert_eq!(page.page.models.len(), 3, "A, B and C are models now");
+}
+
+#[test]
+fn tags_are_counted_per_view_merged_deleted_grouped_and_pinned() {
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["Minis/Orc/orc.stl", "Minis/Elf/elf.stl", "Tools/Clip/clip.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Lib", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    let id_of = |text: &str| {
+        let request = SearchRequest { text: text.to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+        app.search_models.execute(&request).expect("search").models[0].id
+    };
+    let tag = |names: &[&str]| ModelMeta {
+        tags: names.iter().map(|name| TagName::new(name).expect("valid")).collect(),
+        ..ModelMeta::default()
+    };
+    app.update_model_meta.execute(id_of("orc"), tag(&["Sci-Fi", "Ärger"])).expect("orc");
+    app.update_model_meta.execute(id_of("elf"), tag(&["SciFi", "ärger"])).expect("elf");
+    app.update_model_meta.execute(id_of("clip"), tag(&["Functional"])).expect("clip");
+
+    let minis = RelPath::new("Minis").expect("valid");
+    let facets = app.tags.facets(library.id, &minis, "", 10).expect("facets");
+    let names: Vec<&str> = facets.iter().map(|(name, _)| name.as_str()).collect();
+    assert!(!names.contains(&"Functional"), "only what is in Minis: {names:?}");
+    let searched = app.tags.facets(library.id, &RelPath::root(), "clip", 10).expect("facets of a search");
+    assert_eq!(searched.iter().map(|(name, count)| (name.as_str(), *count)).collect::<Vec<_>>(), [("Functional", 1)]);
+
+    let sci_fi = TagName::new("Sci-Fi").expect("valid");
+    app.tags.set_pinned(library.id, &[TagName::new("SciFi").expect("valid")], true).expect("pin");
+    let merged =
+        app.tags.rename(library.id, &[TagName::new("SciFi").expect("valid"), sci_fi.clone()], &sci_fi).expect("merge");
+    assert_eq!(merged, 2);
+    let request = SearchRequest { text: "tag:sci-fi".to_owned(), library: None, scope: None, offset: 0, limit: 5 };
+    assert_eq!(app.search_models.execute(&request).expect("search").total, 2, "the search index follows the merge");
+    let list = app.tags.list(library.id).expect("tags");
+    let merged_tag = list.iter().find(|info| info.name == sci_fi).expect("merged tag");
+    assert_eq!(merged_tag.count, 2);
+    assert!(merged_tag.pinned, "the pin moved to the merged tag");
+    assert!(!list.iter().any(|info| info.name.as_str() == "SciFi"));
+    assert_eq!(
+        list.iter().find(|info| info.name.key() == "ärger").map(|info| info.count),
+        Some(2),
+        "umlauts count together"
+    );
+
+    let group = app.tags.save_group(library.id, None, "Genre", "#4f8cff").expect("group");
+    app.tags.set_group(library.id, std::slice::from_ref(&sci_fi), Some(group)).expect("move to group");
+    assert_eq!(
+        app.tags.list(library.id).expect("tags").iter().find(|info| info.name == sci_fi).and_then(|info| info.group),
+        Some(group)
+    );
+    app.tags.delete_group(library.id, group).expect("delete group");
+    assert_eq!(
+        app.tags.list(library.id).expect("tags").iter().find(|info| info.name == sci_fi).and_then(|info| info.group),
+        None
+    );
+
+    assert_eq!(app.tags.delete(library.id, &[sci_fi]).expect("delete"), 2);
+    assert_eq!(app.search_models.execute(&request).expect("search").total, 0);
 }

@@ -49,6 +49,8 @@ impl SearchModels {
             words: parsed.words,
             formats: parsed.formats,
             tags: parsed.tags,
+            any_tags: parsed.any_tags,
+            excluded_tags: parsed.excluded_tags,
             favorite: parsed.favorite,
             printed: parsed.printed,
             library: request.library,

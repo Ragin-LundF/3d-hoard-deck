@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hoarddeck_application::IndexError;
 use hoarddeck_application::ports::MetaStore;
-use hoarddeck_domain::{LibraryId, ModelMeta, RelPath, TagName};
+use hoarddeck_domain::{LibraryId, ModelMeta, RelPath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::SqliteIndex;
@@ -15,6 +15,7 @@ impl MetaStore for SqliteIndex {
 
     fn save_meta(&self, library: LibraryId, path: &RelPath, meta: &ModelMeta) -> Result<(), IndexError> {
         let tags = serde_json::to_string(&meta.tags).map_err(|error| IndexError(error.to_string()))?;
+        let hidden = serde_json::to_string(&meta.hidden_tags).map_err(|error| IndexError(error.to_string()))?;
         let now =
             SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
         self.write(|connection| {
@@ -25,10 +26,11 @@ impl MetaStore for SqliteIndex {
                 )?;
             } else {
                 connection.execute(
-                    "INSERT INTO model_meta (library_id, path, display_name, favorite, printed, notes, tags, cover, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                    "INSERT INTO model_meta (library_id, path, display_name, favorite, printed, notes, tags, cover, updated_at, hidden_tags)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                      ON CONFLICT (library_id, path) DO UPDATE SET
-                        display_name = ?3, favorite = ?4, printed = ?5, notes = ?6, tags = ?7, cover = ?8, updated_at = ?9",
+                        display_name = ?3, favorite = ?4, printed = ?5, notes = ?6, tags = ?7, cover = ?8, updated_at = ?9,
+                        hidden_tags = ?10",
                     params![
                         library.0,
                         path.as_str(),
@@ -38,7 +40,8 @@ impl MetaStore for SqliteIndex {
                         meta.notes,
                         tags,
                         meta.cover.as_ref().map(RelPath::as_str),
-                        now
+                        now,
+                        hidden
                     ],
                 )?;
             }
@@ -57,26 +60,12 @@ impl MetaStore for SqliteIndex {
                 .optional()
         })
     }
-
-    fn tags(&self, library: LibraryId) -> Result<Vec<(TagName, u32)>, IndexError> {
-        self.read(|connection| {
-            let mut statement = connection.prepare_cached(
-                "SELECT MIN(tag.value), COUNT(*) FROM model_meta, json_each(model_meta.tags) AS tag
-                 WHERE model_meta.library_id = ?1 GROUP BY lower(tag.value) ORDER BY COUNT(*) DESC, lower(tag.value)",
-            )?;
-            statement
-                .query_map([library.0], |row| {
-                    Ok((converted(0, TagName::new(&row.get::<_, String>(0)?))?, row.get(1)?))
-                })?
-                .collect()
-        })
-    }
 }
 
 pub(crate) fn meta_row(connection: &Connection, library: LibraryId, path: &RelPath) -> rusqlite::Result<ModelMeta> {
     let row = connection
         .query_row(
-            "SELECT display_name, favorite, printed, notes, tags, cover FROM model_meta WHERE library_id = ?1 AND path = ?2",
+            "SELECT display_name, favorite, printed, notes, tags, cover, hidden_tags FROM model_meta WHERE library_id = ?1 AND path = ?2",
             params![library.0, path.as_str()],
             |row| {
                 Ok(ModelMeta {
@@ -86,6 +75,7 @@ pub(crate) fn meta_row(connection: &Connection, library: LibraryId, path: &RelPa
                     notes: row.get(3)?,
                     tags: converted(4, serde_json::from_str(&row.get::<_, String>(4)?))?,
                     cover: crate::rows::optional_rel_path(row, 5)?,
+                    hidden_tags: converted(6, serde_json::from_str(&row.get::<_, String>(6)?))?,
                 })
             },
         )

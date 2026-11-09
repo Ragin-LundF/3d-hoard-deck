@@ -62,6 +62,8 @@ pub struct ModelMeta {
     pub notes: String,
     /// An image of the model the user picked as cover, instead of the detected one.
     pub cover: Option<RelPath>,
+    /// Tags from tag rules the user does not want on this model.
+    pub hidden_tags: BTreeSet<TagName>,
 }
 
 impl ModelMeta {
@@ -83,6 +85,8 @@ impl ModelMeta {
         }
         let mut seen = BTreeSet::new();
         self.tags.retain(|tag| seen.insert(tag.key()));
+        let mut seen = BTreeSet::new();
+        self.hidden_tags.retain(|tag| seen.insert(tag.key()));
         Ok(self)
     }
 

@@ -12,6 +12,8 @@ const PATHS: Record<string, ReactElement> = {
   moon: <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />,
   back: <path d="m15 18-6-6 6-6" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  pin: <><path d="M12 17v5" /><path d="M9 3h6l-1 5 3 3v2H7v-2l3-3z" /></>,
+  pinFilled: <><path d="M12 17v5" /><path d="M9 3h6l-1 5 3 3v2H7v-2l3-3z" fill="currentColor" /></>,
   drive: <><rect x="2" y="13" width="20" height="8" rx="2" /><path d="M6 17h.01M10 17h.01M4 13l2.5-8h11L20 13" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
   box: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M7 7V5h10v2" /></>,

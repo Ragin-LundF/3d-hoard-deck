@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 11] = [
+const MIGRATIONS: [&str; 13] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -163,6 +163,39 @@ ALTER TABLE models ADD COLUMN fingerprint INTEGER;
 -- whose mtime did not change cost no writes for the files in them.
 ALTER TABLE entries ADD COLUMN listed_gen INTEGER;
 CREATE INDEX entries_listed ON entries (library_id, listed_gen);
+",
+    r"
+-- 12: tag groups (Scale, Genre, …) and pinned tags. Tags themselves stay in model_meta; these rows only add
+-- presentation, keyed by the lower-case tag.
+CREATE TABLE tag_groups (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL,
+    position   INTEGER NOT NULL
+);
+CREATE TABLE tag_info (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    key        TEXT NOT NULL,
+    group_id   INTEGER REFERENCES tag_groups(id) ON DELETE SET NULL,
+    pinned     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (library_id, key)
+) WITHOUT ROWID;
+",
+    r"
+-- 13: tags from tag rules (derived from the path, rewritten on every regroup), rule tags the user hid on a model,
+-- and tag suggestions from an AI, kept until the user keeps or dismisses them. Both user-owned values are keyed by
+-- path like model_meta, so a regroup does not lose them.
+ALTER TABLE models ADD COLUMN auto_tags TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE model_meta ADD COLUMN hidden_tags TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE tag_suggestions (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    tags       TEXT NOT NULL,
+    source     TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
 ",
 ];
 

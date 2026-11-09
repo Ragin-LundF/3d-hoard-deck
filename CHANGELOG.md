@@ -5,6 +5,32 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 
 ## [Unreleased]
 
+### New
+- **A new way to work with tags.** The sidebar keeps your folders in view however many tags you have: one **Tags**
+  entry opens the tag browser, and the few tags you pin appear below the folders.
+- **Tag bar above the grid.** It shows the most common tags of what you are looking at. Click a tag to see only
+  models with it, ⌥-click (Alt-click) to hide models with it, and switch between "All" and "Any" when you pick
+  several. **All tags…** finds any tag by typing. The search box shows the filter, so you can save it as a smart
+  collection.
+- **Tag browser.** Filter, sort by use, name or recent use, list or cloud view, and jump by letter. Select several
+  tags to merge, rename, pin, delete or put them into groups such as Scale or Genre. Tags that look alike (Sci-Fi and
+  SciFi, Dragon and Dragons) are offered for merging. Only the app's index (and metadata files, if on) change, never
+  your model files.
+- Search understands `-tag:bust` (without a tag) and `tag:32mm|28mm` (any of these tags).
+- **Tags without typing: tag rules.** Settings › Tags › Tag rules turns folder and file names into tags, such as
+  `32mm`, `presupported`, `resin`, `bust` or the creator's folder. Add the suggested rules or write your own (any of
+  these words, all of them, a regular expression, or the folder below a given folder). Only whole words count
+  (`bust` never matches "Robust"), words like "unsupported" can stop a rule, and the usual miniature scales are the
+  only sizes. **Count matches** and **Try a path** show what a rule does before you save it. Rule tags are searchable
+  and appear in the tag bar, but they are kept apart from your own tags: changing a rule never touches what you typed,
+  and nothing is written into your libraries.
+- On a model page, rule tags appear under your tags: keep one as a normal tag, or hide it on that model.
+- **Tag suggestions from an AI (optional).** Under Settings › AI choose LM Studio, Ollama, OpenAI, Anthropic or another
+  OpenAI-compatible server. The AI looks at the model's preview picture and name and suggests a few tags; it never
+  changes anything by itself. Ask for one model on its page, for a folder with **Suggest tags**, or for all models
+  without tags. Keep or dismiss suggestions per model, or for many models at once in the tag browser. The API key is
+  kept in the system keychain. Model files are never sent. As long as AI is off, the app shows no AI feature at all.
+
 ### Faster
 - **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion
   or removing a rule now take effect at once; the models are regrouped in the background. Marking several folders

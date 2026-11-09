@@ -177,10 +177,76 @@ pub trait MetaStore: Send + Sync {
     /// # Errors
     /// Fails when the index cannot be read.
     fn meta_updated_at(&self, library: LibraryId, path: &RelPath) -> Result<Option<i64>, IndexError>;
-    /// Every tag in use with the number of models carrying it, most used first.
+}
+
+/// A tag in use, with how it is shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagInfo {
+    pub name: TagName,
+    /// Models carrying it.
+    pub count: u32,
+    pub group: Option<i64>,
+    pub pinned: bool,
+    /// When a model carrying it was last changed (seconds since 1970), for "recently used".
+    pub recent: i64,
+}
+
+/// A user-made group of tags, such as Scale or Genre.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagGroup {
+    pub id: i64,
+    pub name: String,
+    /// A CSS colour, such as `#4f8cff`.
+    pub color: String,
+}
+
+/// Which models a tag count covers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagScope {
+    /// Models in the folder and below it (the root: the whole library).
+    Folder(RelPath),
+    Models(Vec<ModelId>),
+}
+
+/// Tag groups, pins and counts. The tags themselves live in each model's metadata.
+pub trait TagStore: Send + Sync {
+    /// Every tag in use, most used first.
     /// # Errors
     /// Fails when the index cannot be read.
-    fn tags(&self, library: LibraryId) -> Result<Vec<(TagName, u32)>, IndexError>;
+    fn tag_infos(&self, library: LibraryId) -> Result<Vec<TagInfo>, IndexError>;
+    /// The most used tags among the models in `scope`.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn tag_counts(&self, library: LibraryId, scope: &TagScope, limit: usize)
+    -> Result<Vec<(TagName, u32)>, IndexError>;
+    /// Model paths carrying any of the tags (compared without case).
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn paths_with_tags(&self, library: LibraryId, tags: &[TagName]) -> Result<Vec<RelPath>, IndexError>;
+    /// After a rename or merge: the group and pin of the first old tag move to `to`, unless it has its own.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn move_tag_info(&self, library: LibraryId, from: &[TagName], to: &TagName) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn forget_tags(&self, library: LibraryId, tags: &[TagName]) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_tag_group(&self, library: LibraryId, tags: &[TagName], group: Option<i64>) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_tag_pinned(&self, library: LibraryId, tags: &[TagName], pinned: bool) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn tag_groups(&self, library: LibraryId) -> Result<Vec<TagGroup>, IndexError>;
+    /// Creates a group (`id` = `None`) or renames and recolours one. Returns its id.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_tag_group(&self, library: LibraryId, id: Option<i64>, name: &str, color: &str) -> Result<i64, IndexError>;
+    /// Its tags become ungrouped.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn delete_tag_group(&self, library: LibraryId, id: i64) -> Result<(), IndexError>;
 }
 
 /// Hand-made and smart collections. Members are kept by library and path, so they survive regrouping.
@@ -484,6 +550,100 @@ pub trait IndexLocationStore: Send + Sync {
 }
 
 /// The user's slicer list, kept with the index.
+/// The tag rules, kept with the app settings (they apply to every library).
+pub trait TagRuleStore: Send + Sync {
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn load_tag_rules(&self) -> Result<Vec<crate::tagging::TagRule>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_tag_rules(&self, rules: &[crate::tagging::TagRule]) -> Result<(), IndexError>;
+}
+
+/// One question to an AI: instructions, the model's name and folder, and its preview picture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestRequest {
+    pub system: String,
+    pub text: String,
+    pub image_jpeg: Option<Vec<u8>>,
+}
+
+/// The tags as the AI wrote them, and the model that answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiAnswer {
+    pub tags: Vec<String>,
+    pub model: String,
+}
+
+/// An AI server: `OpenAI`-compatible (LM Studio, Ollama, `OpenAI`, others) or Anthropic.
+pub trait TagSuggester: Send + Sync {
+    /// The models the server offers, for choosing one.
+    /// # Errors
+    /// A readable reason when the server cannot be reached or refuses.
+    fn models(&self, settings: &crate::ai::AiSettings, key: Option<&str>) -> Result<Vec<String>, String>;
+    /// # Errors
+    /// A readable reason when the server cannot be reached, refuses, or answers with no tags.
+    fn suggest(
+        &self,
+        settings: &crate::ai::AiSettings,
+        key: Option<&str>,
+        request: &SuggestRequest,
+    ) -> Result<AiAnswer, String>;
+}
+
+/// Secrets in the system's keychain (macOS Keychain, Windows Credential Manager, Secret Service on Linux).
+pub trait SecretStore: Send + Sync {
+    /// # Errors
+    /// A readable reason when the keychain cannot be used.
+    fn secret(&self, name: &str) -> Result<Option<String>, String>;
+    /// `None` removes it.
+    /// # Errors
+    /// A readable reason when the keychain cannot be used.
+    fn set_secret(&self, name: &str, value: Option<&str>) -> Result<(), String>;
+}
+
+/// A small JPEG of an image file, from the thumbnail cache.
+pub trait PreviewImages: Send + Sync {
+    /// # Errors
+    /// A readable reason when the image cannot be read.
+    fn preview_jpeg(&self, file: &Path) -> Result<Vec<u8>, String>;
+}
+
+/// AI settings and the tags an AI suggested, per model path, until the user keeps or dismisses them.
+pub trait AiStore: Send + Sync {
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn load_ai_settings(&self) -> Result<crate::ai::AiSettings, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_ai_settings(&self, settings: &crate::ai::AiSettings) -> Result<(), IndexError>;
+    /// The suggested tags and which AI suggested them (`provider:model`).
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn suggestion(&self, library: LibraryId, path: &RelPath) -> Result<Option<(Vec<TagName>, String)>, IndexError>;
+    /// Also stores an empty answer, so a run that resumes skips the model.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn save_suggestion(
+        &self,
+        library: LibraryId,
+        path: &RelPath,
+        tags: &[TagName],
+        source: &str,
+    ) -> Result<(), IndexError>;
+    /// Takes `tags` out of the suggestions of `paths`.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn remove_suggested(&self, library: LibraryId, paths: &[RelPath], tags: &[TagName]) -> Result<(), IndexError>;
+    /// Every suggested tag with the number of models it is suggested for, most first.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn suggestion_counts(&self, library: LibraryId) -> Result<Vec<(TagName, u32)>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn paths_with_suggestion(&self, library: LibraryId, tag: &TagName) -> Result<Vec<RelPath>, IndexError>;
+}
+
 pub trait SlicerStore: Send + Sync {
     /// `None` until the list was saved once (first start: detect installed slicers).
     /// # Errors
@@ -510,4 +670,6 @@ pub trait EventSink: Send + Sync {
     fn scan_progress(&self, progress: &ScanProgress);
     /// `done` of `total` groups of same-size files compared.
     fn duplicates_progress(&self, _done: usize, _total: usize) {}
+    /// Tag suggestions: `done` of `total` models asked, `failed` of them without an answer; `running` is false at the end.
+    fn suggest_progress(&self, _done: usize, _total: usize, _failed: usize, _running: bool) {}
 }

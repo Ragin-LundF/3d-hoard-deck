@@ -4,6 +4,8 @@ import { commands, describeError, unwrap, type IpcFailure, type LibraryDto } fro
 import { FolderMenu, useFolderMenu } from "./features/folders/folder-menu";
 import { FolderTree } from "./features/folders/folder-tree";
 import { LibraryNav } from "./features/organize/library-nav";
+import { PinnedTags } from "./features/tags/pinned-tags";
+import { TagBrowser } from "./features/tags/tag-browser";
 import { CollectionsNav } from "./features/collections/collections-nav";
 import { CollectionView } from "./features/collections/collection-view";
 import { DuplicatesView } from "./features/duplicates/duplicates-view";
@@ -16,6 +18,8 @@ import { SettingsView, useAddLibrary } from "./features/settings/settings-view";
 import { Icon, Logo } from "./shared/icons";
 import { HOME, useRoute } from "./shared/route";
 import { useTheme } from "./shared/use-theme";
+import { SuggestStatus } from "./features/ai/suggest-status";
+import { useSuggestProgressListener } from "./features/ai/queries";
 import { t, plural } from "./shared/i18n";
 
 export function App() {
@@ -26,6 +30,7 @@ export function App() {
   const libraries = useLibraries();
   const onScanFailed = useCallback((error: IpcFailure) => setToast(describeError(error)), []);
   const scans = useScanStatus(onScanFailed);
+  useSuggestProgressListener();
   const menu = useFolderMenu();
   const addLibrary = useAddLibrary(setToast);
 
@@ -71,6 +76,8 @@ export function App() {
                 library={item.id}
                 route={libraryRoute && item.id === library?.id ? libraryRoute : null}
                 onNavigate={(patch) => navigate({ ...HOME, library: item.id, ...patch })}
+                onTags={() => navigate({ view: "tags", library: item.id })}
+                tagsOpen={route.view === "tags" && route.library === item.id}
               />
               <h4 className="subhead">{t("Folders")}</h4>
               <FolderTree
@@ -78,6 +85,11 @@ export function App() {
                 current={libraryRoute && item.id === library?.id ? libraryRoute.folder : null}
                 onOpen={(folder) => navigate({ ...HOME, library: item.id, folder })}
                 onMenu={(folder) => menu.open(item.id, folder.path, folder.isCollection)}
+              />
+              <PinnedTags
+                library={item.id}
+                query={libraryRoute && item.id === library?.id ? libraryRoute.q : null}
+                onSearch={(q) => navigate({ ...HOME, ...(libraryRoute && item.id === library?.id ? libraryRoute : {}), library: item.id, q, view: "library" })}
               />
             </div>
           ))}
@@ -96,6 +108,13 @@ export function App() {
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
           <SettingsView libraries={list} scans={scans} onError={setToast} />
+        ) : route.view === "tags" ? (
+          <TagBrowser
+            library={route.library}
+            libraryName={list.find((item) => item.id === route.library)?.name ?? ""}
+            onSearch={(q) => navigate({ ...HOME, library: route.library, q })}
+            onMessage={setToast}
+          />
         ) : route.view === "duplicates" ? (
           <DuplicatesView libraries={list} onOpenModel={(id) => navigate({ view: "model", id })} />
         ) : route.view === "collection" ? (
@@ -126,6 +145,7 @@ export function App() {
       <footer className="status">
         {route.view === "library" && <span>{t("{count} shown", { count: shown })}</span>}
         <span>{plural(list.length, "{count} library", "{count} libraries")}</span>
+        <SuggestStatus />
       </footer>
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}

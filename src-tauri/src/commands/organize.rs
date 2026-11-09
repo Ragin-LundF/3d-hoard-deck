@@ -7,7 +7,7 @@ use hoarddeck_domain::ModelId;
 
 use super::AppState;
 use crate::dto::{
-    DuplicateGroupDto, ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, TagCountDto, rel_path,
+    DuplicateGroupDto, ImportReportDto, IpcError, ModelDetailDto, ModelMetaDto, RebuildReportDto, rel_path,
 };
 
 /// Saves name, tags, marks and notes; also writes the `.3dhoarddeck` file when the library allows it.
@@ -16,13 +16,6 @@ use crate::dto::{
 pub async fn update_model_meta(app: AppState<'_>, id: u32, meta: ModelMetaDto) -> Result<ModelDetailDto, IpcError> {
     let meta = meta.try_into()?;
     Ok(app.update_model_meta.execute(ModelId(i64::from(id)), meta)?.into())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn list_tags(app: AppState<'_>, library: u32) -> Result<Vec<TagCountDto>, IpcError> {
-    let tags = app.list_tags.execute(LibraryId(i64::from(library)))?;
-    Ok(tags.into_iter().map(|(name, count)| TagCountDto { name: name.into(), count }).collect())
 }
 
 /// Restores names, tags, marks and notes from the library's `.3dhoarddeck` files (reads only).

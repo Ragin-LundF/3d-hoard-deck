@@ -1,4 +1,4 @@
-use hoarddeck_domain::{FileFormat, LibraryId, ModelFile, ModelId, ModelKind, ModelMeta, RelPath, YearMonth};
+use hoarddeck_domain::{FileFormat, LibraryId, ModelFile, ModelId, ModelKind, ModelMeta, RelPath, TagName, YearMonth};
 
 /// What a grid tile or list row needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,4 +29,6 @@ pub struct ModelDetail {
     /// The name derived from the folder or file, shown next to a display name.
     pub original_title: String,
     pub meta: ModelMeta,
+    /// Tags from tag rules, including those the user hid (`meta.hidden_tags`).
+    pub auto_tags: Vec<TagName>,
 }

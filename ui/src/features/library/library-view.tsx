@@ -8,8 +8,10 @@ import { NameInput } from "../collections/name-input";
 import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
 import { FolderPictures } from "./folder-pictures";
+import { TagBar } from "../tags/tag-bar";
 import { useFolderPage, useSearch } from "./queries";
 import { VirtualGrid } from "./virtual-grid";
+import { SuggestFolderButton } from "../ai/suggest-folder-button";
 import { t, plural } from "../../shared/i18n";
 
 type Item = { kind: "folder"; folder: FolderDto_Serialize } | { kind: "model"; model: ModelSummaryDto_Serialize };
@@ -77,6 +79,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
               <Icon name="refresh" />{t("Scan this folder")}
             </button>
           )}
+          {!searching && route.folder && <SuggestFolderButton library={library.id} folder={route.folder} onMessage={onError} />}
           {!searching && (
             <div className="seg" role="group" aria-label={t("Folder display")}>
               <button className={route.all ? "" : "on"} aria-pressed={!route.all} onClick={() => navigate({ ...route, all: false })}>
@@ -112,6 +115,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
             <input type="range" min={150} max={320} value={cardWidth} aria-label={t("Card size")} onChange={(event) => setCardWidth(Number(event.target.value))} />
           </label>
         </div>
+        <TagBar library={library.id} folder={route.folder} query={route.q} onQuery={(q) => navigate({ ...route, q })} />
       </div>
       {!searching && !route.all && <FolderPictures library={library.id} images={browse.data?.pages[0]?.images ?? []} />}
       {active.isError ? (

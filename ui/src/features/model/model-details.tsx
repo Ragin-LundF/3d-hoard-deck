@@ -2,6 +2,8 @@ import type { LibraryDto, ModelDetailDto_Serialize } from "../../ipc";
 import { formatBytes } from "../../shared/format";
 import { TagsInput } from "../organize/tags-input";
 import { useSaveMeta } from "../organize/use-save-meta";
+import { RuleTags } from "../tagging/rule-tags";
+import { AiTags } from "../ai/ai-tags";
 import { t } from "../../shared/i18n";
 
 type Props = { model: ModelDetailDto_Serialize; library: LibraryDto | undefined; onMessage: (message: string) => void };
@@ -15,6 +17,8 @@ export function ModelDetails({ model, library, onMessage }: Props) {
       <div className="fgroup">
         <h4>{t("Tags")}</h4>
         <TagsInput library={summary.library} tags={meta.tags} onChange={(tags) => save({ tags })} />
+        <RuleTags model={model} save={save} />
+        <AiTags model={model} onMessage={onMessage} />
       </div>
       <div className="fgroup">
         <h4>{t("Notes")}</h4>

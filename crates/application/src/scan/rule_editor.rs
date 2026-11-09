@@ -9,6 +9,7 @@ use super::{CompiledRules, LibraryLocks, ScanPhase, ScanProgress, ScanRules, reg
 use crate::AppError;
 use crate::library::writes_sidecars;
 use crate::ports::{EntryStore, EventSink, LibraryRepository, ModelRepository, SearchIndex, SidecarFiles};
+use crate::tagging::TagRuleBook;
 
 /// Changes arriving within this time are grouped together, so marking several folders in a row regroups once.
 const QUIET: Duration = Duration::from_millis(400);
@@ -24,6 +25,7 @@ pub struct RuleEditor {
     pub search: Arc<dyn SearchIndex>,
     pub locks: Arc<LibraryLocks>,
     pub sidecars: Arc<dyn SidecarFiles>,
+    pub tag_rules: Arc<TagRuleBook>,
     /// Tells the UI that a background regroup started and finished.
     pub events: Arc<dyn EventSink>,
     /// Serializes rule edits (read, change, save) and counts requested regroups per library.
@@ -41,7 +43,15 @@ impl RuleEditor {
         let compiled = CompiledRules::compile(&rules)?;
         self.libraries.save_scan_rules(library, &rules)?;
         save_rules_file(self.sidecars.as_ref(), &found, &rules);
-        regroup(self.entries.as_ref(), self.models.as_ref(), self.search.as_ref(), &self.locks, library, &compiled)?;
+        regroup(
+            self.entries.as_ref(),
+            self.models.as_ref(),
+            self.search.as_ref(),
+            &self.locks,
+            library,
+            &compiled,
+            &self.tag_rules.current(),
+        )?;
         Ok(())
     }
 
@@ -62,13 +72,24 @@ impl RuleEditor {
             CompiledRules::compile(&rules)?;
             self.libraries.save_scan_rules(library, &rules)?;
             save_rules_file(self.sidecars.as_ref(), &found, &rules);
-            let ticket = queue.entry(library).or_default();
-            *ticket += 1;
-            *ticket
+            Self::next_ticket(&mut queue, library)
         };
         let editor = Arc::clone(self);
         thread::spawn(move || editor.regroup_when_quiet(library, ticket));
         Ok(())
+    }
+
+    /// Regroups in the background without changing the folder rules, e.g. after the tag rules changed.
+    pub(crate) fn regroup_soon(self: &Arc<Self>, library: LibraryId) {
+        let ticket = Self::next_ticket(&mut self.queue(), library);
+        let editor = Arc::clone(self);
+        thread::spawn(move || editor.regroup_when_quiet(library, ticket));
+    }
+
+    fn next_ticket(queue: &mut HashMap<LibraryId, u64>, library: LibraryId) -> u64 {
+        let ticket = queue.entry(library).or_default();
+        *ticket += 1;
+        *ticket
     }
 
     /// Waits until no background regroup is pending, or `timeout` passed. Returns whether all are done.
@@ -104,6 +125,7 @@ impl RuleEditor {
                                 &self.locks,
                                 library,
                                 &rules,
+                                &self.tag_rules.current(),
                             )
                         });
                     if let Err(error) = result {

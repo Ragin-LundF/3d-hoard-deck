@@ -27,6 +27,8 @@ fn query(words: &[&str]) -> SearchQuery {
         words: words.iter().map(|w| (*w).to_owned()).collect(),
         formats: Vec::new(),
         tags: Vec::new(),
+        any_tags: Vec::new(),
+        excluded_tags: Vec::new(),
         favorite: false,
         printed: false,
         library: Some(LIBRARY),
@@ -113,6 +115,11 @@ fn tags_notes_and_marks_are_searchable_and_filterable_after_an_update() {
     assert_eq!(ids(&index, &query(&["supports"])), vec![1], "notes are searched");
     assert_eq!(ids(&index, &SearchQuery { tags: vec!["sci fi".to_owned()], ..query(&[]) }), vec![1]);
     assert_eq!(ids(&index, &SearchQuery { favorite: true, ..query(&[]) }), vec![1]);
+    let without_resin = ids(&index, &SearchQuery { excluded_tags: vec!["resin".to_owned()], ..query(&[]) });
+    assert_eq!(without_resin.len(), 4, "everything but Wolverine");
+    assert!(!without_resin.contains(&1));
+    let either = SearchQuery { any_tags: vec!["fdm".to_owned(), "resin".to_owned()], ..query(&[]) };
+    assert_eq!(ids(&index, &either), vec![1], "any of the tags");
     assert_eq!(ids(&index, &SearchQuery { printed: true, ..query(&[]) }), Vec::<i64>::new());
     assert_eq!(index.search(&query(&[])).expect("all").total, 5, "the update replaced, not duplicated");
 }

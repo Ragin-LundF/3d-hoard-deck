@@ -13,5 +13,7 @@ mod queries;
 mod rows;
 mod schema;
 mod settings;
+mod suggestions;
+mod tags;
 
 pub use database::SqliteIndex;

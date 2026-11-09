@@ -6,6 +6,7 @@ export type Route =
   | { view: "model"; id: number }
   | { view: "collection"; id: number }
   | { view: "duplicates" }
+  | { view: "tags"; library: number }
   | { view: "settings" };
 
 export type LibraryRoute = Extract<Route, { view: "library" }>;
@@ -17,6 +18,8 @@ export function parseRoute(hash: string): Route {
   const view = params.get("view");
   if (view === "settings") return { view: "settings" };
   if (view === "duplicates") return { view: "duplicates" };
+  const tagsLibrary = Number(params.get("lib"));
+  if (view === "tags" && Number.isInteger(tagsLibrary) && tagsLibrary > 0) return { view: "tags", library: tagsLibrary };
   const id = Number(params.get("id"));
   if (view === "model" && Number.isInteger(id) && id > 0) return { view: "model", id };
   if (view === "collection" && Number.isInteger(id) && id > 0) return { view: "collection", id };
@@ -33,6 +36,7 @@ export function parseRoute(hash: string): Route {
 export function formatRoute(route: Route): string {
   const params = new URLSearchParams({ view: route.view });
   if (route.view === "model" || route.view === "collection") params.set("id", String(route.id));
+  if (route.view === "tags") params.set("lib", String(route.library));
   if (route.view === "library") {
     if (route.library !== null) params.set("lib", String(route.library));
     if (route.folder) params.set("folder", route.folder);

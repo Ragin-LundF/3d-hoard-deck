@@ -93,6 +93,7 @@ fn folder_model(path: RelPath, marked_by_user: bool, owned: Vec<Owned<'_>>, imag
         collection: None,
         marked_by_user,
         files,
+        auto_tags: Vec::new(),
         kind: ModelKind::Folder,
         path,
     }
@@ -123,6 +124,7 @@ fn file_model(file: &Owned<'_>, pictures: &[&Owned<'_>], images: &ImagesByDir<'_
         files,
         collection: None,
         marked_by_user: false,
+        auto_tags: Vec::new(),
         kind: ModelKind::File,
         folder,
         path,

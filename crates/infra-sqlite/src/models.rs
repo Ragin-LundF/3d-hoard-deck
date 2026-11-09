@@ -112,11 +112,12 @@ fn upsert_model(
 ) -> rusqlite::Result<i64> {
     let id: i64 = transaction
         .prepare_cached(
-            "INSERT INTO models (library_id, path, folder, kind, title, released, cover, formats, file_count, total_size, added_at, collection, marked_by_user, seen, fingerprint)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, ?14)
+            "INSERT INTO models (library_id, path, folder, kind, title, released, cover, formats, file_count, total_size, added_at, collection, marked_by_user, seen, fingerprint, auto_tags)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, ?14, ?15)
              ON CONFLICT (library_id, path) DO UPDATE SET
                 folder = ?3, kind = ?4, title = ?5, released = ?6, cover = ?7, formats = ?8,
-                file_count = ?9, total_size = ?10, collection = ?12, marked_by_user = ?13, seen = 1, fingerprint = ?14
+                file_count = ?9, total_size = ?10, collection = ?12, marked_by_user = ?13, seen = 1, fingerprint = ?14,
+                auto_tags = ?15
              RETURNING id",
         )?
         .query_row(
@@ -135,6 +136,7 @@ fn upsert_model(
                 model.collection.as_ref().map(RelPath::as_str),
                 model.marked_by_user,
                 fingerprint,
+                serde_json::to_string(&model.auto_tags).unwrap_or_else(|_| "[]".to_owned()),
             ],
             |row| row.get(0),
         )?;
@@ -163,6 +165,10 @@ fn fingerprint(model: &Model) -> i64 {
     for file in &model.files {
         let _ =
             write!(text, "|{}:{}:{}:{}", file.path, file.kind.code(), file.size, file.variant.as_deref().unwrap_or(""));
+    }
+    // Only when there are any, so the fingerprints stored before tag rules existed still match.
+    for tag in &model.auto_tags {
+        let _ = write!(text, "|tag:{}", tag.as_str());
     }
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in text.bytes() {
