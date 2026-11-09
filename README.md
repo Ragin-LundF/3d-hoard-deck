@@ -7,7 +7,7 @@ files into a browsable, searchable library with cover images and an interactive 
 folders in place: nothing is moved, copied or uploaded, and the app never writes into your library unless you
 allow it.
 
-![Browsing a library: every model gets a cover](docs/screenshots/all-models.png)
+![Browsing a library: every model gets a cover, in the dark and the light theme](docs/screenshots/light-dark.png)
 
 ## What it does
 

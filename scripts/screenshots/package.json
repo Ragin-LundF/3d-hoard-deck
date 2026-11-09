@@ -1,0 +1,9 @@
+{
+  "name": "hoarddeck-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Makes the README screenshots from a generated demo library; see README.md here.",
+  "devDependencies": {
+    "playwright-core": "^1.65.0"
+  }
+}

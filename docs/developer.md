@@ -126,6 +126,12 @@ root wires them together.
   folder is byte-for-byte unchanged afterwards.
 - Frontend logic has Vitest tests (`*.test.ts`).
 
+## Screenshots
+
+`./scripts/screenshots/run.sh` rebuilds every picture in `docs/screenshots/` from a generated demo library (dark
+theme, plus `light-dark.png` split diagonally). It needs a Chromium for Playwright; see
+[scripts/screenshots/README.md](../scripts/screenshots/README.md).
+
 ## Debugging helpers
 
 ```bash
