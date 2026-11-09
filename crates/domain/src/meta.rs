@@ -8,7 +8,9 @@ const MAX_TAG: usize = 64;
 const MAX_NAME: usize = 200;
 const MAX_NOTES: usize = 20_000;
 
-/// A tag as the user typed it, trimmed, with inner whitespace collapsed. Compared case-insensitively.
+/// A tag as the user typed it, trimmed, with inner whitespace collapsed. Compared case-insensitively. `|` (which means
+/// "any of" in search) becomes `/`, and `"` (which quotes in search) is dropped, whatever the tag came from: typing, an
+/// import, a folder name or an AI.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct TagName(String);
@@ -17,7 +19,7 @@ impl TagName {
     /// # Errors
     /// Returns [`DomainError::InvalidMeta`] for empty or overly long tags.
     pub fn new(text: &str) -> Result<Self, DomainError> {
-        let tag = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let tag = Self::tidy(text).split_whitespace().collect::<Vec<_>>().join(" ");
         if tag.is_empty() || tag.chars().count() > MAX_TAG {
             return Err(DomainError::InvalidMeta("a tag needs 1 to 64 characters"));
         }
@@ -33,6 +35,16 @@ impl TagName {
     #[must_use]
     pub fn key(&self) -> String {
         self.0.to_lowercase()
+    }
+
+    /// The comparison key of any stored text, also of tags saved before `|` and `"` were tidied.
+    #[must_use]
+    pub fn key_of(text: &str) -> String {
+        Self::tidy(text).to_lowercase()
+    }
+
+    fn tidy(text: &str) -> String {
+        text.replace('|', "/").replace('"', "")
     }
 }
 
@@ -104,6 +116,8 @@ mod tests {
     fn tags_are_tidied_and_deduplicated_case_insensitively() {
         assert_eq!(TagName::new("  Sci   Fi ").expect("valid").as_str(), "Sci Fi");
         assert!(TagName::new("   ").is_err());
+        assert_eq!(TagName::new(r#"28|32mm "big""#).expect("valid").as_str(), "28/32mm big");
+        assert_eq!(TagName::key_of("28|32MM"), "28/32mm");
         let meta = ModelMeta {
             tags: ["Dragon", "dragon", "Resin"].iter().map(|t| TagName::new(t).expect("valid")).collect(),
             display_name: Some("  ".to_owned()),

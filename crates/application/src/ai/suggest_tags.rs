@@ -15,6 +15,8 @@ use crate::ports::{
 use crate::{AppError, ModelDetail};
 
 const MAX_PROMPT: usize = 10_000;
+/// A run stops after this many models in a row without an answer: a wrong key or a used-up quota fails every time.
+const MAX_FAILURES_IN_A_ROW: usize = 5;
 
 /// What to do with the stored API key when saving the settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,23 +155,33 @@ impl SuggestTags {
     /// # Errors
     /// Fails when AI is off, a run is going on already, or the index cannot be read.
     pub fn start(self: &Arc<Self>, library: LibraryId, folder: &RelPath) -> Result<usize, AppError> {
+        let candidates = self.candidates(library, folder)?;
+        self.start_with(library, candidates)
+    }
+
+    /// Runs over `candidates` in the background. Returns their number.
+    pub(super) fn start_with(
+        self: &Arc<Self>,
+        library: LibraryId,
+        candidates: Vec<ModelId>,
+    ) -> Result<usize, AppError> {
         let settings = self.enabled_settings()?;
         let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(AppError::InvalidInput("tags are being suggested already".to_owned()));
         }
-        let candidates = match self.candidates(library, folder) {
-            Ok(candidates) => candidates,
-            Err(error) => {
-                self.running.store(false, Ordering::SeqCst);
-                return Err(error);
-            }
-        };
         let total = candidates.len();
         self.cancelled.store(false, Ordering::SeqCst);
         let this = Arc::clone(self);
         thread::spawn(move || this.run(&settings, &found.root, library, &candidates));
         Ok(total)
+    }
+
+    /// How many models [`Self::start`] would ask about, to confirm a run that costs money first.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    pub fn count(&self, library: LibraryId, folder: &RelPath) -> Result<usize, AppError> {
+        Ok(self.candidates(library, folder)?.len())
     }
 
     pub fn cancel(&self) {
@@ -188,9 +200,9 @@ impl SuggestTags {
     /// Fails when the index or a metadata file cannot be written.
     pub fn accept_all(&self, library: LibraryId, tag: &TagName) -> Result<usize, AppError> {
         let paths = self.store.paths_with_suggestion(library, tag)?;
-        let changed = self.tags.rewrite_paths(library, &paths, |tags| {
-            if !tags.iter().any(|known| known.key() == tag.key()) {
-                tags.insert(tag.clone());
+        let changed = self.tags.rewrite_paths(library, &paths, |_, meta| {
+            if !meta.tags.iter().any(|known| known.key() == tag.key()) {
+                meta.tags.insert(tag.clone());
             }
         })?;
         self.store.remove_suggested(library, &paths, std::slice::from_ref(tag))?;
@@ -209,8 +221,8 @@ impl SuggestTags {
     fn run(&self, settings: &AiSettings, root: &str, library: LibraryId, candidates: &[ModelId]) {
         let key = self.key(settings.provider);
         let vocabulary = self.vocabulary(library).unwrap_or_default();
-        let (total, mut failed) = (candidates.len(), 0);
-        self.events.suggest_progress(0, total, 0, true);
+        let (total, mut failed, mut in_a_row) = (candidates.len(), 0, 0);
+        self.events.suggest_progress(library, 0, total, 0, true);
         for (done, id) in candidates.iter().enumerate() {
             if self.cancelled.load(Ordering::SeqCst) {
                 break;
@@ -228,23 +240,40 @@ impl SuggestTags {
                 // shortcut: reasons are only logged; the UI shows how many failed.
                 eprintln!("no tag suggestion for model {}: {error}", id.0);
                 failed += 1;
+                in_a_row += 1;
+            } else {
+                in_a_row = 0;
             }
-            self.events.suggest_progress(done + 1, total, failed, true);
+            self.events.suggest_progress(library, done + 1, total, failed, true);
+            if in_a_row >= MAX_FAILURES_IN_A_ROW {
+                eprintln!("tag suggestions stopped after {in_a_row} failures in a row");
+                break;
+            }
         }
         self.running.store(false, Ordering::SeqCst);
-        self.events.suggest_progress(total, total, failed, false);
+        self.events.suggest_progress(library, total, total, failed, false);
     }
 
     fn candidates(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<ModelId>, AppError> {
+        self.candidates_where(library, |path| path.is_within(folder), folder.is_root())
+    }
+
+    /// Models `wanted` takes that have no suggestions yet (and no own tags, with `only_untagged`), sorted by path.
+    pub(super) fn candidates_where(
+        &self,
+        library: LibraryId,
+        wanted: impl Fn(&RelPath) -> bool,
+        only_untagged: bool,
+    ) -> Result<Vec<ModelId>, AppError> {
         let mut documents: Vec<_> =
-            self.models.search_documents(library)?.into_iter().filter(|doc| doc.path.is_within(folder)).collect();
+            self.models.search_documents(library)?.into_iter().filter(|doc| wanted(&doc.path)).collect();
         documents.sort_by(|a, b| a.path.cmp(&b.path));
         let mut ids = Vec::new();
         for document in documents {
             if self.store.suggestion(library, &document.path)?.is_some() {
                 continue;
             }
-            if folder.is_root() && !self.meta.meta(library, &document.path)?.tags.is_empty() {
+            if only_untagged && !self.meta.meta(library, &document.path)?.tags.is_empty() {
                 continue;
             }
             ids.push(document.id);

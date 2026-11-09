@@ -4,20 +4,27 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
+use std::sync::Arc;
+
 use hoarddeck_application::ports::FileHasher;
+
+use crate::IoPriority;
 use hoarddeck_domain::RelPath;
 
 /// Bytes read from the start and from the end for the quick fingerprint.
 const EDGE: u64 = 64 * 1024;
 
-pub struct Blake3Hasher;
+/// Steps back for pictures and 3D files the user is waiting for, like the scanner.
+pub struct Blake3Hasher(pub Arc<IoPriority>);
 
 impl FileHasher for Blake3Hasher {
     fn quick(&self, root: &str, file: &RelPath) -> Result<[u8; 32], String> {
+        self.0.yield_to_foreground();
         quick(&absolute(root, file)).map_err(|error| format!("{file}: {error}"))
     }
 
     fn full(&self, root: &str, file: &RelPath) -> Result<[u8; 32], String> {
+        self.0.yield_to_foreground();
         let mut hasher = blake3::Hasher::new();
         hasher
             .update_reader(File::open(absolute(root, file)).map_err(|e| format!("{file}: {e}"))?)
@@ -65,7 +72,7 @@ mod tests {
         std::fs::write(dir.path().join("c.stl"), &content).expect("write c");
         let root = dir.path().to_str().expect("utf-8");
         let file = |name: &str| RelPath::new(name).expect("valid");
-        let hasher = Blake3Hasher;
+        let hasher = Blake3Hasher(Arc::default());
         assert_eq!(hasher.quick(root, &file("a.stl")), hasher.quick(root, &file("b.stl")));
         assert_eq!(hasher.quick(root, &file("a.stl")), hasher.quick(root, &file("c.stl")), "the middle is not sampled");
         assert_ne!(hasher.full(root, &file("a.stl")), hasher.full(root, &file("c.stl")));

@@ -7,12 +7,20 @@ export type Route =
   | { view: "collection"; id: number }
   | { view: "duplicates" }
   | { view: "tags"; library: number }
+  | { view: "review"; library: number; tab: ReviewTab; tag: string; folder: string }
   | { view: "settings"; tab: SettingsTab; lib: number | null; sub: string };
 
 /** The pages of Settings; `library` is one library's detail (`lib`), `sub` a tab inside a page. */
 export const SETTINGS_TABS = ["overview", "libraries", "library", "files", "tags", "ai", "slicers", "general", "index", "updates"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 export type SettingsRoute = Extract<Route, { view: "settings" }>;
+
+/** The AI tag review: by tag (main view), by model, what was reviewed, and the folders the AI works on. */
+export const REVIEW_TABS = ["tag", "model", "reviewed", "folders"] as const;
+export type ReviewTab = (typeof REVIEW_TABS)[number];
+export type ReviewRoute = Extract<Route, { view: "review" }>;
+
+export const reviewRoute = (library: number, tab: ReviewTab = "tag", tag = "", folder = ""): ReviewRoute => ({ view: "review", library, tab, tag, folder });
 
 export const settingsRoute = (tab: SettingsTab = "overview", lib: number | null = null, sub = ""): SettingsRoute => ({ view: "settings", tab, lib, sub });
 
@@ -30,6 +38,10 @@ export function parseRoute(hash: string): Route {
   }
   if (view === "duplicates") return { view: "duplicates" };
   const tagsLibrary = Number(params.get("lib"));
+  if (view === "review" && Number.isInteger(tagsLibrary) && tagsLibrary > 0) {
+    const tab = REVIEW_TABS.find((name) => name === params.get("tab")) ?? "tag";
+    return reviewRoute(tagsLibrary, tab, params.get("tag") ?? "", params.get("folder") ?? "");
+  }
   if (view === "tags" && Number.isInteger(tagsLibrary) && tagsLibrary > 0) return { view: "tags", library: tagsLibrary };
   const id = Number(params.get("id"));
   if (view === "model" && Number.isInteger(id) && id > 0) return { view: "model", id };
@@ -48,6 +60,12 @@ export function formatRoute(route: Route): string {
   const params = new URLSearchParams({ view: route.view });
   if (route.view === "model" || route.view === "collection") params.set("id", String(route.id));
   if (route.view === "tags") params.set("lib", String(route.library));
+  if (route.view === "review") {
+    params.set("lib", String(route.library));
+    if (route.tab !== "tag") params.set("tab", route.tab);
+    if (route.tag) params.set("tag", route.tag);
+    if (route.folder) params.set("folder", route.folder);
+  }
   if (route.view === "settings") {
     if (route.tab !== "overview") params.set("tab", route.tab);
     if (route.lib !== null) params.set("lib", String(route.lib));

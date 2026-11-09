@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use hoarddeck_domain::{LibraryId, ModelKind, RelPath, TagName};
+use hoarddeck_domain::{LibraryId, ModelKind, ModelMeta, RelPath, TagName};
 
 use super::sidecar_path;
 use crate::AppError;
@@ -66,9 +66,12 @@ impl ManageTags {
     /// Fails for an unknown library, or when the index or a metadata file cannot be written.
     pub fn rename(&self, library: LibraryId, from: &[TagName], to: &TagName) -> Result<usize, AppError> {
         let keys: BTreeSet<String> = from.iter().map(TagName::key).collect();
-        let changed = self.rewrite(library, from, |tags| {
-            tags.retain(|tag| !keys.contains(&tag.key()));
-            tags.insert(to.clone());
+        let changed = self.rewrite(library, from, |meta| {
+            meta.tags.retain(|tag| !keys.contains(&tag.key()));
+            meta.tags.insert(to.clone());
+            // Rule tags cannot be renamed, so the old name is hidden on these models and the new one is their own tag.
+            meta.hidden_tags.extend(from.iter().filter(|tag| tag.key() != to.key()).cloned());
+            meta.hidden_tags.retain(|tag| tag.key() != to.key());
         })?;
         self.tags.move_tag_info(library, from, to)?;
         Ok(changed)
@@ -79,7 +82,11 @@ impl ManageTags {
     /// Fails for an unknown library, or when the index or a metadata file cannot be written.
     pub fn delete(&self, library: LibraryId, tags: &[TagName]) -> Result<usize, AppError> {
         let keys: BTreeSet<String> = tags.iter().map(TagName::key).collect();
-        let changed = self.rewrite(library, tags, |set| set.retain(|tag| !keys.contains(&tag.key())))?;
+        let changed = self.rewrite(library, tags, |meta| {
+            meta.tags.retain(|tag| !keys.contains(&tag.key()));
+            // A tag from a tag rule would come back with the next regroup; hiding it removes it for good.
+            meta.hidden_tags.extend(tags.iter().cloned());
+        })?;
         self.tags.forget_tags(library, tags)?;
         Ok(changed)
     }
@@ -124,18 +131,19 @@ impl ManageTags {
         &self,
         library: LibraryId,
         tags: &[TagName],
-        change: impl Fn(&mut BTreeSet<TagName>),
+        change: impl Fn(&mut ModelMeta),
     ) -> Result<usize, AppError> {
         let paths = self.tags.paths_with_tags(library, tags)?;
-        self.rewrite_paths(library, &paths, change)
+        self.rewrite_paths(library, &paths, |_, meta| change(meta))
     }
 
-    /// Applies `change` to the tags of the models at `paths`, then refreshes the search index once.
+    /// Applies `change` to the metadata of the models at `paths`, then refreshes the search index once, also when a
+    /// write failed halfway, so search matches what was changed until then.
     pub(crate) fn rewrite_paths(
         &self,
         library: LibraryId,
         paths: &[RelPath],
-        change: impl Fn(&mut BTreeSet<TagName>),
+        change: impl Fn(&RelPath, &mut ModelMeta),
     ) -> Result<usize, AppError> {
         let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
         if paths.is_empty() {
@@ -143,9 +151,10 @@ impl ManageTags {
         }
         let kinds: HashMap<RelPath, ModelKind> =
             self.models.search_documents(library)?.into_iter().map(|document| (document.path, document.kind)).collect();
-        for path in paths {
+        let written = paths.iter().try_for_each(|path| -> Result<(), AppError> {
             let mut meta = self.meta.meta(library, path)?;
-            change(&mut meta.tags);
+            change(path, &mut meta);
+            let meta = meta.normalized()?;
             self.meta.save_meta(library, path, &meta)?;
             if writes_sidecars(found.settings)
                 && let Some(file) = kinds.get(path).and_then(|kind| sidecar_path(path, *kind))
@@ -154,9 +163,12 @@ impl ManageTags {
                     .write(&found.root, &file, &meta)
                     .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
             }
-        }
+            Ok(())
+        });
         let _sync = self.locks.search_sync();
-        self.search.replace_library(library, &self.models.search_documents(library)?)?;
+        let refreshed = self.search.replace_library(library, &self.models.search_documents(library)?);
+        written?;
+        refreshed?;
         Ok(paths.len())
     }
 }

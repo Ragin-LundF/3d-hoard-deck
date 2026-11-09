@@ -17,11 +17,19 @@ impl TagStore for SqliteIndex {
     fn tag_infos(&self, library: LibraryId) -> Result<Vec<TagInfo>, IndexError> {
         self.read(|connection| {
             let mut statement = connection.prepare_cached(
-                "SELECT MIN(t.value), COUNT(*), i.group_id, coalesce(i.pinned, 0), MAX(mm.updated_at)
-                 FROM model_meta mm, json_each(mm.tags) t
-                 LEFT JOIN tag_info i ON i.library_id = mm.library_id AND i.key = tag_key(t.value)
-                 WHERE mm.library_id = ?1
-                 GROUP BY tag_key(t.value) ORDER BY COUNT(*) DESC, tag_key(t.value)",
+                "WITH t(id, value, updated) AS (
+                    SELECT m.id, j.value, mm.updated_at FROM models m
+                    JOIN model_meta mm ON mm.library_id = m.library_id AND mm.path = m.path, json_each(mm.tags) j
+                    WHERE m.library_id = ?1
+                    UNION
+                    SELECT m.id, j.value, coalesce(mm.updated_at, 0) FROM models m
+                    LEFT JOIN model_meta mm ON mm.library_id = m.library_id AND mm.path = m.path, json_each(m.auto_tags) j
+                    WHERE m.library_id = ?1 AND NOT EXISTS
+                        (SELECT 1 FROM json_each(mm.hidden_tags) h WHERE tag_key(h.value) = tag_key(j.value))
+                 )
+                 SELECT MIN(t.value), COUNT(DISTINCT t.id), i.group_id, coalesce(i.pinned, 0), MAX(t.updated)
+                 FROM t LEFT JOIN tag_info i ON i.library_id = ?1 AND i.key = tag_key(t.value)
+                 GROUP BY tag_key(t.value) ORDER BY COUNT(DISTINCT t.id) DESC, tag_key(t.value)",
             )?;
             statement
                 .query_map([library.0], |row| {
@@ -86,8 +94,11 @@ impl TagStore for SqliteIndex {
     fn paths_with_tags(&self, library: LibraryId, tags: &[TagName]) -> Result<Vec<RelPath>, IndexError> {
         self.read(|connection| {
             let mut statement = connection.prepare_cached(
-                "SELECT DISTINCT mm.path FROM model_meta mm, json_each(mm.tags) t
-                 WHERE mm.library_id = ?1 AND tag_key(t.value) IN (SELECT tag_key(value) FROM json_each(?2))",
+                "SELECT mm.path FROM model_meta mm, json_each(mm.tags) t
+                 WHERE mm.library_id = ?1 AND tag_key(t.value) IN (SELECT tag_key(value) FROM json_each(?2))
+                 UNION
+                 SELECT m.path FROM models m, json_each(m.auto_tags) t
+                 WHERE m.library_id = ?1 AND tag_key(t.value) IN (SELECT tag_key(value) FROM json_each(?2))",
             )?;
             statement.query_map(params![library.0, names_json(tags)], |row| rel_path(row, 0))?.collect()
         })

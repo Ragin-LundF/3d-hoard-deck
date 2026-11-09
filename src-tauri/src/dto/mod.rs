@@ -15,7 +15,7 @@ mod slicer;
 mod tag_rules;
 mod tags;
 
-pub use ai::{AiSettingsDto, AiTestDto, AiViewDto};
+pub use ai::{AiFoldersDto, AiSettingsDto, AiTestDto, AiViewDto, DecisionDto, ResolutionDto, ReviewItemDto};
 pub use browse::{ArchiveEntryDto, BrowseRequestDto, FolderPageDto, FolderRoleDto};
 pub use collection::CollectionDto;
 pub use duplicates::DuplicateGroupDto;

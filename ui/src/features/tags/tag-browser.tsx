@@ -113,7 +113,7 @@ export function TagBrowser({ library, libraryName, onSearch, onMessage }: Props)
         )}
       </div>
 
-      <SuggestionReview library={library} onMessage={onMessage} />
+      <SuggestionReview library={library} />
 
       <div className="tb-body">
         <nav className="tb-groups" aria-label={t("Tag groups")}>

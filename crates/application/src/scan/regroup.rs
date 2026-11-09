@@ -27,11 +27,14 @@ pub(crate) fn regroup(
             model.auto_tags = tags;
         }
     }
+    // Unchanged models are skipped from now on, so a search update that never happened must be caught up in full.
+    let behind = models.search_pending(library)?;
+    models.set_search_pending(library, true)?;
     let change = models.replace_catalog(library, &catalog)?;
     let _sync = locks.search_sync();
     // Few changes: update just those documents. Many (the first regroup after an update, a big rescan): one rebuild
     // is cheaper than thousands of single lookups.
-    if change.changed.len() > FULL_REBUILD_ABOVE.max(catalog.models.len() / 4) {
+    if behind || change.changed.len() > FULL_REBUILD_ABOVE.max(catalog.models.len() / 4) {
         search.replace_library(library, &models.search_documents(library)?)?;
     } else if !change.changed.is_empty() || !change.removed.is_empty() {
         let documents = change
@@ -42,5 +45,6 @@ pub(crate) fn regroup(
             .collect::<Result<Vec<_>, _>>()?;
         search.apply_changes(&documents, &change.removed)?;
     }
+    models.set_search_pending(library, false)?;
     Ok((catalog.models.len(), catalog.folders.len()))
 }

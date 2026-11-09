@@ -28,12 +28,11 @@ type Props = {
   scan: ScanStatus | undefined;
   sub: LibrarySub;
   onSub: (sub: LibrarySub) => void;
-  onBack: () => void;
   onError: (message: string) => void;
 };
 
 /** One library in Settings: rescans and scan problems, then tabs for access, folder rules, and import/rebuild. */
-export function LibrarySettings({ library, scan, sub, onSub, onBack, onError }: Props) {
+export function LibrarySettings({ library, scan, sub, onSub, onError }: Props) {
   const queryClient = useQueryClient();
   const save = useMutation({
     mutationFn: (settings: { access: AccessModeDto; metadata: MetadataStorageDto }) =>
@@ -81,9 +80,6 @@ export function LibrarySettings({ library, scan, sub, onSub, onBack, onError }: 
 
   return (
     <>
-      <nav className="set-crumbs" aria-label={t("Breadcrumbs")}>
-        <button onClick={onBack}>{t("Libraries")}</button> › <span>{library.name}</span>
-      </nav>
       <div className="phead">
         <div className="t">
           <h1>{library.name}</h1>

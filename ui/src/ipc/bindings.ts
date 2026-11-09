@@ -69,8 +69,6 @@ export const commands = {
 	checkForUpdate: () => typedError<UpdateInfoDto_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("check_for_update")),
 	/**  Downloads, checks the signature, installs and restarts. Progress comes as [`UpdateProgressEvent`]. */
 	installUpdate: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("install_update")),
-	/**  Saves the new `.deb` or `.rpm` to Downloads and shows it in the file manager. Returns the file path. */
-	downloadUpdatePackage: (version: string) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("download_update_package", { version })),
 	/**  Opens the release page of `version` in the browser. */
 	openReleasePage: (version: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("open_release_page", { version })),
 	aiSettings: () => typedError<AiViewDto, IpcError_Serialize>(__TAURI_INVOKE("ai_settings")),
@@ -85,6 +83,20 @@ export const commands = {
 	/**  Starts suggesting tags for the models in `folder` in the background. Returns how many models it asks about. */
 	startTagSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("start_tag_suggestions", { library, folder })),
 	cancelTagSuggestions: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_tag_suggestions")),
+	/**  How many models a run over `folder` would ask about. */
+	countTagSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("count_tag_suggestions", { library, folder })),
+	/**  Models in `folder` with suggestions waiting, optionally only those suggested `tag_name`. */
+	reviewSuggestions: (library: number, folder: string, tagName: string | null) => typedError<ReviewItemDto_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("review_suggestions", { library, folder, tagName })),
+	pendingSuggestions: (library: number, folder: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("pending_suggestions", { library, folder })),
+	/**  Keeps and drops suggested tags on many models in one go. Returns what undo needs. */
+	decideSuggestions: (library: number, decisions: DecisionDto[]) => typedError<ResolutionDto[], IpcError_Serialize>(__TAURI_INVOKE("decide_suggestions", { library, decisions })),
+	undoSuggestions: (library: number, resolutions: ResolutionDto[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("undo_suggestions", { library, resolutions })),
+	aiFolders: (library: number) => typedError<AiFoldersDto, IpcError_Serialize>(__TAURI_INVOKE("ai_folders", { library })),
+	saveAiFolders: (library: number, settings: AiFoldersDto) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("save_ai_folders", { library, settings })),
+	/**  How many models a run over these (unsaved) AI folders would ask about. */
+	countAiFolders: (library: number, settings: AiFoldersDto) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("count_ai_folders", { library, settings })),
+	/**  Starts a run over the saved AI folders of a library. Returns how many models it asks about. */
+	startAiFolders: (library: number) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("start_ai_folders", { library })),
 	/**  Suggested tags of a library with the number of models, for the review. */
 	suggestedTagCounts: (library: number) => typedError<TagCountDto[], IpcError_Serialize>(__TAURI_INVOKE("suggested_tag_counts", { library })),
 	/**  Keeps (`keep`) or dismisses one suggested tag on every model it was suggested for. Returns the number of models. */
@@ -149,6 +161,14 @@ export const events = {
 /* Types */
 /**  What the app may write into the library. */
 export type AccessModeDto = "readOnly" | "metadataWrite" | "managed";
+
+export type AiFoldersDto = {
+	included: string[],
+	excluded: string[],
+	onlyUntagged: boolean,
+	afterScan: boolean,
+	skipWithoutPreview: boolean,
+};
 
 export type AiProviderDto = "off" | "lmStudio" | "ollama" | "openAi" | "anthropic" | "custom";
 
@@ -238,6 +258,13 @@ export type CollectionDto_Serialize = {
 export type CursorDto = {
 	key: string,
 	id: number,
+};
+
+/**  Suggested tags to keep and to drop on one model. */
+export type DecisionDto = {
+	id: number,
+	keep: string[],
+	dismiss: string[],
 };
 
 export type DuplicateFileDto = DuplicateFileDto_Serialize | DuplicateFileDto_Deserialize;
@@ -523,6 +550,36 @@ export type RebuildReportDto = {
 	rulesRestored: number,
 };
 
+/**  What a decision changed; sent back as is to undo it. */
+export type ResolutionDto = {
+	path: string,
+	added: string[],
+	removed: string[],
+};
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto = ReviewItemDto_Serialize | ReviewItemDto_Deserialize;
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto_Deserialize = {
+	id: number,
+	title: string,
+	path: string,
+	cover?: string | null,
+	suggested: string[],
+	own: string[],
+};
+
+/**  A model with suggested tags waiting for review. */
+export type ReviewItemDto_Serialize = {
+	id: number,
+	title: string,
+	path: string,
+	cover: string | null,
+	suggested: string[],
+	own: string[],
+};
+
 export type RuleKindDto = "any" | "all" | "regex" | "folder";
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
@@ -619,6 +676,7 @@ export type SortDto = "name" | "added" | "released";
 
 /**  Pushed while an AI suggests tags: `done` of `total` models asked, `failed` without an answer. */
 export type SuggestProgressEvent = {
+	library: number,
 	done: number,
 	total: number,
 	failed: number,
@@ -698,13 +756,9 @@ export type UpdateInfoDto_Serialize = {
 
 /**  How this installation can take an update. */
 export type UpdateMethod = 
-/**  The app downloads, installs and restarts itself. */
+/**  The app downloads, checks, installs and restarts itself. */
 "install" | 
-/**  A Linux system package: the new `.deb` is saved to Downloads. */
-"deb" | 
-/**  A Linux system package: the new `.rpm` is saved to Downloads. */
-"rpm" | 
-/**  Only the release page can help (no updater key in this build, or an unknown Linux install). */
+/**  Only the release page can help: this build has no updater key. */
 "page";
 
 /**  Pushed while an update downloads: `done` of `total` bytes (`total` is 0 when unknown). */

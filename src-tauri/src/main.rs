@@ -15,7 +15,7 @@ use tauri_specta::{Builder, collect_commands, collect_events};
 
 /// Parallel folder reads. Network shares answer several requests at once, so a scan waits less on each one;
 /// still modest, so a NAS stays usable for others meanwhile.
-const SCAN_THREADS: usize = 12;
+const SCAN_THREADS: usize = 6;
 
 fn main() {
     let specta = specta_builder();
@@ -84,7 +84,6 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::tags::delete_tag_group,
             commands::update::check_for_update,
             commands::update::install_update,
-            commands::update::download_update_package,
             commands::update::open_release_page,
             commands::ai::ai_settings,
             commands::ai::save_ai_settings,
@@ -94,6 +93,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ai::resolve_tag_suggestion,
             commands::ai::start_tag_suggestions,
             commands::ai::cancel_tag_suggestions,
+            commands::ai::count_tag_suggestions,
+            commands::ai::review_suggestions,
+            commands::ai::pending_suggestions,
+            commands::ai::decide_suggestions,
+            commands::ai::undo_suggestions,
+            commands::ai::ai_folders,
+            commands::ai::save_ai_folders,
+            commands::ai::count_ai_folders,
+            commands::ai::start_ai_folders,
             commands::ai::suggested_tag_counts,
             commands::ai::resolve_suggested_tag,
             commands::tag_rules::tag_rules,

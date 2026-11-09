@@ -35,6 +35,7 @@ pub struct DuplicatesProgressEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestProgressEvent {
+    pub library: u32,
     pub done: u32,
     pub total: u32,
     pub failed: u32,
@@ -99,9 +100,18 @@ impl EventSink for TauriEvents {
         let _ = DuplicatesProgressEvent { done: count(done), total: count(total) }.emit(&self.handle);
     }
 
-    fn suggest_progress(&self, done: usize, total: usize, failed: usize, running: bool) {
+    fn suggest_progress(
+        &self,
+        library: hoarddeck_domain::LibraryId,
+        done: usize,
+        total: usize,
+        failed: usize,
+        running: bool,
+    ) {
         let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
-        let _ = SuggestProgressEvent { done: count(done), total: count(total), failed: count(failed), running }
-            .emit(&self.handle);
+        let library = u32::try_from(library.0).unwrap_or(0);
+        let _ =
+            SuggestProgressEvent { library, done: count(done), total: count(total), failed: count(failed), running }
+                .emit(&self.handle);
     }
 }

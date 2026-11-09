@@ -17,6 +17,11 @@ describe("route", () => {
     expect(parseRoute("#view=settings&tab=nope")).toEqual({ view: "settings", tab: "overview", lib: null, sub: "" });
   });
 
+  it("round-trips the AI tag review", () => {
+    const route: Route = { view: "review", library: 1, tab: "tag", tag: "sci fi", folder: "Miniatures/Loot" };
+    expect(parseRoute(formatRoute(route))).toEqual(route);
+  });
+
   it("round-trips collections", () => {
     expect(parseRoute(formatRoute({ view: "collection", id: 7 }))).toEqual({ view: "collection", id: 7 });
   });

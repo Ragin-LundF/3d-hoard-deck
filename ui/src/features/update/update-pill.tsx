@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { commands, describeError, unwrap } from "../../ipc";
+import { commands } from "../../ipc";
 import { formatBytes } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import { t } from "../../shared/i18n";
@@ -35,8 +35,6 @@ export function UpdatePill({ scanning }: { scanning: boolean }) {
 export function UpdateCard({ scanning, onClose, inline = false }: { scanning: boolean; onClose: () => void; inline?: boolean }) {
   const update = useUpdate();
   const [confirming, setConfirming] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
   const info = update.info!;
   const notes = whatsNew(info.notes);
   const page = () => void commands.openReleasePage(info.version);
@@ -55,9 +53,7 @@ export function UpdateCard({ scanning, onClose, inline = false }: { scanning: bo
     }
     void installUpdate();
   };
-  const download = () =>
-    unwrap(commands.downloadUpdatePackage(info.version)).then(setSaved, (error) => setDownloadError(describeError(error)));
-  const failed = update.phase === "error" || downloadError !== null;
+  const failed = update.phase === "error";
 
   return (
     <div className={`upcard${inline ? " inline" : ""}`} role={inline ? "region" : "dialog"} aria-label={t("Update")}>
@@ -90,12 +86,8 @@ export function UpdateCard({ scanning, onClose, inline = false }: { scanning: bo
         </>
       )}
       {update.phase === "restarting" && <p className="hint">{t("Installing. The app restarts in a moment…")}</p>}
-      {failed && <p className="hint err">{update.error ?? downloadError}</p>}
+      {failed && <p className="hint err">{update.error}</p>}
       {confirming && update.phase === "idle" && <p className="hint">{t("A scan is running. It starts again after the restart; your index is safe.")}</p>}
-      {saved && <p className="hint">{t("Saved to {path}. Install it with your package tool.", { path: saved })}</p>}
-      {!saved && info.method !== "install" && info.method !== "page" && update.phase === "idle" && !failed && (
-        <p className="hint">{t("This installation cannot update itself. The new package is saved to your Downloads folder.")}</p>
-      )}
 
       {!busy(update.phase) && (
         <div className="acts">
@@ -106,10 +98,8 @@ export function UpdateCard({ scanning, onClose, inline = false }: { scanning: bo
             </>
           ) : info.method === "install" ? (
             <button className="btn primary" onClick={start}>{confirming ? t("Update anyway") : t("Update now")}</button>
-          ) : info.method === "page" ? (
-            <button className="btn primary" onClick={page}>{t("Open the release page")}</button>
           ) : (
-            !saved && <button className="btn primary" onClick={() => void download()}>{t("Download")}</button>
+            <button className="btn primary" onClick={page}>{t("Open the release page")}</button>
           )}
           <button className="btn ghost" onClick={later}>{t("Later")}</button>
           <span className="spacer" />

@@ -69,7 +69,7 @@ fn register_functions(connection: &Connection) -> Result<(), IndexError> {
             "tag_key",
             1,
             FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-            |context| Ok(context.get::<String>(0)?.to_lowercase()),
+            |context| Ok(hoarddeck_domain::TagName::key_of(&context.get::<String>(0)?)),
         )
         .map_err(db_error)
 }

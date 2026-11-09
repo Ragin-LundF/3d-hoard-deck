@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { commands, describeError, unwrap, type IpcFailure, type LibraryDto } from "./ipc";
 import { FolderMenu, useFolderMenu } from "./features/folders/folder-menu";
 import { FolderTree } from "./features/folders/folder-tree";
@@ -16,13 +16,16 @@ import { ModelPage } from "./features/model/model-page";
 import { SearchBox } from "./features/search/search-box";
 import { SettingsView, useAddLibrary } from "./features/settings/settings-view";
 import { Icon, Logo } from "./shared/icons";
-import { HOME, settingsRoute, useRoute } from "./shared/route";
+import { HOME, reviewRoute, settingsRoute, useRoute, type Route } from "./shared/route";
 import { useTheme } from "./shared/use-theme";
 import { SuggestStatus } from "./features/ai/suggest-status";
 import { UpdatePill } from "./features/update/update-pill";
 import { useUpdateCheck } from "./features/update/use-update";
 import { useSuggestProgressListener } from "./features/ai/queries";
 import { SettingsNav } from "./features/settings/settings-nav";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { confirmDiscard, useHasUnsavedChanges } from "./features/settings/drafts";
+import { ReviewView } from "./features/ai/review/review-view";
 import { t, plural } from "./shared/i18n";
 
 export function App() {
@@ -35,6 +38,17 @@ export function App() {
   const scans = useScanStatus(onScanFailed);
   useSuggestProgressListener();
   useUpdateCheck();
+  // Where "Back to library" returns to: the last screen outside Settings, however many settings pages were opened.
+  const outside = useRef<Route>(HOME);
+  if (route.view !== "settings") outside.current = route;
+  const unsaved = useHasUnsavedChanges();
+  useEffect(() => {
+    // Closing the window would lose unsaved tag rules or AI settings, so ask first.
+    const stop = getCurrentWindow().onCloseRequested(async (event) => {
+      if (!(await confirmDiscard())) event.preventDefault();
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, []);
   const menu = useFolderMenu();
   const addLibrary = useAddLibrary(setToast);
 
@@ -66,15 +80,15 @@ export function App() {
           <button className="tbtn" onClick={() => library && void rescan(library)} disabled={!library || isScanning(scans[library.id])} aria-label={t("Scan for changes")} title={t("Scan for changes")}>
             <Icon name="refresh" />
           </button>
-          <button className="tbtn" onClick={() => navigate(settingsRoute())} aria-label={t("Settings")} title={t("Settings")}>
-            <Icon name="settings" />
+          <button className="tbtn" onClick={() => navigate(settingsRoute())} aria-label={unsaved ? t("Settings (unsaved changes)") : t("Settings")} title={unsaved ? t("Settings (unsaved changes)") : t("Settings")}>
+            <Icon name="settings" />{unsaved && <span className="tdot" />}
           </button>
         </div>
       </header>
 
       <aside className="side" aria-label={t("Sidebar")}>
         {route.view === "settings" ? (
-          <SettingsNav route={route} libraries={list} scans={scans} onNavigate={navigate} onBack={() => (history.length > 1 ? history.back() : navigate(HOME))} />
+          <SettingsNav route={route} libraries={list} scans={scans} onNavigate={navigate} onBack={() => navigate(outside.current)} />
         ) : (
         <div className="side-scroll">
           {list.map((item) => (
@@ -85,6 +99,8 @@ export function App() {
                 route={libraryRoute && item.id === library?.id ? libraryRoute : null}
                 onNavigate={(patch) => navigate({ ...HOME, library: item.id, ...patch })}
                 onTags={() => navigate({ view: "tags", library: item.id })}
+                onReview={() => navigate(reviewRoute(item.id))}
+                reviewOpen={route.view === "review" && route.library === item.id}
                 tagsOpen={route.view === "tags" && route.library === item.id}
               />
               <h4 className="subhead">{t("Folders")}</h4>
@@ -117,6 +133,8 @@ export function App() {
           <div className="empty err">{describeError(libraries.error)}</div>
         ) : libraries.isPending ? null : route.view === "settings" ? (
           <SettingsView route={route} navigate={navigate} libraries={list} scans={scans} theme={theme} onTheme={setTheme} onTags={(id) => navigate({ view: "tags", library: id })} onError={setToast} />
+        ) : route.view === "review" ? (
+          <ReviewView route={route} libraryName={list.find((item) => item.id === route.library)?.name ?? ""} navigate={(next) => navigate(next, { replace: true })} onMessage={setToast} />
         ) : route.view === "tags" ? (
           <TagBrowser
             library={route.library}

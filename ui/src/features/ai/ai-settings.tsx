@@ -6,6 +6,7 @@ import { formatNumber, plural, t } from "../../shared/i18n";
 import { useAiSettings, useSuggestProgress } from "./queries";
 import { aiDraft } from "../settings/drafts";
 import { SaveBar } from "../settings/save-bar";
+import { startSuggestions } from "./start-run";
 
 const PROVIDERS: { value: AiProviderDto; label: string }[] = [
   { value: "off", label: t("Off") },
@@ -160,7 +161,7 @@ export function AiSettings({ libraries, onError }: Props) {
           <h2>{t("Suggest tags now")}</h2>
           <div className="panel">
             {libraries.map((library) => (
-              <RunRow key={library.id} library={library} running={progress?.running ?? false} onError={onError} />
+              <RunRow key={library.id} library={library} remote={view.data.remote} running={progress?.running ?? false} onError={onError} />
             ))}
           </div>
         </>
@@ -187,11 +188,11 @@ function TestButton({ settings, keyText, onTested, onError }: TestProps) {
   );
 }
 
-function RunRow({ library, running, onError }: { library: LibraryDto; running: boolean; onError: (message: string) => void }) {
+function RunRow({ library, remote, running, onError }: { library: LibraryDto; remote: boolean; running: boolean; onError: (message: string) => void }) {
   const [started, setStarted] = useState<number | null>(null);
   const start = useMutation({
-    mutationFn: () => unwrap(commands.startTagSuggestions(library.id, "")),
-    onSuccess: setStarted,
+    mutationFn: () => startSuggestions(library.id, "", remote),
+    onSuccess: (count) => count !== null && setStarted(count),
     onError: (error) => onError(describeError(error)),
   });
   return (

@@ -12,6 +12,8 @@ describe("update preferences", () => {
     expect(hiddenBySkip("1.1.0", "1.1.0")).toBe(true);
     expect(hiddenBySkip("1.2.0", "1.1.0")).toBe(false);
     expect(hiddenBySkip("1.1.0", null)).toBe(false);
+    expect(hiddenBySkip("1.2.0", "1.2.0-beta")).toBe(false);
+    expect(hiddenBySkip("1.2.0-beta", "1.2.0")).toBe(true);
   });
 
   it("takes the first sentence of the first list items as what's new", () => {

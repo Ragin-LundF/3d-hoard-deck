@@ -1,5 +1,5 @@
 use hoarddeck_application::search::SearchDocument;
-use hoarddeck_domain::{LibraryId, ModelId, ModelKind};
+use hoarddeck_domain::{LibraryId, ModelId, ModelKind, TagName};
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use crate::rows::{converted, formats_from_text, rel_path};
@@ -21,7 +21,11 @@ pub(crate) fn search_document(connection: &Connection, id: ModelId) -> rusqlite:
 fn document(row: &Row<'_>) -> rusqlite::Result<SearchDocument> {
     let original: String = row.get(3)?;
     let display: Option<String> = row.get(4)?;
-    let mut tags: Vec<String> = converted(8, serde_json::from_str(&row.get::<_, String>(8)?))?;
+    // Through `TagName`, so tags stored before `|` and `"` were tidied are searched the way they are queried.
+    let mut tags: Vec<String> = converted::<Vec<String>, _>(8, serde_json::from_str(&row.get::<_, String>(8)?))?
+        .iter()
+        .filter_map(|tag| TagName::new(tag).ok().map(String::from))
+        .collect();
     let auto: Vec<String> = converted(12, serde_json::from_str(&row.get::<_, String>(12)?))?;
     let hidden: Vec<String> = converted(13, serde_json::from_str(&row.get::<_, String>(13)?))?;
     // Rule tags are searched like the user's own, except those the user hid on this model.

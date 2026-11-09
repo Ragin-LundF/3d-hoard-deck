@@ -71,6 +71,18 @@ impl EntryStore for SqliteIndex {
         })
     }
 
+    fn remove_folders(&self, library: LibraryId, folders: &[RelPath]) -> Result<u64, IndexError> {
+        self.write(|connection| {
+            let transaction = connection.transaction()?;
+            let mut removed = 0;
+            for folder in folders.iter().filter(|folder| !folder.is_root()) {
+                removed += remove_subtree(&transaction, library, folder)?;
+            }
+            transaction.commit()?;
+            Ok(removed)
+        })
+    }
+
     fn folders(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError> {
         self.read(|connection| {
             let mut statement = connection.prepare_cached(

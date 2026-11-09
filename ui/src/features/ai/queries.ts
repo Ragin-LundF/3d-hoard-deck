@@ -32,7 +32,9 @@ export function useSuggestProgressListener() {
       progress = payload;
       listeners.forEach((listener) => listener());
       void queryClient.invalidateQueries({ queryKey: ["suggestions"] });
-      if (!payload.running) void queryClient.invalidateQueries({ queryKey: ["suggestedTags"] });
+      if (!payload.running) {
+        for (const key of ["suggestedTags", "pending", "review"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     });
     return () => void unlisten.then((stop) => stop());
   }, [queryClient]);

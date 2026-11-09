@@ -27,7 +27,17 @@ impl TagSuggester for HttpTagSuggester {
         let model = self.model(settings, key)?;
         let timeout = Duration::from_secs(u64::from(settings.timeout_seconds));
         let text = if settings.provider == AiProvider::Anthropic {
-            anthropic_text(&call(settings, key, "messages", Some(&anthropic_body(&model, request)), timeout)?)
+            // Like the OpenAI path: a refused answer format is asked again without it.
+            match call(settings, key, "messages", Some(&anthropic_body(&model, request, true)), timeout) {
+                Err(reason) if reason.starts_with("400") => anthropic_text(&call(
+                    settings,
+                    key,
+                    "messages",
+                    Some(&anthropic_body(&model, request, false)),
+                    timeout,
+                )?),
+                answer => anthropic_text(&answer?),
+            }
         } else {
             // A schema makes LM Studio answer in seconds instead of "thinking" for a minute; servers that do not know
             // `response_format` refuse it, so they are asked again without.
@@ -93,19 +103,22 @@ fn openai_body(model: &str, request: &SuggestRequest, with_schema: bool) -> Valu
     body
 }
 
-fn anthropic_body(model: &str, request: &SuggestRequest) -> Value {
+fn anthropic_body(model: &str, request: &SuggestRequest, with_schema: bool) -> Value {
     let mut content = Vec::new();
     if let Some(jpeg) = &request.image_jpeg {
         content.push(json!({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": STANDARD.encode(jpeg)}}));
     }
     content.push(json!({"type": "text", "text": request.text}));
-    json!({
+    let mut body = json!({
         "model": model,
         "max_tokens": MAX_TOKENS,
         "system": request.system,
         "messages": [{"role": "user", "content": content}],
-        "output_config": {"format": {"type": "json_schema", "schema": schema()}},
-    })
+    });
+    if with_schema {
+        body["output_config"] = json!({"format": {"type": "json_schema", "schema": schema()}});
+    }
+    body
 }
 
 /// GET (no body) or POST to `{url}/{path}`. Errors start with the HTTP status when there is one.
@@ -176,7 +189,8 @@ mod tests {
         assert_eq!(openai["messages"][1]["content"][1]["image_url"]["url"], "data:image/jpeg;base64,/9g=");
         assert_eq!(openai["response_format"]["json_schema"]["name"], "tags");
         assert!(openai_body("m", &request, false).get("response_format").is_none());
-        let anthropic = anthropic_body("m", &request);
+        let anthropic = anthropic_body("m", &request, true);
+        assert!(anthropic_body("m", &request, false).get("output_config").is_none());
         assert_eq!(anthropic["messages"][0]["content"][0]["source"]["data"], "/9g=");
         assert_eq!(anthropic["system"], "s");
     }

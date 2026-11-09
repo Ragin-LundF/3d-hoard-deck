@@ -69,8 +69,8 @@ One-time setup, needed before the first release that should be able to update it
    `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The release workflow then signs the installers and attaches `latest.json`.
 4. Back up the private key. Without it, installed apps cannot update themselves any more.
 
-Builds without a key still work: the update hint then only opens the release page. Linux `.deb`/`.rpm` installs
-download the new package to Downloads instead of installing it. The release notes (and the "What's new" of the hint)
+Builds without a key still work: the update hint then only opens the release page. With the key, the updater also
+installs Linux `.deb`/`.rpm` packages (asking for the admin password), always after checking the signature. The release notes (and the "What's new" of the hint)
 start with the version's section of `CHANGELOG.md`.
 
 ## Architecture

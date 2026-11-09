@@ -30,8 +30,9 @@ pub fn handle<R: Runtime>(context: UriSchemeContext<'_, R>, request: Request<Vec
     let app = handle.state::<Arc<App>>().inner().clone();
     let thumbnails = handle.state::<Arc<ThumbnailCache>>().inner().clone();
     let path = request.uri().path().to_owned();
-    // While the user waits for this picture or 3D file, a running scan steps back.
-    let foreground = app.io_priority.foreground();
+    // While the user waits for a picture or 3D file from the library, a running scan steps back. Covers already in the
+    // thumbnail cache need no library read, so they take the guard only when the thumbnail has to be made.
+    let foreground = (!path.trim_start_matches('/').starts_with("thumb/")).then(|| app.io_priority.foreground());
     pool::run(
         lane(&path),
         Box::new(move |dropped| {
@@ -97,7 +98,9 @@ fn serve_thumbnail(app: &App, thumbnails: &ThumbnailCache, path: &str) -> Respon
     let Some(file) = resolve(app, path).filter(|file| file.kind == Kind::Image) else {
         return status(StatusCode::NOT_FOUND);
     };
-    match thumbnails.get_or_create(&file.path) {
+    let cached = thumbnails.cached(&file.path).ok().flatten();
+    let _foreground = cached.is_none().then(|| app.io_priority.foreground());
+    match cached.map_or_else(|| thumbnails.get_or_create(&file.path), Ok) {
         // The URL names only the source, not its version: keep browser caching short so a replaced cover shows up.
         Ok(thumbnail) => read(&thumbnail, "image/jpeg", "max-age=60"),
         Err(_) => status(StatusCode::UNPROCESSABLE_ENTITY),

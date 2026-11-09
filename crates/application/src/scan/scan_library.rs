@@ -13,6 +13,10 @@ use crate::{AppError, ScanError};
 const BATCH_ENTRIES: usize = 2_000;
 /// Walk results buffered between the walker threads and the index writer; keeps memory flat.
 const CHANNEL_CAPACITY: usize = 256;
+/// A library root that suddenly lists nothing while the index knew more folders than this is treated as offline.
+const MIN_DIRS_FOR_EMPTY_GUARD: usize = 20;
+/// Wait before asking again whether a folder that seemed gone really is.
+const RECHECK_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 /// Unreadable entries named in the report; the rest are only counted.
 const MAX_FAILURES_LISTED: usize = 50;
 
@@ -145,6 +149,10 @@ impl ScanLibrary {
         changed: &[RelPath],
     ) -> Result<ScanReport, AppError> {
         let (generation, mut known) = self.entries.begin_scan(library.id)?;
+        let indexed_dirs = known.len();
+        // Folders an ignore rule hides now (e.g. `#recycle`) are never listed again, so they are removed after the walk.
+        let ignored: Vec<RelPath> =
+            known.keys().filter(|dir| rules.is_ignored_dir(dir) && dir.is_within(from)).cloned().collect();
         if mode == ScanMode::Full {
             known = KnownDirs::new();
         }
@@ -156,6 +164,7 @@ impl ScanLibrary {
         let mut report = ScanReport { partial: !from.is_root(), ..ScanReport::default() };
         // The scanner reports nothing for a start folder that no longer exists.
         let mut visited = false;
+        let mut root_empty = false;
         thread::scope(|scope| -> Result<(), AppError> {
             let (scanner, known, root) = (&self.scanner, &known, library.root.as_str());
             let walker = scope.spawn(move || scanner.scan(root, from, known, rules, &sender));
@@ -163,6 +172,11 @@ impl ScanLibrary {
             let mut batch_entries = 0;
             for item in receiver {
                 visited |= item_dir(&item) == from;
+                if let ScanItem::Listed { dir, children, .. } = &item
+                    && dir.is_root()
+                {
+                    root_empty = children.is_empty();
+                }
                 batch_entries += count(&item, &mut report);
                 batch.push(item);
                 if batch_entries >= BATCH_ENTRIES {
@@ -176,7 +190,19 @@ impl ScanLibrary {
             walker.join().map_err(|_| ScanError::Aborted("walker thread panicked".to_owned()))??;
             Ok(())
         })?;
+        if from.is_root() && root_empty && indexed_dirs > MIN_DIRS_FOR_EMPTY_GUARD {
+            // A stale mount point or a share that answers with nothing must not clear a big library's index.
+            return Err(ScanError::Offline(format!("{} looks empty; the index is kept", library.root)).into());
+        }
+        if !visited && !from.is_root() {
+            // An SMB hiccup can report a folder as missing for a moment; only a second "not found" removes it.
+            thread::sleep(RECHECK_DELAY);
+            visited = self.scanner.exists(&library.root, from) != Ok(false);
+        }
         report.entries_removed = self.entries.finish_folder_scan(library.id, generation, from, visited)?;
+        if !ignored.is_empty() {
+            report.entries_removed += self.entries.remove_folders(library.id, &ignored)?;
+        }
         Ok(report)
     }
 

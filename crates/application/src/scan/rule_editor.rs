@@ -38,10 +38,8 @@ impl RuleEditor {
     pub(crate) fn edit(&self, library: LibraryId, change: impl FnOnce(&mut ScanRules)) -> Result<(), AppError> {
         let _busy = self.locks.lock(library)?;
         let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
-        let mut rules = self.libraries.scan_rules(library)?;
-        change(&mut rules);
+        let rules = self.change_rules(library, change)?;
         let compiled = CompiledRules::compile(&rules)?;
-        self.libraries.save_scan_rules(library, &rules)?;
         save_rules_file(self.sidecars.as_ref(), &found, &rules);
         regroup(
             self.entries.as_ref(),
@@ -67,10 +65,7 @@ impl RuleEditor {
         let ticket = {
             let mut queue = self.queue();
             let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
-            let mut rules = self.libraries.scan_rules(library)?;
-            change(&mut rules);
-            CompiledRules::compile(&rules)?;
-            self.libraries.save_scan_rules(library, &rules)?;
+            let rules = self.change_rules(library, change)?;
             save_rules_file(self.sidecars.as_ref(), &found, &rules);
             Self::next_ticket(&mut queue, library)
         };
@@ -84,6 +79,29 @@ impl RuleEditor {
         let ticket = Self::next_ticket(&mut self.queue(), library);
         let editor = Arc::clone(self);
         thread::spawn(move || editor.regroup_when_quiet(library, ticket));
+    }
+
+    /// Applies `change` and saves, in one index transaction; rules that do not compile are not saved.
+    fn change_rules(&self, library: LibraryId, change: impl FnOnce(&mut ScanRules)) -> Result<ScanRules, AppError> {
+        let mut change = Some(change);
+        let mut refused = None;
+        let saved = self.libraries.update_scan_rules(library, &mut |rules| {
+            if let Some(change) = change.take() {
+                change(rules);
+            }
+            match CompiledRules::compile(rules) {
+                Ok(_) => true,
+                Err(error) => {
+                    refused = Some(error);
+                    false
+                }
+            }
+        })?;
+        match (saved, refused) {
+            (_, Some(error)) => Err(error),
+            (Some(rules), None) => Ok(rules),
+            (None, None) => Err(AppError::LibraryNotFound(library)),
+        }
     }
 
     fn next_ticket(queue: &mut HashMap<LibraryId, u64>, library: LibraryId) -> u64 {

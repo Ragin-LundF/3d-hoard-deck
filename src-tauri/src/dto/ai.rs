@@ -1,4 +1,4 @@
-use hoarddeck_application::ai::{AiProvider, AiSettings, AiTest, AiView};
+use hoarddeck_application::ai::{AiFolders, AiProvider, AiSettings, AiTest, AiView, Resolution, ReviewItem};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -124,6 +124,81 @@ impl From<AiTest> for AiTestDto {
             model: test.model,
             tags: test.tags,
             millis: u32::try_from(test.millis).unwrap_or(u32::MAX),
+        }
+    }
+}
+
+/// A model with suggested tags waiting for review.
+#[derive(Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewItemDto {
+    pub id: u32,
+    pub title: String,
+    pub path: String,
+    pub cover: Option<String>,
+    pub suggested: Vec<String>,
+    pub own: Vec<String>,
+}
+
+impl From<ReviewItem> for ReviewItemDto {
+    fn from(item: ReviewItem) -> Self {
+        Self {
+            id: u32::try_from(item.id.0).unwrap_or(u32::MAX),
+            title: item.title,
+            path: item.path.into(),
+            cover: item.cover.map(String::from),
+            suggested: item.suggested.into_iter().map(String::from).collect(),
+            own: item.own.into_iter().map(String::from).collect(),
+        }
+    }
+}
+
+/// Suggested tags to keep and to drop on one model.
+#[derive(Debug, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionDto {
+    pub id: u32,
+    pub keep: Vec<String>,
+    pub dismiss: Vec<String>,
+}
+
+/// What a decision changed; sent back as is to undo it.
+#[derive(Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolutionDto {
+    pub path: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+impl From<Resolution> for ResolutionDto {
+    fn from(resolution: Resolution) -> Self {
+        Self {
+            path: resolution.path.into(),
+            added: resolution.added.into_iter().map(String::from).collect(),
+            removed: resolution.removed.into_iter().map(String::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AiFoldersDto {
+    pub included: Vec<String>,
+    pub excluded: Vec<String>,
+    pub only_untagged: bool,
+    pub after_scan: bool,
+    pub skip_without_preview: bool,
+}
+
+impl From<AiFolders> for AiFoldersDto {
+    fn from(folders: AiFolders) -> Self {
+        Self {
+            included: folders.included.into_iter().map(String::from).collect(),
+            excluded: folders.excluded.into_iter().map(String::from).collect(),
+            only_untagged: folders.only_untagged,
+            after_scan: folders.after_scan,
+            skip_without_preview: folders.skip_without_preview,
         }
     }
 }

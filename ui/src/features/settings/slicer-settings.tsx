@@ -22,12 +22,14 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
   const update = (next: SlicerDto[]) => save.mutate(next);
   const [dragged, setDragged] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
+  const move = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= list.length) return;
+    const next = list.filter((_, i) => i !== from);
+    next.splice(to, 0, list[from]!);
+    update(next);
+  };
   const drop = (target: number) => {
-    if (dragged !== null && dragged !== target) {
-      const next = list.filter((_, i) => i !== dragged);
-      next.splice(target, 0, list[dragged]!);
-      update(next);
-    }
+    if (dragged !== null) move(dragged, target);
     setDragged(null);
     setOver(null);
   };
@@ -73,7 +75,9 @@ export function SlicerSettings({ onError }: { onError: (message: string) => void
                 />
               </label>
             </div>
-            {index > 0 && <button className="btn" onClick={() => update([slicer, ...list.filter((_, i) => i !== index)])}>{t("Make default")}</button>}
+            <button className="btn ghost" disabled={index === 0} onClick={() => move(index, index - 1)} aria-label={t("Move {name} up", { name: slicer.name })} title={t("Move up")}>↑</button>
+            <button className="btn ghost" disabled={index === list.length - 1} onClick={() => move(index, index + 1)} aria-label={t("Move {name} down", { name: slicer.name })} title={t("Move down")}>↓</button>
+            {index > 0 && <button className="btn" onClick={() => move(index, 0)}>{t("Make default")}</button>}
             <button className="btn ghost" onClick={() => update(list.filter((_, i) => i !== index))} aria-label={t("Remove {name}", { name: slicer.name })}>{t("Remove")}</button>
           </div>
         ))}

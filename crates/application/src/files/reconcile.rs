@@ -29,8 +29,7 @@ impl ReconcileJournal {
             let exists = |path| self.files.exists(&library.root, path).ok();
             match (exists(old), exists(new)) {
                 (Some(false), Some(true)) => {
-                    let rules = self.libraries.scan_rules(library.id)?.moved(old, new);
-                    self.journal.finish(entry.id, library.id, old, new, &rules, done)?;
+                    self.journal.finish(entry.id, library.id, old, new, done)?;
                 }
                 (Some(true), Some(false)) => self.journal.set_status(entry.id, abandoned)?,
                 _ => {}

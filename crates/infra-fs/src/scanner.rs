@@ -39,6 +39,14 @@ struct Walk<'a> {
 }
 
 impl LibraryScanner for FsLibraryScanner {
+    fn exists(&self, root: &str, path: &RelPath) -> Result<bool, String> {
+        match fs::symlink_metadata(Path::new(root).join(path.as_str())) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
     fn scan(
         &self,
         root: &str,

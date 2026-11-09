@@ -51,6 +51,7 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
     onError: (error) => onError(describeError(error)),
   });
   const missing = (presets.data ?? []).filter((preset) => !rules.some((rule) => same(rule, preset)));
+  const [choosing, setChoosing] = useState(false);
 
   return (
     <>
@@ -80,13 +81,74 @@ export function TagRuleSettings({ onError }: { onError: (message: string) => voi
         </button>
         <button className="btn" onClick={() => update([...rules, EMPTY])}><Icon name="plus" />{t("Add rule")}</button>
         {missing.length > 0 && (
-          <button className="btn ghost" onClick={() => update([...rules, ...missing])}>
-            <Icon name="plus" />{t("Add suggested rules ({n})", { n: missing.length })}
+          <button className={`btn ghost${choosing ? " on" : ""}`} onClick={() => setChoosing(!choosing)} aria-expanded={choosing}>
+            <Icon name="plus" />{t("Suggested rules ({n})", { n: missing.length })}
           </button>
         )}
       </div>
+      {choosing && missing.length > 0 && (
+        <SuggestedRules
+          rules={missing}
+          onAdd={(picked) => {
+            update([...rules, ...picked]);
+            setChoosing(false);
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      )}
       {changed && <SaveBar what={t("Tag rules")} saving={save.isPending} onSave={() => save.mutate()} onDiscard={() => update(saved.data ?? [])} />}
     </>
+  );
+}
+
+type SuggestedProps = { rules: TagRuleDto[]; onAdd: (rules: TagRuleDto[]) => void; onClose: () => void };
+
+/** The suggested rules to look at first: tick the ones that fit (or take all); they are added as unsaved rules. */
+function SuggestedRules({ rules, onAdd, onClose }: SuggestedProps) {
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const kindLabel = (kind: RuleKindDto) => KINDS.find((entry) => entry.kind === kind)?.label ?? kind;
+  return (
+    <div className="panel" role="region" aria-label={t("Suggested rules")}>
+      <div className="prow2">
+        <div className="t">
+          <b>{t("Suggested rules")}</b>
+          <span>{t("Tick the rules that fit your library. They are added below as unsaved changes; Count matches shows what they would tag before you save.")}</span>
+        </div>
+      </div>
+      {rules.map((rule, index) => (
+        <label className="prow2 trule" key={`${rule.tag}-${rule.pattern}`}>
+          <input
+            type="checkbox"
+            checked={picked.has(index)}
+            onChange={(event) => {
+              const next = new Set(picked);
+              if (event.target.checked) next.add(index);
+              else next.delete(index);
+              setPicked(next);
+            }}
+          />
+          <div className="t">
+            <b>{rule.tag}</b>
+            <span>{kindLabel(rule.kind)}: <span className="mono">{rule.pattern}</span></span>
+            {(rule.unless || rule.nameOnly) && (
+              <span className="tr-line sub">
+                {rule.unless && <span className="pill">{t("unless {words}", { words: rule.unless })}</span>}
+                {rule.nameOnly && <span className="pill">{t("own name only")}</span>}
+              </span>
+            )}
+          </div>
+        </label>
+      ))}
+      <div className="prow2">
+        <div className="actions">
+          <button className="btn primary" disabled={picked.size === 0} onClick={() => onAdd(rules.filter((_, index) => picked.has(index)))}>
+            {t("Add selected ({n})", { n: picked.size })}
+          </button>
+          <button className="btn" onClick={() => onAdd(rules)}>{t("Add all")}</button>
+          <button className="btn ghost" onClick={onClose}>{t("Cancel")}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

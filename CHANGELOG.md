@@ -32,13 +32,20 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
   kept in the system keychain. Model files are never sent. As long as AI is off, the app shows no AI feature at all.
 - **Update check.** A few seconds after start the app asks GitHub whether a newer version is out. If so, a small
   **Update** pill appears in the title bar: see what's new, then **Update now** (downloads, installs and restarts),
-  **Later** or **Skip this version**. On Linux with a `.deb` or `.rpm` package the new package is saved to Downloads.
+  **Later** or **Skip this version**. Every download is checked against the project's signature before it is installed.
   Settings › Updates shows the installed version, can check right away, and can turn the check off.
 - **Settings in pages.** Settings now have their own sidebar (Overview, Libraries, Tags & rules, AI suggestions,
   Slicers, General, Index & storage, Updates) instead of one long page. The overview shows at a glance what needs
   attention, each library has its own page with tabs, **Find a setting** jumps to any option, unsaved tag rule and AI
   changes wait in a bar at the bottom (and survive switching pages), slicers can be reordered by dragging, and the
   theme can be chosen under General.
+- **Review AI tags.** A new screen (sidebar › Review AI tags, only while AI is set up) shows the AI's suggestions with
+  the model pictures. **By tag:** pick a suggested tag, see every model it was suggested for, switch it off where it
+  doesn't fit (⇧-click for a range), then keep it on the rest in one go. **By model:** all suggestions of each model,
+  keep the rest or dismiss, also for several models at once. Every step can be undone, also later from **Reviewed**.
+- **AI folders.** Choose per library which folders the AI works on (untick subfolders to leave them out), only models
+  without own tags, whether new models get suggestions after each scan, and whether models without a picture are
+  skipped. The screen shows how many models that is and about how long it takes.
 
 ### Faster
 - **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion

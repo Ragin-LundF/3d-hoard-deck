@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use crate::after_scan::AfterScan;
 
 use hoarddeck_application::AppError;
 use hoarddeck_application::ai::SuggestTags;
@@ -76,6 +78,8 @@ impl App {
     /// # Errors
     /// Fails when the index or search index cannot be opened.
     pub fn open(index_dir: &Path, scan_threads: usize, events: Arc<dyn EventSink>) -> Result<Self, AppError> {
+        let after_scan = Arc::new(AfterScan { inner: events, suggest: OnceLock::new() });
+        let events: Arc<dyn EventSink> = after_scan.clone();
         let index = Arc::new(SqliteIndex::open(index_dir)?);
         // Resolved after SqliteIndex created the folder, so symlinks and relative paths cannot dodge the
         // "index inside a library" guard.
@@ -113,8 +117,9 @@ impl App {
         let tags = Arc::new(manage_tags(&index, &search, &search_models, &locks));
         let thumbnails = Arc::new(ThumbnailCache::new(index_dir.join("thumbnails")));
         let suggest_tags = suggest_tags(&index, &tags, &thumbnails, &update_model_meta, events.clone());
+        let _ = after_scan.suggest.set(Arc::downgrade(&suggest_tags));
         Ok(Self {
-            io_priority,
+            io_priority: io_priority.clone(),
             index_dir: index_dir.clone(),
             libraries: index.clone(),
             update_library_settings: UpdateLibrarySettings {
@@ -170,7 +175,7 @@ impl App {
                 models: index.clone(),
                 search: search_models.clone(),
             },
-            find_duplicates: find_duplicates(&index, events),
+            find_duplicates: find_duplicates(&index, &io_priority, events),
             search_models,
         })
     }
@@ -221,12 +226,16 @@ fn file_operations(
     (move_model, undo, screenshot, folder_cover)
 }
 
-fn find_duplicates(index: &Arc<SqliteIndex>, events: Arc<dyn EventSink>) -> FindDuplicates {
+fn find_duplicates(
+    index: &Arc<SqliteIndex>,
+    io_priority: &Arc<IoPriority>,
+    events: Arc<dyn EventSink>,
+) -> FindDuplicates {
     FindDuplicates {
         libraries: index.clone(),
         entries: index.clone(),
         models: index.clone(),
-        hasher: Arc::new(Blake3Hasher),
+        hasher: Arc::new(Blake3Hasher(io_priority.clone())),
         cache: index.clone(),
         events,
         cancelled: Arc::default(),

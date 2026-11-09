@@ -20,6 +20,7 @@ import { useUpdate } from "../update/use-update";
 import { IndexSettings } from "./index-settings";
 import { ACCESS_LABELS, LibrarySettings, type LibrarySub } from "./library-settings";
 import { SlicerSettings } from "./slicer-settings";
+import { confirmDiscard } from "./drafts";
 
 type Props = {
   route: SettingsRoute;
@@ -70,7 +71,7 @@ export function SettingsView({ route, navigate, libraries, scans, theme, onTheme
     case "library":
       page = library
         ? <LibrarySettings library={library} scan={scans[library.id]} sub={(["access", "rules", "import"].includes(route.sub) ? route.sub : "access") as LibrarySub}
-            onSub={(sub) => navigate(settingsRoute("library", library.id, sub))} onBack={() => go("libraries")} onError={onError} />
+            onSub={(sub) => navigate(settingsRoute("library", library.id, sub))} onError={onError} />
         : <LibrariesPage libraries={libraries} scans={scans} onOpen={(id) => go("library", id, "access")} onError={onError} />;
       break;
     case "files":
@@ -103,7 +104,14 @@ export function SettingsView({ route, navigate, libraries, scans, theme, onTheme
     default:
       page = <OverviewPage libraries={libraries} scans={scans} theme={theme} go={go} />;
   }
-  return <div className="setpage">{page}</div>;
+  // One level up within Settings: a library's page goes to the list, every other page to the overview.
+  const up = route.tab === "overview" ? null : route.tab === "library" ? settingsRoute("libraries") : settingsRoute();
+  return (
+    <div className="setpage">
+      {up && <button className="set-back" onClick={() => navigate(up)}><Icon name="back" />{route.tab === "library" ? t("Libraries") : t("Overview")}</button>}
+      {page}
+    </div>
+  );
 }
 
 function LibrariesPage({ libraries, scans, onOpen, onError }: { libraries: LibraryDto[]; scans: Record<number, ScanStatus>; onOpen: (id: number) => void; onError: (message: string) => void }) {
@@ -172,7 +180,17 @@ function GeneralPage({ theme, onTheme }: { theme: Theme; onTheme: (theme: Theme)
       <div className="panel">
         <div className="prow2">
           <div className="t"><b>{t("Language of the app")}</b><span>{t("The app restarts its window to switch.")}</span></div>
-          <select className="sel" aria-label={t("Language")} value={languageChoice()} onChange={(event) => setLanguage(event.target.value as LanguageChoice)}>
+          <select
+            className="sel"
+            aria-label={t("Language")}
+            value={languageChoice()}
+            onChange={(event) => {
+              const select = event.target;
+              const choice = select.value as LanguageChoice;
+              // Switching reloads the window, which would lose unsaved tag rules or AI settings.
+              void confirmDiscard().then((yes) => (yes ? setLanguage(choice) : (select.value = languageChoice())));
+            }}
+          >
             <option value="system">{t("Like the system")}</option>
             <option value="en">English</option>
             <option value="de">Deutsch</option>

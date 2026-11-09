@@ -152,7 +152,7 @@ impl<'a> Evaluator<'a> {
             .enumerate()
             .map(|(index, rule)| {
                 if let Matcher::Folder(folders) = &rule.matcher {
-                    return self.folder_tag(rule, folders, &names, &whole[index]);
+                    return self.folder_tag(index, rule, folders, &names);
                 }
                 let start = if rule.name_only { own[index] } else { whole[index] };
                 // Each path on its own: a model with `Supported` and `Unsupported` variant folders gets both tags.
@@ -167,11 +167,9 @@ impl<'a> Evaluator<'a> {
             .collect()
     }
 
-    /// The name below the deepest listed folder, but never the model's own folder or file.
-    fn folder_tag(&mut self, rule: &Compiled, folders: &[String], names: &[&'a str], whole: &Hit) -> Option<TagName> {
-        if whole.unless {
-            return None;
-        }
+    /// The name below the deepest listed folder, but never the model's own folder or file, and not a name that holds
+    /// an "unless" word (sorting folders such as `Collections`).
+    fn folder_tag(&mut self, index: usize, rule: &Compiled, folders: &[String], names: &[&'a str]) -> Option<TagName> {
         let mut found = None;
         for (index, name) in names.iter().enumerate() {
             if folders.contains(&self.name(name).letters) {
@@ -179,7 +177,7 @@ impl<'a> Evaluator<'a> {
             }
         }
         let below = found?;
-        if below + 1 >= names.len() {
+        if below + 1 >= names.len() || self.name(names[below]).hits[index].unless {
             return None;
         }
         TagName::new(&rule.tag.replace(CAPTURE, names[below])).ok()
@@ -488,6 +486,14 @@ mod tests {
         // Parts of words, numbers that are no miniature scale, and the model's own folder as "creator".
         assert_eq!(tags("Props/Robust Crate/Superfantasyland/Resinous Tree"), Vec::<String>::new());
         assert_eq!(tags("Hardware/M3 screws 10mm/Fan 40mm/Nozzle 0.4mm/Year 2032mm"), Vec::<String>::new());
+        assert_eq!(tags("Home/Fan 120mm/Vase 150mm/Shelf 200mm"), Vec::<String>::new(), "no scale outside 28 to 75 mm");
+        assert_eq!(tags("Tools/Resin Printer Upgrades/Vat cover"), Vec::<String>::new(), "printer parts are no resin");
+        assert_eq!(
+            tags("Miniatures/Collections/WOR/Apatosaurus"),
+            Vec::<String>::new(),
+            "a sorting folder is no creator"
+        );
+        assert_eq!(tags("Miniatures/Loot Studios/Busts/Knight"), ["Loot Studios"], "\"busts\" deeper down is fine");
         assert_eq!(tags("Miniatures/Dragon"), Vec::<String>::new());
         assert_eq!(tags("Miniatures/hollowknight.stl"), Vec::<String>::new());
         assert!(tags("Terrain/Unsupported walls").iter().all(|tag| tag != "presupported"));

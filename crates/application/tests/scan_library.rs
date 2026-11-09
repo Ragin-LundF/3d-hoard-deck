@@ -43,8 +43,12 @@ impl LibraryRepository for Store {
     fn save_settings(&self, _: LibraryId, _: LibrarySettings) -> Result<(), IndexError> {
         Ok(())
     }
-    fn save_scan_rules(&self, _: LibraryId, _: &ScanRules) -> Result<(), IndexError> {
-        Ok(())
+    fn update_scan_rules(
+        &self,
+        _: LibraryId,
+        _: &mut dyn FnMut(&mut ScanRules) -> bool,
+    ) -> Result<Option<ScanRules>, IndexError> {
+        Ok(None)
     }
     fn last_scan_at(&self, _: LibraryId) -> Result<Option<i64>, IndexError> {
         Ok(None)
@@ -62,6 +66,10 @@ impl EntryStore for Store {
         *self.finished.lock().expect("lock") = true;
         Ok(0)
     }
+    fn remove_folders(&self, _: LibraryId, _: &[RelPath]) -> Result<u64, IndexError> {
+        Ok(0)
+    }
+
     fn finish_folder_scan(
         &self,
         library: LibraryId,
@@ -83,6 +91,14 @@ impl EntryStore for Store {
 }
 
 impl ModelRepository for Store {
+    fn search_pending(&self, _: LibraryId) -> Result<bool, IndexError> {
+        Ok(false)
+    }
+
+    fn set_search_pending(&self, _: LibraryId, _: bool) -> Result<(), IndexError> {
+        Ok(())
+    }
+
     fn replace_catalog(&self, _: LibraryId, _: &Catalog) -> Result<CatalogChange, IndexError> {
         *self.replaced.lock().expect("lock") = true;
         Ok(CatalogChange::default())
@@ -143,6 +159,10 @@ struct ScriptedScanner {
 }
 
 impl LibraryScanner for ScriptedScanner {
+    fn exists(&self, _: &str, _: &RelPath) -> Result<bool, String> {
+        Ok(false)
+    }
+
     fn scan(
         &self,
         _: &str,

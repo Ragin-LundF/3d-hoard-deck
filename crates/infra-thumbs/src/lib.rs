@@ -33,17 +33,31 @@ impl ThumbnailCache {
         Self { dir }
     }
 
+    /// The thumbnail if it is cached already; costs one `stat` of the source, no read.
+    ///
+    /// # Errors
+    /// Fails when the source cannot be found.
+    pub fn cached(&self, source: &Path) -> Result<Option<PathBuf>, ThumbnailError> {
+        let (target, _) = self.target(source)?;
+        Ok(target.exists().then_some(target))
+    }
+
+    /// Where the thumbnail of this version of `source` lives, and its key.
+    fn target(&self, source: &Path) -> Result<(PathBuf, u64), ThumbnailError> {
+        let metadata = fs::metadata(source).map_err(|e| ThumbnailError(e.to_string()))?;
+        let modified =
+            metadata.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
+        let key = fnv1a(format!("{}|{}|{modified}", source.display(), metadata.len()).as_bytes());
+        Ok((self.dir.join(format!("{key:016x}.jpg")), key))
+    }
+
     /// The cached thumbnail of `source`, created on first use. Safe to call from several threads: the file is
     /// written under a temporary name and renamed, so readers never see half a JPEG.
     ///
     /// # Errors
     /// Fails when the source cannot be read or decoded, or the cache folder cannot be written.
     pub fn get_or_create(&self, source: &Path) -> Result<PathBuf, ThumbnailError> {
-        let metadata = fs::metadata(source).map_err(|e| ThumbnailError(e.to_string()))?;
-        let modified =
-            metadata.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
-        let key = fnv1a(format!("{}|{}|{modified}", source.display(), metadata.len()).as_bytes());
-        let target = self.dir.join(format!("{key:016x}.jpg"));
+        let (target, key) = self.target(source)?;
         if target.exists() {
             return Ok(target);
         }

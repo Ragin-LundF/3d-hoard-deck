@@ -140,7 +140,6 @@ pub(super) fn apply(
     journal: &dyn FileJournal,
     root: &str,
     entry: &JournalEntry,
-    rules: &ScanRules,
     forward: bool,
 ) -> Result<(), AppError> {
     let (from, to, done, abandoned) = if forward {
@@ -158,7 +157,7 @@ pub(super) fn apply(
             return Err(failure.error);
         }
     };
-    if let Err(error) = journal.finish(entry.id, entry.library, from, to, &rules.moved(from, to), done) {
+    if let Err(error) = journal.finish(entry.id, entry.library, from, to, done) {
         // The index did not change, so the files go back.
         if move_files(files, root, to, from, entry.kind).is_ok() {
             remove_empty(files, root, &created);

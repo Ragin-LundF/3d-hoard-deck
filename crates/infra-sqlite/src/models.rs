@@ -83,6 +83,31 @@ impl ModelRepository for SqliteIndex {
         })
     }
 
+    fn search_pending(&self, library: LibraryId) -> Result<bool, IndexError> {
+        self.read(|connection| {
+            connection
+                .query_row(
+                    "SELECT 1 FROM app_settings WHERE key = ?1",
+                    [format!("search_pending:{}", library.0)],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map(|found| found.is_some())
+        })
+    }
+
+    fn set_search_pending(&self, library: LibraryId, pending: bool) -> Result<(), IndexError> {
+        let key = format!("search_pending:{}", library.0);
+        self.write(|connection| {
+            if pending {
+                connection.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?1, '1')", [key])?;
+            } else {
+                connection.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
+            }
+            Ok(())
+        })
+    }
+
     fn child_folders(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<Folder>, IndexError> {
         self.read(|connection| crate::queries::child_folders(connection, library, folder))
     }

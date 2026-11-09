@@ -67,7 +67,35 @@ fn rule_tags_are_searchable_counted_and_can_be_hidden() {
     let facets = app.tags.facets(library.id, &RelPath::root(), "", 10).expect("facets");
     assert!(!facets.iter().any(|(name, _)| name.as_str() == "presupported"), "nor counted: {facets:?}");
 
+    let list = app.tags.list(library.id).expect("tag browser");
+    assert!(list.iter().any(|info| info.name.as_str() == "resin" && info.count == 2), "rule tags in the tag browser");
+    let tag = |name: &str| TagName::new(name).expect("valid");
+    assert_eq!(app.tags.delete(library.id, &[tag("resin")]).expect("delete a rule tag"), 2);
+    assert_eq!(total("tag:resin"), 0, "a deleted rule tag stays away");
+    app.tags.rename(library.id, &[tag("32mm")], &tag("scale 32")).expect("rename a rule tag");
+    assert_eq!((total("tag:32mm"), total("tag:\"scale 32\"")), (0, 2));
+    app.tag_rules.save(&presets).expect("save again");
+    assert!(app.tag_rules.editor.wait_for_regroups(Duration::from_secs(10)));
+    assert_eq!((total("tag:resin"), total("tag:32mm")), (0, 0), "still gone after the next regroup");
+
     app.tag_rules.save(&[]).expect("remove all rules");
     assert!(app.tag_rules.editor.wait_for_regroups(Duration::from_secs(10)));
     assert_eq!(total("tag:32mm"), 0, "removing a rule removes its tags");
+}
+
+#[test]
+fn a_library_root_that_suddenly_looks_empty_keeps_its_index() {
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    for index in 0..25 {
+        write_stl(library_dir.path(), &format!("Minis/Model {index}/model.stl"));
+    }
+    let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
+    let library = app.add_library.execute("Lib", library_dir.path().to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+    fs::remove_dir_all(library_dir.path().join("Minis")).expect("empty the root, like a stale mount point");
+
+    assert!(app.scan_library.execute(library.id, ScanMode::Full).is_err(), "an empty root is refused");
+    let request = SearchRequest { text: "model".to_owned(), library: None, scope: None, offset: 0, limit: 1 };
+    assert_eq!(app.search_models.execute(&request).expect("search").total, 25, "nothing was removed");
 }

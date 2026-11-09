@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hoarddeck_application::IndexError;
-use hoarddeck_application::ai::AiSettings;
+use hoarddeck_application::ai::{AiFolders, AiSettings};
 use hoarddeck_application::ports::AiStore;
 use hoarddeck_domain::{LibraryId, RelPath, TagName};
 use rusqlite::{OptionalExtension, params};
@@ -111,4 +111,59 @@ impl AiStore for SqliteIndex {
             statement.query_map(params![library.0, tag.as_str()], |row| rel_path(row, 0))?.collect()
         })
     }
+
+    fn pending_suggestions(&self, library: LibraryId) -> Result<Vec<(RelPath, Vec<TagName>)>, IndexError> {
+        self.read(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT path, tags FROM tag_suggestions WHERE library_id = ?1 AND json_array_length(tags) > 0 ORDER BY path",
+            )?;
+            statement
+                .query_map([library.0], |row| {
+                    Ok((rel_path(row, 0)?, converted(1, serde_json::from_str(&row.get::<_, String>(1)?))?))
+                })?
+                .collect()
+        })
+    }
+
+    fn restore_suggested(&self, library: LibraryId, path: &RelPath, tags: &[TagName]) -> Result<(), IndexError> {
+        let mut all = self.suggestion(library, path)?.map(|(tags, _)| tags).unwrap_or_default();
+        for tag in tags {
+            if !all.iter().any(|known| known.key() == tag.key()) {
+                all.push(tag.clone());
+            }
+        }
+        self.write(|connection| {
+            connection
+                .execute(
+                    "UPDATE tag_suggestions SET tags = ?3 WHERE library_id = ?1 AND path = ?2",
+                    params![library.0, path.as_str(), json(&all)],
+                )
+                .map(|_| ())
+        })
+    }
+
+    fn ai_folders(&self, library: LibraryId) -> Result<AiFolders, IndexError> {
+        let stored: Option<String> = self.read(|connection| {
+            connection
+                .query_row("SELECT value FROM app_settings WHERE key = ?1", [folders_key(library)], |row| row.get(0))
+                .optional()
+        })?;
+        Ok(stored.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default())
+    }
+
+    fn save_ai_folders(&self, library: LibraryId, folders: &AiFolders) -> Result<(), IndexError> {
+        let text = serde_json::to_string(folders).map_err(|error| IndexError(error.to_string()))?;
+        self.write(|connection| {
+            connection
+                .execute(
+                    "INSERT INTO app_settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = ?2",
+                    params![folders_key(library), text],
+                )
+                .map(|_| ())
+        })
+    }
+}
+
+fn folders_key(library: LibraryId) -> String {
+    format!("ai_folders:{}", library.0)
 }

@@ -8,14 +8,17 @@ export const skippedVersion = () => localStorage.getItem(SKIP_KEY);
 export const skipVersion = (version: string | null) =>
   version === null ? localStorage.removeItem(SKIP_KEY) : localStorage.setItem(SKIP_KEY, version);
 
-/** Compares `1.10.0` and `1.9.2` by number; a pre-release suffix is ignored. */
+/** Compares `1.10.0` and `1.9.2` by number; a release is newer than its own pre-release (`1.2.0` > `1.2.0-beta`). */
 export function newer(version: string, than: string): boolean {
-  const parts = (text: string) => text.replace(/^v/, "").split(/[-+]/)[0]!.split(".").map((part) => Number(part) || 0);
-  const [a, b] = [parts(version), parts(than)];
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  const split = (text: string) => {
+    const [numbers, pre] = text.replace(/^v/, "").split("+")[0]!.split(/-(.*)/);
+    return { parts: numbers!.split(".").map((part) => Number(part) || 0), pre: pre ?? "" };
+  };
+  const [a, b] = [split(version), split(than)];
+  for (let i = 0; i < Math.max(a.parts.length, b.parts.length); i++) {
+    if ((a.parts[i] ?? 0) !== (b.parts[i] ?? 0)) return (a.parts[i] ?? 0) > (b.parts[i] ?? 0);
   }
-  return false;
+  return a.pre === "" ? b.pre !== "" : b.pre !== "" && a.pre > b.pre;
 }
 
 /** A skipped version stays hidden until a newer one than it exists. */
