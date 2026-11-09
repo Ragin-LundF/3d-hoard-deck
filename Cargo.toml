@@ -18,6 +18,7 @@ hoarddeck-infra-mesh = { path = "crates/infra-mesh" }
 hoarddeck-infra-thumbs = { path = "crates/infra-thumbs" }
 hoarddeck-infra-platform = { path = "crates/infra-platform" }
 hoarddeck-infra-ai = { path = "crates/infra-ai" }
+hoarddeck-infra-archive = { path = "crates/infra-archive" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

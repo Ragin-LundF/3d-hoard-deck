@@ -50,8 +50,17 @@ impl MoveModel {
             let rules = self.libraries.scan_rules(library.id)?;
             refuse_ignored(&rules, &to)?;
             let id = self.journal.begin(library.id, &from, &to, kind)?;
-            let entry =
-                JournalEntry { id, library: library.id, from, to, kind, done_at: 0, status: JournalStatus::Pending };
+            let entry = JournalEntry {
+                id,
+                library: library.id,
+                from,
+                to,
+                kind,
+                extract: None,
+                parts: Vec::new(),
+                done_at: 0,
+                status: JournalStatus::Pending,
+            };
             apply(self.files.as_ref(), self.journal.as_ref(), &library.root, &entry, true)?;
             save_rules_file(self.sidecars.as_ref(), &library, &self.libraries.scan_rules(library.id)?);
             id

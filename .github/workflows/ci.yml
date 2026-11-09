@@ -57,3 +57,24 @@ jobs:
 
       - name: Rust tests
         run: cargo test --workspace
+
+  # The RAR support compiles RARLAB's C++ UnRAR source; make sure that builds and works on every release platform.
+  archives:
+    name: Archives (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Archive tests
+        run: cargo test -p hoarddeck-infra-archive

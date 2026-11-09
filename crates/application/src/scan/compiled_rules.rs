@@ -70,6 +70,7 @@ fn is_own_file(name: &str) -> bool {
     lower.ends_with(".3dhoarddeck")
         || lower.ends_with(".3dhoarddeck-renaming")
         || (lower.contains(".3dhoarddeck.") && lower.ends_with(".tmp"))
+        || lower.starts_with(crate::ports::STAGING_PREFIX)
 }
 
 fn glob_set<'a>(patterns: impl Iterator<Item = &'a String>) -> Result<GlobSet, AppError> {

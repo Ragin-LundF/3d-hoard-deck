@@ -1,0 +1,24 @@
+[package]
+name = "hoarddeck-infra-archive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["rar", "sevenz"]
+# RAR uses the official UnRAR source (UnRAR license: free to use and pass on, but not for making RAR archives).
+rar = ["dep:unrar"]
+sevenz = ["dep:sevenz-rust2"]
+
+[dependencies]
+hoarddeck-domain.workspace = true
+hoarddeck-application.workspace = true
+zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs", "deflate64", "lzma", "xz", "bzip2", "zstd", "aes-crypto"] }
+unrar = { version = "0.5", optional = true }
+sevenz-rust2 = { version = "0.25", optional = true, features = ["aes256"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

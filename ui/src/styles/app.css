@@ -599,3 +599,33 @@ button.subhead[aria-expanded="true"] svg { transform: rotate(90deg); }
 .rendered-strip .thumbs img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: #e6e8ec; }
 .rendered-strip .grow { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .rendered-strip .hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* Archive extraction: callout on the model page and above the grid, and the dialog. */
+.xcallout { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 10px 12px; margin: 0 0 12px; display: grid; gap: 6px; font-size: 13px; }
+.xcallout.banner { margin: 8px 22px 0; border-style: dashed; }
+.xcallout-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.xcallout .hint, .xdlg .hint { margin: 0; font-size: 12px; color: var(--muted); }
+.xcallout .linkish { margin: 0; }
+.xdlg-back { position: fixed; inset: 0; z-index: 60; background: rgba(8, 10, 14, .55); display: grid; place-items: center; padding: 24px; }
+.xdlg { width: min(620px, 100%); max-height: 100%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; gap: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .4); }
+.xdlg h2 { margin: 0; font-size: 17px; }
+.xdlg p { margin: 0; }
+.xdlg .muted, .xcallout .muted { color: var(--muted); }
+.xlist { display: grid; gap: 8px; }
+.xrow { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 6px; background: var(--raised); }
+.xrow.bad { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.xrow.ok { border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.xname { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.xname .btn { margin-left: auto; }
+.xfield { display: flex; gap: 8px; align-items: center; }
+.xfield span { color: var(--muted); font-size: 12px; min-width: 80px; }
+.xfield input { flex: 1; }
+.xbar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px; }
+.xprogress { height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+.xprogress span { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+.xfiles { margin: 0; padding-left: 18px; font-family: var(--font-mono); font-size: 12px; max-height: 160px; overflow: auto; }
+.xdlg details ul { margin: 6px 0 0; padding-left: 18px; font-family: var(--font-mono); font-size: 11.5px; }
+.xpill { position: fixed; right: 18px; bottom: 44px; z-index: 55; border: 1px solid var(--accent); border-radius: 999px; padding: 8px 14px; background: var(--panel); color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, .3); font-size: 13px; cursor: pointer; }
+.xpics { display: flex; gap: 6px; flex-wrap: wrap; }
+.xpics img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); }
+.xcallout-row.sub { padding-left: 10px; font-size: 12.5px; }

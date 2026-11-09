@@ -23,6 +23,9 @@ impl UndoFileOperation {
     pub fn execute(&self, id: i64) -> Result<FileChange, AppError> {
         let entry =
             self.journal.entry(id)?.ok_or_else(|| AppError::InvalidInput("unknown journal entry".to_owned()))?;
+        if entry.extract.is_some() {
+            return Err(AppError::InvalidInput("an extraction is undone with \"Discard extracted files\"".to_owned()));
+        }
         if entry.status != JournalStatus::Done {
             return Err(AppError::InvalidInput("only finished changes can be undone, and only once".to_owned()));
         }

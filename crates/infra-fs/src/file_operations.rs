@@ -4,7 +4,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use hoarddeck_application::ports::{FileError, FileOperations};
+use hoarddeck_application::ports::{ArchiveStamp, Deleted, FileError, FileOperations, STAGING_PREFIX};
 use hoarddeck_domain::RelPath;
 
 pub struct FsFileOperations;
@@ -83,6 +83,67 @@ impl FileOperations for FsFileOperations {
             return Ok(false);
         }
         rename_new(&step, &target).map(|()| true).map_err(|error| format!("{to}: {error}"))
+    }
+
+    fn stamp(&self, root: &str, path: &RelPath) -> Result<ArchiveStamp, String> {
+        let metadata = fs::metadata(absolute(Path::new(root), path)).map_err(|error| format!("{path}: {error}"))?;
+        let mtime = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
+        Ok(ArchiveStamp { size: metadata.len(), mtime })
+    }
+
+    fn delete_archive(&self, root: &str, path: &RelPath, permanent: bool) -> Result<Deleted, FileError> {
+        let failed = |message: String| FileError::Failed(message);
+        let canonical = fs::canonicalize(root).map_err(|error| failed(format!("{root}: {error}")))?;
+        let target = absolute(&canonical, path);
+        inside(&canonical, &target).map_err(failed)?;
+        if !fs::symlink_metadata(&target).map_err(|error| failed(format!("{path}: {error}")))?.is_file() {
+            return Err(failed(format!("{path} is not a file")));
+        }
+        if permanent {
+            fs::remove_file(&target).map_err(|error| failed(format!("{path}: {error}")))?;
+            return Ok(Deleted::Removed);
+        }
+        match trash::delete(&target) {
+            Ok(()) if !target.exists() => Ok(Deleted::Trashed),
+            // Some drives (external disks without a trash folder) refuse; the file stays and the user decides.
+            _ => Err(FileError::NoTrash),
+        }
+    }
+
+    fn trash_dir(&self, root: &str, dir: &RelPath) -> Result<(), FileError> {
+        let failed = |message: String| FileError::Failed(message);
+        let canonical = fs::canonicalize(root).map_err(|error| failed(format!("{root}: {error}")))?;
+        let target = absolute(&canonical, dir);
+        inside(&canonical, &target).map_err(failed)?;
+        let metadata = fs::symlink_metadata(&target).map_err(|error| failed(format!("{dir}: {error}")))?;
+        if !metadata.is_dir() || dir.is_root() {
+            return Err(failed(format!("{dir} is not a folder")));
+        }
+        match trash::delete(&target) {
+            Ok(()) if !target.exists() => Ok(()),
+            _ => Err(FileError::NoTrash),
+        }
+    }
+
+    fn remove_staging_dir(&self, root: &str, dir: &RelPath) -> Result<(), String> {
+        // The only recursive delete in the app, and only for its own hidden staging folders.
+        if !dir.name().starts_with(STAGING_PREFIX) {
+            return Err(format!("{dir} is not a staging folder"));
+        }
+        let canonical = fs::canonicalize(root).map_err(|error| format!("{root}: {error}"))?;
+        let target = absolute(&canonical, dir);
+        if !target.try_exists().map_err(|error| format!("{dir}: {error}"))? {
+            return Ok(());
+        }
+        inside(&canonical, &target)?;
+        if fs::symlink_metadata(&target).map_err(|error| format!("{dir}: {error}"))?.file_type().is_symlink() {
+            return Err(format!("{dir} is a link"));
+        }
+        fs::remove_dir_all(&target).map_err(|error| format!("{dir}: {error}"))
     }
 }
 

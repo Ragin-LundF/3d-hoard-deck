@@ -7,7 +7,7 @@ files into a browsable, searchable library with cover images and an interactive 
 folders in place: nothing is moved, copied or uploaded, and the app never writes into your library unless you
 allow it.
 
-![Browsing a library: every model gets a cover](docs/screenshots/all-models.png)
+![Browsing a library: every model gets a cover, in the dark and the light theme](docs/screenshots/light-dark.png)
 
 ## What it does
 
@@ -164,6 +164,11 @@ Changing a role regroups the library within seconds; the folders are not read ag
 - **Index**: where the app keeps its data.
 
 ## Questions
+
+**Can it unpack my ZIP and RAR downloads?** Yes, in libraries where file changes are allowed ("rename and move"):
+open the archive or the folder holding it and choose **Extract…**. You see the extracted files before the archive is
+deleted, and nothing is deleted without your confirmation. RAR support uses the official UnRAR code, see
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 **Does it work with my Orynt3D library?** Yes. 3D Hoard Deck never changes Orynt3D's `_orynt3d` folders or
 `config.orynt3d` files, so both apps can use the same folders. **Settings › Libraries › Import from Orynt3D**

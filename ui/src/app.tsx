@@ -28,6 +28,7 @@ import { confirmDiscard, useHasUnsavedChanges } from "./features/settings/drafts
 import { ReviewView } from "./features/ai/review/review-view";
 import { CheckView } from "./features/batch/check-view";
 import { UndoToast } from "./features/batch/undo-toast";
+import { ExtractHost } from "./features/files/extract-host";
 import { useRenderQueue } from "./features/render/render-queue";
 import { t, plural } from "./shared/i18n";
 
@@ -183,6 +184,7 @@ export function App() {
 
       {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
       {toast ? <div className="toast" role="status">{toast}</div> : <UndoToast onMessage={setToast} />}
+      <ExtractHost onMessage={setToast} />
     </div>
   );
 }

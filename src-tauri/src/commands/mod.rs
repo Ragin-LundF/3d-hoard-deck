@@ -3,6 +3,7 @@
 pub mod ai;
 pub mod browse;
 pub mod collections;
+pub mod extract;
 pub mod files;
 pub mod index;
 pub mod library;

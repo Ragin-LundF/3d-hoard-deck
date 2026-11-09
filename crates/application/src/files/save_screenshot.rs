@@ -74,7 +74,7 @@ impl SaveScreenshot {
                         break;
                     }
                     Err(FileError::AlreadyExists) => {}
-                    Err(FileError::Failed(reason)) => return Err(AppError::InvalidInput(reason)),
+                    Err(error) => return Err(AppError::InvalidInput(error.to_string())),
                 }
             }
             written.ok_or_else(|| AppError::InvalidInput("no free name for the screenshot".to_owned()))?

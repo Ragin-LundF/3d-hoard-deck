@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hoarddeck_application::IndexError;
-use hoarddeck_application::ports::{FileJournal, JournalEntry, JournalStatus};
+use hoarddeck_application::ports::{ArchiveStamp, FileJournal, JournalEntry, JournalStatus};
 use hoarddeck_application::scan::ScanRules;
 use hoarddeck_domain::{LibraryId, ModelKind, RelPath};
 use rusqlite::{OptionalExtension, Row, params};
@@ -9,7 +9,8 @@ use rusqlite::{OptionalExtension, Row, params};
 use crate::SqliteIndex;
 use crate::rows::{converted, rel_path};
 
-const COLUMNS: &str = "id, library_id, from_path, to_path, kind, done_at, status";
+const COLUMNS: &str =
+    "id, library_id, from_path, to_path, kind, done_at, status, archive_size, archive_mtime, archive_parts";
 
 /// `?2` is the old path, `?3` the new one; rows at the old path or below it follow. Prefixes are compared with
 /// `substr`, because `_` and `%` in folder names would be wildcards for `LIKE`.
@@ -31,6 +32,35 @@ impl FileJournal for SqliteIndex {
                 "INSERT INTO file_journal (library_id, from_path, to_path, kind, done_at, status)
                  VALUES (?1, ?2, ?3, ?4, ?5, 'pending')",
                 params![library.0, from.as_str(), to.as_str(), kind.code(), now()],
+            )?;
+            Ok(connection.last_insert_rowid())
+        })
+    }
+
+    fn begin_extract(
+        &self,
+        library: LibraryId,
+        archive: &RelPath,
+        folder: &RelPath,
+        stamp: ArchiveStamp,
+        parts: &[RelPath],
+    ) -> Result<i64, IndexError> {
+        let parts: Vec<&str> = parts.iter().map(RelPath::as_str).collect();
+        let parts = serde_json::to_string(&parts).unwrap_or_else(|_| "[]".to_owned());
+        self.write(|connection| {
+            connection.execute(
+                "INSERT INTO file_journal (library_id, from_path, to_path, kind, done_at, status, archive_size, archive_mtime, archive_parts)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7, ?8)",
+                params![
+                    library.0,
+                    archive.as_str(),
+                    folder.as_str(),
+                    ModelKind::File.code(),
+                    now(),
+                    i64::try_from(stamp.size).unwrap_or(i64::MAX),
+                    stamp.mtime,
+                    parts
+                ],
             )?;
             Ok(connection.last_insert_rowid())
         })
@@ -104,6 +134,17 @@ fn entry(row: &Row<'_>) -> rusqlite::Result<JournalEntry> {
         from: rel_path(row, 2)?,
         to: rel_path(row, 3)?,
         kind: converted(4, ModelKind::from_code(&row.get::<_, String>(4)?))?,
+        extract: match (row.get::<_, Option<i64>>(7)?, row.get::<_, Option<i64>>(8)?) {
+            (Some(size), Some(mtime)) => Some(ArchiveStamp { size: u64::try_from(size).unwrap_or(0), mtime }),
+            _ => None,
+        },
+        parts: row
+            .get::<_, Option<String>>(9)?
+            .and_then(|text| serde_json::from_str::<Vec<String>>(&text).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|path| RelPath::new(path).ok())
+            .collect(),
         done_at: row.get(5)?,
         status: JournalStatus::from_code(&status).ok_or_else(|| {
             rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, format!("status {status}").into())

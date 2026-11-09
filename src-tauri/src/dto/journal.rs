@@ -17,6 +17,8 @@ pub struct JournalEntryDto {
     pub done_at: f64,
     /// `pending`, `done`, `failed`, `undoing` or `undone`; only `done` can be undone.
     pub status: String,
+    /// An archive extracted into a new folder (`from` the archive, `to` the folder), not a move.
+    pub extract: bool,
 }
 
 impl From<JournalEntry> for JournalEntryDto {
@@ -29,6 +31,7 @@ impl From<JournalEntry> for JournalEntryDto {
             to: entry.to.to_string(),
             done_at: entry.done_at as f64,
             status: entry.status.code().to_owned(),
+            extract: entry.extract.is_some(),
         }
     }
 }

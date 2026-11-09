@@ -29,7 +29,8 @@ impl From<AppError> for IpcError {
                 | Refusal::TrailingDotOrSpace(subject)
                 | Refusal::ReservedName(subject)
                 | Refusal::NotManaged(subject)
-                | Refusal::ReadOnly(subject),
+                | Refusal::ReadOnly(subject)
+                | Refusal::NoTrash(subject),
             ) => Some(subject.clone()),
             _ => None,
         };
@@ -51,6 +52,8 @@ impl From<AppError> for IpcError {
                 Refusal::SmartCollection => "smart_collection",
                 Refusal::NotManaged(_) => "not_managed",
                 Refusal::ReadOnly(_) => "read_only",
+                Refusal::NoTrash(_) => "no_trash",
+                Refusal::WrongPassword => "wrong_password",
             },
             AppError::InvalidInput(_) | AppError::Domain(_) => "invalid_input",
             AppError::Scan(hoarddeck_application::ScanError::Offline(_)) => "offline",
