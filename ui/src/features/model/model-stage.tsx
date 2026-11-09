@@ -1,8 +1,9 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { fileUrl, thumbUrl, type ModelFileDto_Serialize } from "../../ipc";
 import { fileName, folderName } from "../../shared/format";
 import type { MeshFormat } from "../viewer/formats";
 import { t } from "../../shared/i18n";
+import { Icon } from "../../shared/icons";
 import { ZoomImage } from "./zoom-image";
 
 // three.js is only downloaded when a model is opened in 3D.
@@ -80,14 +81,45 @@ export function ModelStage({ library, title, view, images, firstMesh, onView, co
         )}
       </div>
       {images.length > 1 && (
-        <div className="gallery" aria-label={t("Images")}>
+        <Gallery>
           {images.map((image) => (
             <button key={image.path} className={view.kind === "image" && image.path === view.path ? "on" : ""} onClick={() => onView({ kind: "image", path: image.path })} title={fileName(image.path)}>
               <img src={thumbUrl(library, image.path)} alt="" loading="lazy" />
             </button>
           ))}
-        </div>
+        </Gallery>
       )}
+    </div>
+  );
+}
+
+/** The image strip; arrows scroll it by a page for the mouse, shown only where there is more to see. */
+function Gallery({ children }: { children: ReactNode }) {
+  const strip = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  useEffect(() => {
+    const element = strip.current;
+    if (!element) return;
+    const update = () =>
+      setMore({ left: element.scrollLeft > 1, right: element.scrollLeft + element.clientWidth < element.scrollWidth - 1 });
+    update();
+    const resized = new ResizeObserver(update);
+    resized.observe(element);
+    element.addEventListener("scroll", update, { passive: true });
+    return () => {
+      resized.disconnect();
+      element.removeEventListener("scroll", update);
+    };
+  }, [children]);
+  const page = (direction: number) => {
+    const element = strip.current;
+    element?.scrollBy({ left: direction * element.clientWidth * 0.8, behavior: "smooth" });
+  };
+  return (
+    <div className="gallery-wrap">
+      <div className="gallery" ref={strip} aria-label={t("Images")}>{children}</div>
+      {more.left && <button className="gallery-arrow prev" onClick={() => page(-1)} aria-label={t("Previous images")}><Icon name="chevron" /></button>}
+      {more.right && <button className="gallery-arrow next" onClick={() => page(1)} aria-label={t("More images")}><Icon name="chevron" /></button>}
     </div>
   );
 }

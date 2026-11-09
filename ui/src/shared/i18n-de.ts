@@ -721,4 +721,6 @@ export const de: Record<string, string> = {
   "Models without any picture get a preview rendered from their 3D file. It is only shown until you save or keep it.": "Modelle ohne Bild bekommen eine aus ihrer 3D-Datei erstellte Vorschau. Sie wird nur gezeigt, bis du sie speicherst oder behältst.",
   "For models on screen": "Für Modelle auf dem Bildschirm",
   "Only when I ask": "Nur auf Wunsch",
+  "Previous images": "Vorherige Bilder",
+  "More images": "Weitere Bilder",
 };

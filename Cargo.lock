@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-app"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-application"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "globset",
  "hoarddeck-domain",
@@ -1904,7 +1904,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-app",
  "hoarddeck-application",
@@ -1915,7 +1915,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-desktop"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-app",
  "hoarddeck-application",
@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-domain"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-ai"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.22.1",
  "hoarddeck-application",
@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-fs"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "blake3",
  "hoarddeck-application",
@@ -1972,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-mesh"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-platform"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-sqlite"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -2003,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-tantivy"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",
@@ -2014,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "hoarddeck-infra-thumbs"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hoarddeck-application",
  "hoarddeck-domain",

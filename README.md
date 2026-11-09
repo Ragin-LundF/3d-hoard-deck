@@ -20,7 +20,9 @@ allow it.
   can stay inside the current folder.
 - **Covers without effort.** Images from the model folder (or an image next to it with the same name) become
   the cover, resized once and cached so the grid stays fast, even over a network share. Folders without a picture
-  borrow one from their subfolders, like a movie library, and you can pick a folder's picture yourself.
+  borrow one from their subfolders, like a movie library, and you can pick a folder's picture yourself. Models
+  without a picture take the one from the folder above or the preview inside their 3MF; if there is none, the app
+  renders a grey preview that you can save as the cover.
 - **Make your own cover.** Turn a model in the 3D preview until it looks right and press **Screenshot**; the image
   is saved next to the file and becomes the cover of a folder without pictures.
 - **Look at the model in 3D.** Rotate, zoom and pan STL, 3MF and OBJ files, with size in millimetres and the
@@ -49,14 +51,32 @@ allow it.
 
 ![Searching for gears](docs/screenshots/search.png)
 
+## How to install
+
+Download the installer for your system from the [Releases page](https://github.com/Ragin-LundF/3d-hoard-deck/releases).
+The builds are not signed with a developer certificate yet, so your system asks once before the first start.
+
+- **macOS** (Apple Silicon or Intel): the `.dmg`. Open it and drag the app into Applications. On the first start
+  macOS blocks it; allow it under System Settings › Privacy & Security › **Open Anyway**.
+- **Windows**: the `.exe` installer (or the `.msi`). If SmartScreen warns, choose **More info** › **Run anyway**.
+- **Linux**: the `.AppImage` (make it executable and start it), or the `.deb` / `.rpm` package for your
+  distribution.
+
+You can also build the app yourself as described in [docs/developer.md](docs/developer.md#build-an-installer).
+
+### Install with Homebrew (macOS)
+
+```bash
+brew install --cask ragin-lundf/tap/3d-hoard-deck
+```
+
+Because the app is not signed yet, allow it once under System Settings › Privacy & Security › **Open Anyway**
+after the first start. `brew upgrade --cask 3d-hoard-deck` gets a
+new version; the app's own update check works as well.
+
 ## Getting started
 
-1. **Install the app.** Download the installer for your system from the
-   [Releases page](https://github.com/Ragin-LundF/3d-hoard-deck/releases): `.dmg` for macOS (Apple Silicon or
-   Intel), `.exe` or `.msi` for Windows, `.AppImage`, `.deb` or `.rpm` for Linux. The builds are not signed with a
-   developer certificate yet, so the system asks once: on macOS allow the app under System Settings › Privacy &
-   Security › **Open Anyway**; on Windows choose **More info** › **Run anyway**. You can also build it yourself as
-   described in [docs/developer.md](docs/developer.md#build-an-installer).
+1. **Install the app** as described in [How to install](#how-to-install).
 2. **Add your library.** On first start choose **Add library folder** and pick the folder with your models,
    for example a folder on your NAS. The first scan starts right away; large libraries on a network share take
    a few minutes, and you can keep browsing meanwhile.

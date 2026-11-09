@@ -61,7 +61,8 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const openFolder = (folder: string) => navigate({ ...route, folder, q: "" });
+  // Like the sidebar: a folder always opens in folder view; "Everything inside" is chosen per folder.
+  const openFolder = (folder: string) => navigate({ ...route, folder, q: "", all: false });
 
   const batch = useBatchTags(library.id, onError);
   const removeEverywhere = async (tag: string) => {
