@@ -8,7 +8,7 @@ use hoarddeck_application::IndexError;
 use hoarddeck_application::ports::{EntryStore, SizedFile};
 use hoarddeck_application::scan::{Generation, KnownDir, KnownDirs, ScanItem};
 use hoarddeck_domain::{Entry, EntryKind, FileKind, LibraryId, RelPath};
-use rusqlite::params;
+use rusqlite::{Transaction, params};
 
 use crate::SqliteIndex;
 use crate::rows::{converted, rel_path, subtree_bounds, to_i64, to_u64};
@@ -42,13 +42,10 @@ impl EntryStore for SqliteIndex {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| to_i64(d.as_secs()));
         self.write(|connection| {
             let transaction = connection.transaction()?;
-            let removed = transaction.execute(
-                "DELETE FROM entries WHERE library_id = ?1 AND generation < ?2",
-                params![library.0, generation.0],
-            )?;
+            let removed = remove_missing(&transaction, library, generation)?;
             transaction.execute("UPDATE libraries SET last_scan_at = ?2 WHERE id = ?1", params![library.0, now])?;
             transaction.commit()?;
-            Ok(removed as u64)
+            Ok(removed)
         })
     }
 
@@ -57,17 +54,20 @@ impl EntryStore for SqliteIndex {
         library: LibraryId,
         generation: Generation,
         folder: &RelPath,
+        visited: bool,
     ) -> Result<u64, IndexError> {
         if folder.is_root() {
             return self.finish_scan(library, generation);
         }
-        let (low, high) = subtree_bounds(folder);
         self.write(|connection| {
-            let removed = connection.execute(
-                "DELETE FROM entries WHERE library_id = ?1 AND generation < ?2 AND (path = ?3 OR (path >= ?4 AND path < ?5))",
-                params![library.0, generation.0, folder.as_str(), low, high],
-            )?;
-            Ok(removed as u64)
+            let transaction = connection.transaction()?;
+            let removed = if visited {
+                remove_missing(&transaction, library, generation)?
+            } else {
+                remove_subtree(&transaction, library, folder)?
+            };
+            transaction.commit()?;
+            Ok(removed)
         })
     }
 
@@ -146,4 +146,36 @@ impl SqliteIndex {
             Ok(known)
         })
     }
+}
+
+/// Removes what a scan did not see in the folders it listed, and everything below subfolders that vanished from
+/// them. Folders that were only visited (unchanged mtime) or could not be read keep their contents.
+fn remove_missing(transaction: &Transaction<'_>, library: LibraryId, generation: Generation) -> rusqlite::Result<u64> {
+    const IN_LISTED: &str = "library_id = ?1 AND generation < ?2
+        AND parent IN (SELECT path FROM entries INDEXED BY entries_listed WHERE library_id = ?1 AND listed_gen = ?2)";
+    let vanished: Vec<RelPath> = {
+        let mut statement =
+            transaction.prepare_cached(&format!("SELECT path FROM entries WHERE is_dir = 1 AND {IN_LISTED}"))?;
+        statement
+            .query_map(params![library.0, generation.0], |row| rel_path(row, 0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let mut removed = 0;
+    for dir in &vanished {
+        removed += remove_subtree(transaction, library, dir)?;
+    }
+    removed += transaction
+        .execute(&format!("DELETE FROM entries WHERE {IN_LISTED}"), params![library.0, generation.0])?
+        as u64;
+    Ok(removed)
+}
+
+/// Removes a folder and everything below it.
+fn remove_subtree(transaction: &Transaction<'_>, library: LibraryId, dir: &RelPath) -> rusqlite::Result<u64> {
+    let (low, high) = subtree_bounds(dir);
+    let removed = transaction.execute(
+        "DELETE FROM entries WHERE library_id = ?1 AND (path = ?2 OR (path >= ?3 AND path < ?4))",
+        params![library.0, dir.as_str(), low, high],
+    )?;
+    Ok(removed as u64)
 }

@@ -95,6 +95,7 @@ fn scan_browse_and_search_a_library_without_writing_into_it() {
     assert_eq!(proposals.iter().map(|p| (p.id.as_str(), p.matches)).collect::<Vec<_>>(), vec![("creator-releases", 1)]);
     assert_eq!(proposals[0].samples, vec!["September Release"]);
     app.collection_presets.accept(library.id, "creator-releases").expect("accept");
+    assert!(app.folder_rules.editor.wait_for_regroups(std::time::Duration::from_secs(10)), "background regroup");
     let wolverine = search("wolverine");
     let release = RelPath::new("Miniatures/Creator/2022-09 - September Release").expect("valid");
     assert_eq!(wolverine[0].collection, Some(release.clone()), "the release became a collection");

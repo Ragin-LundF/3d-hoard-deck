@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 9] = [
+const MIGRATIONS: [&str; 11] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -153,6 +153,16 @@ CREATE TABLE folder_covers (
     cover      TEXT NOT NULL,
     PRIMARY KEY (library_id, path)
 ) WITHOUT ROWID;
+",
+    r"
+-- 10: a fingerprint of each model row, so a regroup writes only the models that really changed.
+ALTER TABLE models ADD COLUMN fingerprint INTEGER;
+",
+    r"
+-- 11: which scan last listed a folder. A scan then removes only what is missing in folders it read, and folders
+-- whose mtime did not change cost no writes for the files in them.
+ALTER TABLE entries ADD COLUMN listed_gen INTEGER;
+CREATE INDEX entries_listed ON entries (library_id, listed_gen);
 ",
 ];
 

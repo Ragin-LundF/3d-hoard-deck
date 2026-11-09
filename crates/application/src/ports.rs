@@ -57,7 +57,8 @@ pub trait EntryStore: Send + Sync {
     /// Fails when the index cannot be written.
     fn finish_scan(&self, library: LibraryId, generation: Generation) -> Result<u64, IndexError>;
     /// Like [`Self::finish_scan`] after scanning only `folder` and what is below it: removes unseen entries there and
-    /// leaves the rest of the library alone.
+    /// leaves the rest of the library alone. `visited` is false when the scan reported nothing for `folder` itself,
+    /// because it no longer exists; then it is removed with everything below it.
     /// # Errors
     /// Fails when the index cannot be written.
     fn finish_folder_scan(
@@ -65,6 +66,7 @@ pub trait EntryStore: Send + Sync {
         library: LibraryId,
         generation: Generation,
         folder: &RelPath,
+        visited: bool,
     ) -> Result<u64, IndexError>;
     /// All stored folder paths of a library (the root excluded).
     /// # Errors
@@ -82,10 +84,11 @@ pub trait EntryStore: Send + Sync {
 }
 
 pub trait ModelRepository: Send + Sync {
-    /// Replaces folders and models of a library, keeping ids of models whose path did not change.
+    /// Replaces folders and models of a library, keeping ids of models whose path did not change. Only what differs
+    /// is written; the result names the models that are new or changed, and those that are gone.
     /// # Errors
     /// Fails when the index cannot be written.
-    fn replace_catalog(&self, library: LibraryId, catalog: &Catalog) -> Result<(), IndexError>;
+    fn replace_catalog(&self, library: LibraryId, catalog: &Catalog) -> Result<CatalogChange, IndexError>;
     /// # Errors
     /// Fails when the index cannot be read.
     fn search_documents(&self, library: LibraryId) -> Result<Vec<SearchDocument>, IndexError>;
@@ -116,6 +119,14 @@ pub trait ModelRepository: Send + Sync {
     fn loose_images(&self, library: LibraryId, folder: &RelPath) -> Result<Vec<RelPath>, IndexError>;
 }
 
+/// What a [`ModelRepository::replace_catalog`] changed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CatalogChange {
+    /// New models and models whose files, title, cover or grouping changed.
+    pub changed: Vec<ModelId>,
+    pub removed: Vec<ModelId>,
+}
+
 pub trait SearchIndex: Send + Sync {
     /// Replaces all documents of a library and makes them searchable.
     /// # Errors
@@ -125,6 +136,10 @@ pub trait SearchIndex: Send + Sync {
     /// # Errors
     /// Fails when the search index cannot be written.
     fn update_documents(&self, docs: &[SearchDocument]) -> Result<(), SearchError>;
+    /// Replaces `docs` and drops the `removed` models, in one commit.
+    /// # Errors
+    /// Fails when the search index cannot be written.
+    fn apply_changes(&self, docs: &[SearchDocument], removed: &[ModelId]) -> Result<(), SearchError>;
     /// # Errors
     /// Fails when the search index cannot be read.
     fn search(&self, query: &SearchQuery) -> Result<SearchHits, SearchError>;

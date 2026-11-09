@@ -14,8 +14,9 @@ use hoarddeck_infra_thumbs::ThumbnailCache;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
-/// Parallel folder reads; modest because the main library sits on a network share.
-const SCAN_THREADS: usize = 6;
+/// Parallel folder reads. Network shares answer several requests at once, so a scan waits less on each one;
+/// still modest, so a NAS stays usable for others meanwhile.
+const SCAN_THREADS: usize = 12;
 
 fn main() {
     let specta = specta_builder();

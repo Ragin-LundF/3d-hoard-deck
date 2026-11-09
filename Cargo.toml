@@ -34,5 +34,10 @@ pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 module_name_repetitions = "allow"
 
+# `npm run dev` builds in this profile: light optimization keeps grouping a big library from taking seconds,
+# while compile times and debugging stay reasonable.
+[profile.dev]
+opt-level = 1
+
 [profile.dev.package."*"]
 opt-level = 2

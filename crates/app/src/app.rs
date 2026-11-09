@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use hoarddeck_application::AppError;
 use hoarddeck_application::browse::{BrowseFolder, GetFolderChildren, GetModel, ListArchive};
@@ -15,8 +15,8 @@ use hoarddeck_application::scan::{
 use hoarddeck_application::search::{RebuildSearchIndex, SearchModels};
 use hoarddeck_application::slicer::{ManageSlicers, OpenInSlicer};
 use hoarddeck_infra_fs::{
-    Blake3Hasher, BootstrapFile, FsFileOperations, FsLibraryScanner, NotifyWatcher, Orynt3dFiles, SidecarFileStore,
-    SystemStorage,
+    Blake3Hasher, BootstrapFile, FsFileOperations, FsLibraryScanner, IoPriority, NotifyWatcher, Orynt3dFiles,
+    SidecarFileStore, SystemStorage,
 };
 use hoarddeck_infra_mesh::ZipArchives;
 use hoarddeck_infra_platform::{InstalledSlicers, SystemLauncher};
@@ -27,6 +27,8 @@ use hoarddeck_infra_tantivy::{SearchFolder, TantivySearchIndex};
 pub struct App {
     /// The folder this index was opened from (resolved).
     pub index_dir: PathBuf,
+    /// Interactive reads (pictures, 3D files) take this while they run, so a scan steps back meanwhile.
+    pub io_priority: Arc<IoPriority>,
     pub libraries: Arc<dyn LibraryRepository>,
     pub add_library: AddLibrary,
     pub update_library_settings: UpdateLibrarySettings,
@@ -73,16 +75,17 @@ impl App {
             RebuildSearchIndex { libraries: index.clone(), models: index.clone(), search: search.clone() }.execute()?;
         }
         let locks = Arc::new(LibraryLocks::default());
+        let io_priority = Arc::new(IoPriority::default());
         let scan_library = Arc::new(ScanLibrary::new(
             index.clone(),
             index.clone(),
             index.clone(),
             search.clone(),
-            Arc::new(FsLibraryScanner::new(scan_threads)),
+            Arc::new(FsLibraryScanner::new(scan_threads, io_priority.clone())),
             events.clone(),
             locks.clone(),
         ));
-        let editor = rule_editor(&index, &search, &locks);
+        let editor = rule_editor(&index, &search, &locks, events.clone());
         let search_models = Arc::new(SearchModels { search: search.clone(), models: index.clone() });
         let update_model_meta = Arc::new(UpdateModelMeta {
             libraries: index.clone(),
@@ -96,6 +99,7 @@ impl App {
         let (move_model, undo_file_operation, save_screenshot, set_folder_cover) =
             file_operations(&index, &locks, &scan_library);
         Ok(Self {
+            io_priority,
             index_dir: index_dir.clone(),
             libraries: index.clone(),
             update_library_settings: UpdateLibrarySettings {
@@ -228,6 +232,7 @@ fn rule_editor(
     index: &Arc<SqliteIndex>,
     search: &Arc<TantivySearchIndex>,
     locks: &Arc<LibraryLocks>,
+    events: Arc<dyn EventSink>,
 ) -> Arc<RuleEditor> {
     Arc::new(RuleEditor {
         libraries: index.clone(),
@@ -236,5 +241,7 @@ fn rule_editor(
         search: search.clone(),
         locks: locks.clone(),
         sidecars: Arc::new(SidecarFileStore),
+        events,
+        queue: Mutex::default(),
     })
 }

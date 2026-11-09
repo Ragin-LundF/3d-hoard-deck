@@ -19,7 +19,8 @@ pub async fn set_folder_role(
 ) -> Result<(), IpcError> {
     let app = Arc::clone(&app);
     let folder = rel_path(&folder)?;
-    blocking(move || app.set_folder_role.execute(LibraryId(i64::from(library)), &folder, role.map(Into::into))).await
+    // Returns once the rule is saved; the regroup follows in the background and ends with a "done" progress event.
+    blocking(move || app.set_folder_role.queue(LibraryId(i64::from(library)), &folder, role.map(Into::into))).await
 }
 
 #[tauri::command]
@@ -32,7 +33,7 @@ pub async fn folder_rules(app: AppState<'_>, library: u32) -> Result<Vec<FolderR
 #[specta::specta]
 pub async fn remove_folder_rule(app: AppState<'_>, library: u32, pattern: String) -> Result<(), IpcError> {
     let app = Arc::clone(&app);
-    blocking(move || app.folder_rules.remove(LibraryId(i64::from(library)), &pattern)).await
+    blocking(move || app.folder_rules.queue_remove(LibraryId(i64::from(library)), &pattern)).await
 }
 
 /// Collection presets that match this library's folders and are not in use yet.

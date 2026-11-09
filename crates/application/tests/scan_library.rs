@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use hoarddeck_application::browse::{BrowsePage, BrowseRequest};
 use hoarddeck_application::ports::{
-    EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
+    CatalogChange, EntryStore, EventSink, LibraryRepository, LibraryScanner, ModelRepository, SearchIndex, SizedFile,
 };
 use hoarddeck_application::scan::{
     CompiledRules, Generation, KnownDirs, LibraryLocks, ScanItem, ScanLibrary, ScanMode, ScanProgress, ScanRules,
@@ -60,7 +60,13 @@ impl EntryStore for Store {
         *self.finished.lock().expect("lock") = true;
         Ok(0)
     }
-    fn finish_folder_scan(&self, library: LibraryId, generation: Generation, _: &RelPath) -> Result<u64, IndexError> {
+    fn finish_folder_scan(
+        &self,
+        library: LibraryId,
+        generation: Generation,
+        _: &RelPath,
+        _: bool,
+    ) -> Result<u64, IndexError> {
         self.finish_scan(library, generation)
     }
     fn folders(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
@@ -75,9 +81,9 @@ impl EntryStore for Store {
 }
 
 impl ModelRepository for Store {
-    fn replace_catalog(&self, _: LibraryId, _: &Catalog) -> Result<(), IndexError> {
+    fn replace_catalog(&self, _: LibraryId, _: &Catalog) -> Result<CatalogChange, IndexError> {
         *self.replaced.lock().expect("lock") = true;
-        Ok(())
+        Ok(CatalogChange::default())
     }
     fn search_documents(&self, _: LibraryId) -> Result<Vec<SearchDocument>, IndexError> {
         Ok(Vec::new())
@@ -112,6 +118,9 @@ impl SearchIndex for NoSearch {
         Ok(())
     }
     fn update_documents(&self, _: &[SearchDocument]) -> Result<(), SearchError> {
+        Ok(())
+    }
+    fn apply_changes(&self, _: &[SearchDocument], _: &[ModelId]) -> Result<(), SearchError> {
         Ok(())
     }
     fn search(&self, _: &SearchQuery) -> Result<SearchHits, SearchError> {

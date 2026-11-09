@@ -30,9 +30,12 @@ pub fn handle<R: Runtime>(context: UriSchemeContext<'_, R>, request: Request<Vec
     let app = handle.state::<Arc<App>>().inner().clone();
     let thumbnails = handle.state::<Arc<ThumbnailCache>>().inner().clone();
     let path = request.uri().path().to_owned();
+    // While the user waits for this picture or 3D file, a running scan steps back.
+    let foreground = app.io_priority.foreground();
     pool::run(
         lane(&path),
         Box::new(move |dropped| {
+            let _foreground = foreground;
             // A request dropped from a full queue still gets an answer, so the webview never waits forever.
             if dropped {
                 return responder.respond(status(StatusCode::SERVICE_UNAVAILABLE));

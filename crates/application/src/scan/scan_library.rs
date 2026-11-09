@@ -135,12 +135,15 @@ impl ScanLibrary {
         }
         let (sender, receiver) = sync_channel::<ScanItem>(CHANNEL_CAPACITY);
         let mut report = ScanReport { partial: !from.is_root(), ..ScanReport::default() };
+        // The scanner reports nothing for a start folder that no longer exists.
+        let mut visited = false;
         thread::scope(|scope| -> Result<(), AppError> {
             let (scanner, known, root) = (&self.scanner, &known, library.root.as_str());
             let walker = scope.spawn(move || scanner.scan(root, from, known, rules, &sender));
             let mut batch = Vec::new();
             let mut batch_entries = 0;
             for item in receiver {
+                visited |= item_dir(&item) == from;
                 batch_entries += count(&item, &mut report);
                 batch.push(item);
                 if batch_entries >= BATCH_ENTRIES {
@@ -154,7 +157,7 @@ impl ScanLibrary {
             walker.join().map_err(|_| ScanError::Aborted("walker thread panicked".to_owned()))??;
             Ok(())
         })?;
-        report.entries_removed = self.entries.finish_folder_scan(library.id, generation, from)?;
+        report.entries_removed = self.entries.finish_folder_scan(library.id, generation, from, visited)?;
         Ok(report)
     }
 
@@ -169,6 +172,12 @@ impl ScanLibrary {
             failures: report.failures.clone(),
             partial: report.partial,
         });
+    }
+}
+
+fn item_dir(item: &ScanItem) -> &RelPath {
+    match item {
+        ScanItem::Listed { dir, .. } | ScanItem::Unchanged { dir } | ScanItem::Failed { dir, .. } => dir,
     }
 }
 

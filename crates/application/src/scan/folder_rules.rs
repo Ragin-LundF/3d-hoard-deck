@@ -22,4 +22,11 @@ impl FolderRules {
     pub fn remove(&self, library: LibraryId, pattern: &str) -> Result<(), AppError> {
         self.editor.edit(library, |rules| rules.folder_rules.retain(|rule| rule.pattern != pattern))
     }
+
+    /// Like [`Self::remove`], but the regroup follows in the background.
+    /// # Errors
+    /// Fails for an unknown library, or when the index cannot be written.
+    pub fn queue_remove(&self, library: LibraryId, pattern: &str) -> Result<(), AppError> {
+        self.editor.edit_soon(library, |rules| rules.folder_rules.retain(|rule| rule.pattern != pattern))
+    }
 }

@@ -3,6 +3,20 @@
 All notable changes to 3D Hoard Deck are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Faster
+- **Marking folders no longer makes you wait.** "Treat as one model", "Treat as collection", accepting a suggestion
+  or removing a rule now take effect at once; the models are regrouped in the background. Marking several folders
+  in a row regroups only once, and a running scan is simply waited for.
+- **Regrouping is about four times faster.** Only the models that actually change are updated, instead of all of
+  them. In a library with about 45,000 models this takes about half a second instead of more than two.
+- **Scans write far less.** Folders that did not change cost no work in the app's index any more, which saves
+  several seconds per scan in big libraries, and the app now asks the NAS for more folders at the same time.
+- **Pictures load quickly during a scan.** Pictures and 3D files now go first: while you wait for one, a running scan
+  steps back for a moment, so browsing stays smooth while the library is being read.
+- The first start after the update takes a few seconds longer once while the app prepares its index.
+
 ## [1.0.0] - 2026-11-08
 
 3D Hoard Deck is ready for everyday use. This release is about finding your models faster, giving every folder a

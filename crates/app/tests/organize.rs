@@ -367,3 +367,52 @@ fn scanning_a_folder_that_was_deleted_outside_the_app_removes_it() {
     assert_eq!(found("gone"), 0, "the deleted folder's model is removed");
     assert_eq!(found("kept"), 1, "the rest of the library stays");
 }
+
+/// Counts the "done" events of background regroups.
+struct DoneCounter(std::sync::atomic::AtomicUsize);
+
+impl EventSink for DoneCounter {
+    fn scan_progress(&self, progress: &ScanProgress) {
+        if progress.partial && progress.phase == hoarddeck_application::scan::ScanPhase::Done {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+#[test]
+fn several_folder_marks_in_a_row_return_at_once_and_regroup_once() {
+    use hoarddeck_application::scan::FolderRole;
+    use hoarddeck_domain::RelPath;
+
+    let library_dir = tempfile::tempdir().expect("library");
+    let index_dir = tempfile::tempdir().expect("index");
+    let root = library_dir.path();
+    for file in ["A/x/a.stl", "B/x/b.stl", "C/x/c.stl"] {
+        fs::create_dir_all(root.join(file).parent().expect("parent")).expect("dirs");
+        fs::write(root.join(file), vec![0_u8; 134]).expect("stl");
+    }
+    let counter = Arc::new(DoneCounter(std::sync::atomic::AtomicUsize::new(0)));
+    let app = App::open(index_dir.path(), 2, counter.clone()).expect("open");
+    let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
+
+    for folder in ["A", "B", "C"] {
+        let folder = RelPath::new(folder).expect("valid");
+        app.set_folder_role.queue(library.id, &folder, Some(FolderRole::Model)).expect("queued");
+    }
+    assert_eq!(app.folder_rules.list(library.id).expect("rules").len(), 3, "the rules are saved at once");
+    assert!(app.folder_rules.editor.wait_for_regroups(std::time::Duration::from_secs(10)));
+    assert_eq!(counter.0.load(std::sync::atomic::Ordering::SeqCst), 1, "three marks, one regroup");
+    let page = app
+        .browse_folder
+        .execute(&hoarddeck_application::browse::BrowseRequest {
+            library: library.id,
+            folder: RelPath::root(),
+            recursive: false,
+            sort: hoarddeck_application::browse::Sort::Name,
+            cursor: None,
+            limit: 10,
+        })
+        .expect("browse");
+    assert_eq!(page.page.models.len(), 3, "A, B and C are models now");
+}
