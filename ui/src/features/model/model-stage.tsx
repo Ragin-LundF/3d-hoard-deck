@@ -5,6 +5,8 @@ import type { MeshFormat } from "../viewer/formats";
 import { t } from "../../shared/i18n";
 import { Icon } from "../../shared/icons";
 import { ZoomImage } from "./zoom-image";
+import { openAtLastPoint, openContextMenu, type MenuItem } from "../../shared/context-menu";
+import { copyPath, revealPath } from "../../shared/file-actions";
 
 // three.js is only downloaded when a model is opened in 3D.
 const MeshViewer = lazy(() => import("../viewer/mesh-viewer"));
@@ -26,12 +28,26 @@ type Props = {
   /** Folders the shown image can be the card picture of, nearest first. */
   folders: string[];
   onUseForFolder: (folder: string, image: string) => void;
+  /** The library's folder on this machine, for "Show in folder" and "Copy path"; `null` when unknown. */
+  root: string | null;
+  onMessage: (message: string) => void;
 };
 
 /** Left column of the model page: an image, or the interactive 3D preview of one mesh file. */
-export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover, onScreenshot, folders, onUseForFolder }: Props) {
+export function ModelStage({ library, title, view, images, firstMesh, onView, cover, onUseCover, onScreenshot, folders, onUseForFolder, root, onMessage }: Props) {
   const firstImage = images[0]?.path ?? null;
   const [folderMenu, setFolderMenu] = useState(false);
+  /** The menu of a picture: the big one and each thumbnail. */
+  const imageMenu = (path: string): MenuItem[] => [
+    { label: t("Use as cover"), checked: path === cover, onSelect: () => path !== cover && onUseCover(path) },
+    {
+      label: t("Use for folder…"),
+      hidden: folders.length === 0,
+      onSelect: () => openAtLastPoint(folders.map((folder) => ({ label: folderName(folder), onSelect: () => onUseForFolder(folder, path) }))),
+    },
+    { label: t("Show in folder"), hidden: root === null, onSelect: () => root !== null && revealPath(root, path, onMessage) },
+    { label: t("Copy path"), hidden: root === null, onSelect: () => root !== null && copyPath(root, path, onMessage) },
+  ];
   return (
     <div className="stagecol">
       <div className="stage">
@@ -40,7 +56,10 @@ export function ModelStage({ library, title, view, images, firstMesh, onView, co
             <MeshViewer library={library} path={view.path} format={view.format} onScreenshot={onScreenshot} />
           </Suspense>
         ) : view.path ? (
-          <ZoomImage src={fileUrl(library, view.path)} alt={title} />
+          // `display: contents` keeps the layout; the wrapper only catches the right-click on the picture.
+          <div style={{ display: "contents" }} onContextMenu={(event) => openContextMenu(event, imageMenu(view.path ?? ""))}>
+            <ZoomImage src={fileUrl(library, view.path)} alt={title} />
+          </div>
         ) : (
           <span className="crumbs">{t("No preview image in this folder")}</span>
         )}
@@ -83,7 +102,7 @@ export function ModelStage({ library, title, view, images, firstMesh, onView, co
       {images.length > 1 && (
         <Gallery>
           {images.map((image) => (
-            <button key={image.path} className={view.kind === "image" && image.path === view.path ? "on" : ""} onClick={() => onView({ kind: "image", path: image.path })} title={fileName(image.path)}>
+            <button key={image.path} className={view.kind === "image" && image.path === view.path ? "on" : ""} onClick={() => onView({ kind: "image", path: image.path })} onContextMenu={(event) => openContextMenu(event, imageMenu(image.path))} title={fileName(image.path)}>
               <img src={thumbUrl(library, image.path)} alt="" loading="lazy" />
             </button>
           ))}

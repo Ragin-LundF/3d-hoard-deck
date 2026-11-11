@@ -23,9 +23,11 @@ type ModelCardProps = {
   /** The library may write files: a rendered preview is saved into the folder, else kept in the app. */
   canWrite?: boolean;
   onMessage?: (message: string) => void;
+  /** Right-click (or the Context Menu key) on the card. */
+  onMenu?: (event: MouseEvent) => void;
 };
 
-export function ModelCard({ model, onOpen, selected = false, selecting = false, onSelect, canWrite = false, onMessage = () => {} }: ModelCardProps) {
+export function ModelCard({ model, onOpen, selected = false, selecting = false, onSelect, canWrite = false, onMessage = () => {}, onMenu }: ModelCardProps) {
   const click = (event: MouseEvent) => {
     if (onSelect && (selecting || event.metaKey || event.ctrlKey || event.shiftKey)) onSelect(event);
     else onOpen();
@@ -39,7 +41,7 @@ export function ModelCard({ model, onOpen, selected = false, selecting = false, 
   return (
     <div className={`card-wrap${waiting ? " rendered" : ""}`}>
     {waiting && <RenderedActions model={model} canWrite={canWrite} onMessage={onMessage} />}
-    <button className={`card${selected ? " sel" : ""}`} onClick={click} title={model.path} aria-pressed={selecting ? selected : undefined}>
+    <button className={`card${selected ? " sel" : ""}`} onClick={click} onContextMenu={onMenu} title={model.path} aria-pressed={selecting ? selected : undefined}>
       {onSelect && (
         <span className="cb" role="checkbox" aria-checked={selected} aria-label={t("Select {name}", { name: model.title })}
           onClick={(event) => { event.stopPropagation(); onSelect(event); }}>

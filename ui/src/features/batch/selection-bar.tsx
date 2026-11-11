@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { commands, unwrap } from "../../ipc";
 import { formatNumber, plural, t } from "../../shared/i18n";
@@ -14,11 +14,16 @@ type Props = {
   onSelectAll: () => void;
   onClear: () => void;
   onMessage: (message: string) => void;
+  /** Opens "Add tag" or "Remove tag" from outside (the card menu); a new object each time. */
+  request?: { which: "add" | "remove" } | null;
 };
 
 /** Floating bar while models are selected: how many, select all, add a tag, remove tags, clear. */
-export function SelectionBar({ library, ids, search, all, onSelectAll, onClear, onMessage }: Props) {
+export function SelectionBar({ library, ids, search, all, onSelectAll, onClear, onMessage, request }: Props) {
   const [open, setOpen] = useState<"add" | "remove" | null>(null);
+  useEffect(() => {
+    if (request) setOpen(request.which);
+  }, [request]);
   const batch = useBatchTags(library, onMessage);
   const target: BatchTarget = all && search ? { query: search.query, folder: search.folder } : { ids };
   const count = all && search ? search.total : ids.length;

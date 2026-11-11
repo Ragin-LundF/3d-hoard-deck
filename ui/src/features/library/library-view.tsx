@@ -4,6 +4,9 @@ import { folderName } from "../../shared/format";
 import { Icon } from "../../shared/icons";
 import type { LibraryRoute, Route } from "../../shared/route";
 import { Breadcrumbs } from "../folders/breadcrumbs";
+import { useFolderMenu, useLibraryMenu } from "../folders/folder-menu";
+import { useModelMenu } from "./model-menu";
+import { openContextMenu } from "../../shared/context-menu";
 import { NameInput } from "../collections/name-input";
 import { useCreateCollection } from "../collections/queries";
 import { FolderCard, ModelCard } from "./cards";
@@ -35,12 +38,16 @@ type Props = {
   library: LibraryDto;
   route: LibraryRoute;
   navigate: (route: Route) => void;
-  onFolderMenu: (folder: FolderDto_Serialize) => (event: MouseEvent) => void;
   onShownChange: (shown: number) => void;
   onError: (message: string) => void;
 };
 
-export function LibraryView({ library, route, navigate, onFolderMenu, onShownChange, onError }: Props) {
+export function LibraryView({ library, route, navigate, onShownChange, onError }: Props) {
+  const folderMenu = useFolderMenu(onError);
+  const libraryMenu = useLibraryMenu(onError);
+  const crumbMenu = (folder: string) => (folder ? folderMenu(library, folder) : libraryMenu(library));
+  const modelMenu = useModelMenu(onError);
+  const [selectionRequest, setSelectionRequest] = useState<{ which: "add" | "remove" } | null>(null);
   const [sort, setSort] = useState<SortDto>("name");
   const [cardWidth, setCardWidth] = useState(208);
   const searching = route.q.trim().length > 0;
@@ -112,7 +119,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
   return (
     <>
       <div className="libhead">
-        <Breadcrumbs libraryName={library.name} folder={route.folder} onOpen={openFolder} />
+        <Breadcrumbs libraryName={library.name} folder={route.folder} onOpen={openFolder} menu={crumbMenu} />
         <div className="libtitle">
           <h1>{searching ? t("Search: {query}", { query: route.q }) : title}</h1>
           <span className="crumbs">
@@ -208,10 +215,19 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
                 library={library.id}
                 folder={item.folder}
                 onOpen={() => (item.folder.isCollection ? navigate({ ...route, folder: item.folder.path, all: true, q: "" }) : openFolder(item.folder.path))}
-                onMenu={onFolderMenu(item.folder)}
+                onMenu={(event) => openContextMenu(event, folderMenu(library, item.folder.path, item.folder.isCollection))}
               />
             ) : (
-              <ModelCard model={item.model} onOpen={() => navigate({ view: "model", id: item.model.id })} selected={allResults || selected.has(item.model.id)} selecting={selecting} onSelect={select(item.model.id)} canWrite={library.access !== "readOnly"} onMessage={onError} />
+              <ModelCard model={item.model} onOpen={() => navigate({ view: "model", id: item.model.id })} selected={allResults || selected.has(item.model.id)} selecting={selecting} onSelect={select(item.model.id)} canWrite={library.access !== "readOnly"} onMessage={onError}
+                onMenu={(event) => openContextMenu(event, (allResults || selected.has(item.model.id))
+                  // A right-click on a selected card acts on the whole selection.
+                  ? [
+                      { label: plural(allResults && total !== undefined ? total : selected.size, "Add tag to {count} model…", "Add tag to {count} models…"), onSelect: () => setSelectionRequest({ which: "add" }) },
+                      { label: plural(allResults && total !== undefined ? total : selected.size, "Remove tag from {count} model…", "Remove tag from {count} models…"), onSelect: () => setSelectionRequest({ which: "remove" }) },
+                      "separator",
+                      { label: t("Clear selection"), onSelect: clearSelection },
+                    ]
+                  : modelMenu(item.model, { onSelect: () => { setSelectMode(true); setSelected(new Set([...selected, item.model.id])); } }))} />
             )
           }
         />
@@ -225,6 +241,7 @@ export function LibraryView({ library, route, navigate, onFolderMenu, onShownCha
           onSelectAll={() => { setAllResults(true); setSelected(new Set(modelIds)); }}
           onClear={clearSelection}
           onMessage={onError}
+          request={selectionRequest}
         />
       )}
     </>

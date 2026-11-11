@@ -1,69 +1,41 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type MouseEvent } from "react";
-import { commands, describeError, unwrap, type FolderRoleDto } from "../../ipc";
+import { useQueryClient } from "@tanstack/react-query";
+import { commands, describeError, unwrap, type FolderRoleDto, type LibraryDto } from "../../ipc";
+import type { MenuItem } from "../../shared/context-menu";
+import { copyPath, revealPath } from "../../shared/file-actions";
 import { t } from "../../shared/i18n";
+import { HOME, settingsRoute, useRoute } from "../../shared/route";
 
-export type MenuTarget = { library: number; folder: string; isCollection: boolean; x: number; y: number };
-
-/** Right-click on a folder: the user decides whether it is one model, a collection, or detected automatically. */
-export function useFolderMenu() {
-  const [target, setTarget] = useState<MenuTarget | null>(null);
-  const open = (library: number, folder: string, isCollection: boolean) => (event: MouseEvent) => {
-    event.preventDefault();
-    setTarget({ library, folder, isCollection, x: event.clientX, y: event.clientY });
+/** The menu of a folder, the same in the tree, as a card, in the breadcrumbs and behind its "⋯". */
+export function useFolderMenu(onMessage: (message: string) => void) {
+  const queryClient = useQueryClient();
+  const [, navigate] = useRoute();
+  const run = (work: Promise<unknown>) => {
+    work.then(() => queryClient.invalidateQueries()).catch((error) => onMessage(describeError(error)));
   };
-  return { target, open, close: () => setTarget(null) };
+  const setRole = (library: LibraryDto, folder: string, role: FolderRoleDto | null) =>
+    run(unwrap(commands.setFolderRole(library.id, folder, role)));
+  /** `isCollection` is unknown where the folder's role is not loaded (breadcrumbs): then no check mark. */
+  return (library: LibraryDto, folder: string, isCollection?: boolean): MenuItem[] => [
+    { label: t("Open"), onSelect: () => navigate({ ...HOME, library: library.id, folder }) },
+    { label: t("Show in folder"), onSelect: () => revealPath(library.root, folder, onMessage) },
+    { label: t("Copy path"), onSelect: () => copyPath(library.root, folder, onMessage) },
+    "separator",
+    { label: t("Treat as one model"), onSelect: () => setRole(library, folder, "model") },
+    { label: t("Treat as collection"), checked: isCollection, onSelect: () => setRole(library, folder, "collection") },
+    { label: t("Detect automatically"), onSelect: () => setRole(library, folder, null) },
+    "separator",
+    { label: t("Automatic cover"), onSelect: () => run(unwrap(commands.setFolderCover(library.id, folder, null))) },
+    { label: t("Scan this folder"), onSelect: () => run(unwrap(commands.scanFolder(library.id, folder))) },
+    { hint: t("Rules for whole patterns (suggested collections) are listed in Settings › Libraries.") },
+  ];
 }
 
-export function FolderMenu({ target, onClose, onError }: { target: MenuTarget; onClose: () => void; onError: (message: string) => void }) {
-  const queryClient = useQueryClient();
-  const setRole = useMutation({
-    mutationFn: (role: FolderRoleDto | null) => unwrap(commands.setFolderRole(target.library, target.folder, role)),
-    onSuccess: () => queryClient.invalidateQueries(),
-    onError: (error) => onError(describeError(error)),
-  });
-  useEffect(() => {
-    const close = () => onClose();
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-  const choose = (role: FolderRoleDto | null) => () => {
-    setRole.mutate(role);
-    onClose();
-  };
-  return (
-    <div className="menu" role="menu" style={{ left: target.x, top: target.y }} onClick={(event) => event.stopPropagation()}>
-      <button role="menuitem" onClick={choose("model")}>{t("Treat as one model")}</button>
-      <button role="menuitemcheckbox" aria-checked={target.isCollection} onClick={choose("collection")}>{t("Treat as collection")}</button>
-      <hr />
-      <button role="menuitem" onClick={choose(null)}>{t("Detect automatically")}</button>
-      <button
-        role="menuitem"
-        onClick={() => {
-          unwrap(commands.setFolderCover(target.library, target.folder, null))
-            .then(() => queryClient.invalidateQueries())
-            .catch((error) => onError(describeError(error)));
-          onClose();
-        }}
-      >
-        {t("Automatic cover")}
-      </button>
-      <hr />
-      <button
-        role="menuitem"
-        onClick={() => {
-          unwrap(commands.scanFolder(target.library, target.folder)).catch((error) => onError(describeError(error)));
-          onClose();
-        }}
-      >
-        {t("Scan this folder")}
-      </button>
-      <p className="menu-hint">{t("Rules for whole patterns (suggested collections) are listed in Settings › Libraries.")}</p>
-    </div>
-  );
+/** The menu of a library itself (its name in the sidebar, the first breadcrumb). */
+export function useLibraryMenu(onMessage: (message: string) => void) {
+  const [, navigate] = useRoute();
+  return (library: LibraryDto): MenuItem[] => [
+    { label: t("Show in folder"), onSelect: () => revealPath(library.root, "", onMessage) },
+    { label: t("Scan for changes"), onSelect: () => void unwrap(commands.scanLibrary(library.id, false)).catch((error) => onMessage(describeError(error))) },
+    { label: t("Library settings…"), onSelect: () => navigate(settingsRoute("library", library.id, "access")) },
+  ];
 }

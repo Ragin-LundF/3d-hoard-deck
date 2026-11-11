@@ -3,6 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import { commands, describeError, unwrap, type LibraryDto, type ModelFileDto_Serialize } from "../../ipc";
 import { folderName } from "../../shared/format";
+import { absolutePath } from "../../shared/file-actions";
 import { Icon } from "../../shared/icons";
 import { viewerFormat, type MeshFormat } from "../viewer/formats";
 import { ArchiveActions } from "../files/archive-actions";
@@ -20,12 +21,6 @@ type Props = {
   onOpenFolder: (library: number, folder: string) => void;
   onMessage: (message: string) => void;
 };
-
-/** Absolute path on this machine, in the root's own separator style. */
-function absolutePath(root: string, path: string): string {
-  const separator = root.includes("\\") ? "\\" : "/";
-  return `${root.replace(/[\\/]+$/, "")}${separator}${path.split("/").join(separator)}`;
-}
 
 /** `a/b/c` → `["a/b/c", "a/b", "a"]`: the folders a picture of this model can stand for. */
 function parentFolders(folder: string): string[] {
@@ -103,6 +98,8 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
           onScreenshot={library && library.access !== "readOnly" ? saveScreenshot : null}
           folders={parentFolders(summary.folder)}
           onUseForFolder={(folder, image) => void useForFolder(folder, image)}
+          root={library?.root ?? null}
+          onMessage={onMessage}
         />
         <div className="info">
           <ModelHeader
@@ -125,7 +122,7 @@ export function ModelPage({ id, libraries, onBack, onOpenFolder, onMessage }: Pr
             {tab === "files" ? (
               <>
                 {library && <ArchiveActions model={summary.id} library={library} files={files} />}
-                <ModelFiles library={summary.library} files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} />
+                <ModelFiles library={summary.library} files={files} viewing={viewing} onView={(path, format) => setPicked({ kind: "mesh", path, format })} onReveal={reveal} model={summary.id} libraryInfo={library} onMessage={onMessage} />
               </>
             ) : (
               <ModelDetails model={data} library={library} onMessage={onMessage} />

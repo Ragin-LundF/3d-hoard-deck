@@ -3,12 +3,17 @@ import { commands, describeError, unwrap } from "../../ipc";
 import { formatBytes } from "../../shared/format";
 import type { MeshFormat } from "../viewer/formats";
 import { t } from "../../shared/i18n";
+import { openContextMenu } from "../../shared/context-menu";
+import { copyPath, revealPath } from "../../shared/file-actions";
 
 type Props = {
   library: number;
   archive: string;
   viewing: string | null;
   onView: (path: string, format: MeshFormat) => void;
+  /** The library's folder on this machine; "Show in folder" shows the archive. */
+  root: string | null;
+  onMessage: (message: string) => void;
 };
 
 /** Matches the shell's limit for one archive listing. */
@@ -22,7 +27,7 @@ function entryFormat(name: string): MeshFormat | null {
 }
 
 /** The files inside a ZIP, read without unpacking it. */
-export function ArchiveContents({ library, archive, viewing, onView }: Props) {
+export function ArchiveContents({ library, archive, viewing, onView, root, onMessage }: Props) {
   const contents = useQuery({
     queryKey: ["archive", library, archive],
     queryFn: () => unwrap(commands.archiveContents(library, archive)),
@@ -40,6 +45,11 @@ export function ArchiveContents({ library, archive, viewing, onView }: Props) {
         className={["frow inner", format ? "viewable" : "", path === viewing ? "active" : ""].join(" ")}
         title={format ? `${entry.name}\n${t("Click to preview in 3D")}` : entry.name}
         onClick={() => format && onView(path, format)}
+        onContextMenu={(event) => openContextMenu(event, [
+          { label: t("Preview in 3D"), hidden: !format, onSelect: () => format && onView(path, format) },
+          { label: t("Show the archive in its folder"), hidden: root === null, onSelect: () => root !== null && revealPath(root, archive, onMessage) },
+          { label: t("Copy path"), hidden: root === null, onSelect: () => root !== null && copyPath(root, archive, onMessage) },
+        ])}
       >
         <span />
         <span className="fn">{entry.name}</span>

@@ -5,6 +5,8 @@ import { Icon } from "../../shared/icons";
 import { ModelCard } from "../library/cards";
 import { NameInput } from "./name-input";
 import { useCollections } from "./queries";
+import { openContextMenu } from "../../shared/context-menu";
+import { useModelMenu } from "../library/model-menu";
 import { t, plural } from "../../shared/i18n";
 
 /** shortcut: collections show up to this many models at once; page them when collections get that big. */
@@ -21,6 +23,7 @@ export function CollectionView({ id, onOpenModel, onDeleted, onError }: Props) {
   const [dragged, setDragged] = useState<number | null>(null);
   const refresh = () => queryClient.invalidateQueries({ predicate: (query) => ["collection", "collections"].includes(String(query.queryKey[0])) });
   const fail = (error: unknown) => onError(describeError(error));
+  const modelMenu = useModelMenu(onError);
   const rename = useMutation({ mutationFn: (name: string) => unwrap(commands.renameCollection(id, name)), onSuccess: refresh, onError: fail });
   const remove = useMutation({ mutationFn: (model: number) => unwrap(commands.removeFromCollection(id, [model])), onSuccess: refresh, onError: fail });
   const move = useMutation({ mutationFn: ({ model, index }: { model: number; index: number }) => unwrap(commands.moveInCollection(id, model, index)), onSuccess: refresh, onError: fail });
@@ -72,7 +75,7 @@ export function CollectionView({ id, onOpenModel, onDeleted, onError }: Props) {
                   setDragged(null);
                 }}
               >
-                <ModelCard model={model} onOpen={() => onOpenModel(model.id)} />
+                <ModelCard model={model} onOpen={() => onOpenModel(model.id)} onMenu={(event) => openContextMenu(event, modelMenu(model, { collection: handMade ? id : undefined }))} />
                 {handMade && (
                   <button className="member-remove" onClick={() => remove.mutate(model.id)} aria-label={t("Remove {name} from the collection", { name: model.title })} title={t("Remove from collection")}>
                     <Icon name="close" />

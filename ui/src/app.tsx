@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { commands, describeError, unwrap, type IpcFailure, type LibraryDto } from "./ipc";
-import { FolderMenu, useFolderMenu } from "./features/folders/folder-menu";
+import { useFolderMenu, useLibraryMenu } from "./features/folders/folder-menu";
+import { ContextMenuHost, menuProps, openContextMenu } from "./shared/context-menu";
 import { FolderTree } from "./features/folders/folder-tree";
 import { LibraryNav } from "./features/organize/library-nav";
 import { PinnedTags } from "./features/tags/pinned-tags";
@@ -54,7 +55,8 @@ export function App() {
     });
     return () => void stop.then((unlisten) => unlisten());
   }, []);
-  const menu = useFolderMenu();
+  const folderMenu = useFolderMenu(setToast);
+  const libraryMenu = useLibraryMenu(setToast);
   const addLibrary = useAddLibrary(setToast);
 
   useEffect(() => {
@@ -98,7 +100,7 @@ export function App() {
         <div className="side-scroll">
           {list.map((item) => (
             <div className="sec" key={item.id}>
-              <h3>{item.name}</h3>
+              <h3 {...menuProps(() => libraryMenu(item))}>{item.name}</h3>
               <LibraryNav
                 library={item.id}
                 route={libraryRoute && item.id === library?.id ? libraryRoute : null}
@@ -113,7 +115,7 @@ export function App() {
                 library={item.id}
                 current={libraryRoute && item.id === library?.id ? libraryRoute.folder : null}
                 onOpen={(folder) => navigate({ ...HOME, library: item.id, folder })}
-                onMenu={(folder) => menu.open(item.id, folder.path, folder.isCollection)}
+                onMenu={(folder) => (event) => openContextMenu(event, folderMenu(item, folder.path, folder.isCollection))}
               />
               <PinnedTags
                 library={item.id}
@@ -122,7 +124,7 @@ export function App() {
               />
             </div>
           ))}
-          <CollectionsNav current={route.view === "collection" ? route.id : null} onOpen={(id) => navigate({ view: "collection", id })} onError={setToast} />
+          <CollectionsNav current={route.view === "collection" ? route.id : null} onOpen={(id) => navigate({ view: "collection", id })} onDeleted={() => navigate(HOME)} onError={setToast} />
           <div className="sec">
             <button className={`nav${route.view === "duplicates" ? " on" : ""}`} onClick={() => navigate({ view: "duplicates" })}>
               <Icon name="layers" />{t("Duplicates")}
@@ -161,7 +163,6 @@ export function App() {
             library={library}
             route={{ ...libraryRoute, library: library.id }}
             navigate={navigate}
-            onFolderMenu={(folder) => menu.open(library.id, folder.path, folder.isCollection)}
             onShownChange={setShown}
             onError={setToast}
           />
@@ -182,7 +183,7 @@ export function App() {
         <SuggestStatus />
       </footer>
 
-      {menu.target && <FolderMenu target={menu.target} onClose={menu.close} onError={setToast} />}
+      <ContextMenuHost />
       {toast ? <div className="toast" role="status">{toast}</div> : <UndoToast onMessage={setToast} />}
       <ExtractHost onMessage={setToast} />
     </div>

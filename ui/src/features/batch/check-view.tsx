@@ -5,6 +5,8 @@ import { commands, thumbUrl, unwrap, type CheckItemDto_Serialize } from "../../i
 import { Icon } from "../../shared/icons";
 import { formatNumber, plural, t } from "../../shared/i18n";
 import { settingsRoute, type Route } from "../../shared/route";
+import { openContextMenu } from "../../shared/context-menu";
+import { useModelMenu } from "../library/model-menu";
 import { useBatchTags } from "./batch";
 
 type Props = { library: number; tag: string; folder: string; navigate: (route: Route) => void; onMessage: (message: string) => void };
@@ -22,6 +24,7 @@ export function CheckView({ library, tag, folder, navigate, onMessage }: Props) 
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<Filter>("all");
   const batch = useBatchTags(library, onMessage);
+  const modelMenu = useModelMenu(onMessage);
   const all = items.data ?? [];
   const fromRule = (item: CheckItemDto_Serialize) => item.source !== "own";
   const shown = all.filter((item) => filter === "all" || (filter === "rule" ? fromRule(item) : item.source !== "rule"));
@@ -91,7 +94,7 @@ export function CheckView({ library, tag, folder, navigate, onMessage }: Props) 
                     {models.map((item) => {
                       const remove = marked.has(item.id);
                       return (
-                        <div key={item.id} className={`rv-card${remove ? " off" : ""}`}>
+                        <div key={item.id} className={`rv-card${remove ? " off" : ""}`} onContextMenu={(event) => openContextMenu(event, modelMenu({ id: item.id, library, path: item.path }))}>
                           <div className="cover">{item.cover ? <img src={thumbUrl(library, item.cover)} alt="" loading="lazy" /> : <span className="none">{t("No preview")}</span>}</div>
                           <div className="name" title={item.path}>{item.title}</div>
                           <div className="also"><span className={`src src-${item.source}`}>{item.source === "own" ? t("YOU") : item.source === "rule" ? t("RULE") : t("YOU + RULE")}</span></div>
