@@ -31,6 +31,9 @@ fn main() {
             let events = Arc::new(events::TauriEvents::new(tauri_app.handle().clone()));
             let app = App::open(&index_dir, SCAN_THREADS, events)?;
             tauri_app.manage(app.thumbnails.clone());
+            // Metadata files that could not be written last time (NAS offline) are tried again.
+            let sync = Arc::clone(&app.sidecar_sync);
+            std::thread::spawn(move || sync.retry_all());
             let auto_rescan = Arc::clone(&app.auto_rescan);
             std::thread::spawn(move || {
                 loop {
@@ -114,7 +117,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::tag_rules::save_tag_rules,
             commands::tag_rules::test_tag_rules,
             commands::tag_rules::count_tag_rules,
-            commands::organize::rebuild_from_sidecars,
+            commands::sidecar::write_metadata_files,
+            commands::sidecar::cancel_metadata_files,
+            commands::sidecar::metadata_status,
+            commands::sidecar::retry_metadata_files,
+            commands::sidecar::export_backup,
+            commands::sidecar::restore_from_sidecars,
+            commands::sidecar::scan_and_restore,
+            commands::sidecar::use_saved_tag_rules,
+            commands::sidecar::saved_library_data,
             commands::organize::import_orynt3d,
             commands::organize::find_duplicates,
             commands::organize::set_folder_cover,
@@ -148,6 +159,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             events::DuplicatesProgressEvent,
             events::SuggestProgressEvent,
             events::ExtractProgressEvent,
+            events::MetadataProgressEvent,
             commands::update::UpdateProgressEvent
         ])
 }

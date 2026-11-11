@@ -33,6 +33,15 @@ pub struct ExtractProgressEvent {
     pub file: String,
 }
 
+/// Pushed while "Write metadata files" runs: `done` of `total` files handled.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataProgressEvent {
+    pub library: u32,
+    pub done: u32,
+    pub total: u32,
+}
+
 /// Pushed while duplicates are searched: `done` of `total` groups of same-size files compared.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +124,12 @@ impl EventSink for TauriEvents {
             file: file.to_owned(),
         };
         let _ = event.emit(&self.handle);
+    }
+
+    fn metadata_progress(&self, library: hoarddeck_domain::LibraryId, done: usize, total: usize) {
+        let count = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let library = u32::try_from(library.0).unwrap_or(0);
+        let _ = MetadataProgressEvent { library, done: count(done), total: count(total) }.emit(&self.handle);
     }
 
     fn duplicates_progress(&self, done: usize, total: usize) {

@@ -14,6 +14,7 @@ pub struct ManageTagRules {
     pub libraries: Arc<dyn LibraryRepository>,
     pub entries: Arc<dyn EntryStore>,
     pub editor: Arc<RuleEditor>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl ManageTagRules {
@@ -32,6 +33,8 @@ impl ManageTagRules {
     /// Fails for invalid rules or when the index cannot be written.
     pub fn save(&self, rules: &[TagRule]) -> Result<(), AppError> {
         self.book.save(rules)?;
+        // Every library file keeps a copy, so a new computer gets the rules back.
+        self.sync.all_libraries_changed();
         for library in self.libraries.list()? {
             self.editor.regroup_soon(library.id);
         }

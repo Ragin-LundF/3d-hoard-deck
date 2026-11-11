@@ -629,3 +629,6 @@ button.subhead[aria-expanded="true"] svg { transform: rotate(90deg); }
 .xpics { display: flex; gap: 6px; flex-wrap: wrap; }
 .xpics img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); }
 .xcallout-row.sub { padding-left: 10px; font-size: 12.5px; }
+.row-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.prow2 .t .seg.mini { align-self: flex-start; margin-top: 6px; }
+.prow2 .t .xprogress { margin-top: 6px; }

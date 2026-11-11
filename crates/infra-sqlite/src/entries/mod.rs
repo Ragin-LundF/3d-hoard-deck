@@ -14,6 +14,15 @@ use crate::SqliteIndex;
 use crate::rows::{converted, rel_path, subtree_bounds, to_i64, to_u64};
 
 impl EntryStore for SqliteIndex {
+    fn metadata_files(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError> {
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT path FROM entries WHERE library_id = ?1 AND is_dir = 0 AND path LIKE '%.3dhoarddeck' ORDER BY path",
+            )?;
+            statement.query_map([library.0], |row| crate::rows::rel_path(row, 0))?.collect()
+        })
+    }
+
     fn begin_scan(&self, library: LibraryId) -> Result<(Generation, KnownDirs), IndexError> {
         let generation = self.write(|connection| {
             connection.query_row(

@@ -1,19 +1,17 @@
 use std::sync::Arc;
 
-use hoarddeck_domain::{AccessMode, FileKind, MetadataStorage, ModelId, ModelMeta};
+use hoarddeck_domain::{FileKind, ModelId, ModelMeta};
 
-use super::sidecar_path;
-use crate::ports::{LibraryRepository, MetaStore, ModelRepository, SearchIndex, SidecarFiles};
+use crate::ports::{LibraryRepository, MetaStore, ModelRepository, SearchIndex};
 use crate::scan::LibraryLocks;
 use crate::{AppError, ModelDetail};
 
-/// Saves what the user set on a model. With sidecar files allowed for the library, the `.3dhoarddeck` file is
-/// written first, so the index never claims more than the folder holds.
+/// Saves what the user set on a model, then its `.3dhoarddeck` file where the library keeps metadata files.
 pub struct UpdateModelMeta {
     pub libraries: Arc<dyn LibraryRepository>,
     pub models: Arc<dyn ModelRepository>,
     pub meta: Arc<dyn MetaStore>,
-    pub sidecars: Arc<dyn SidecarFiles>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
     pub search: Arc<dyn SearchIndex>,
     pub locks: Arc<LibraryLocks>,
 }
@@ -31,14 +29,9 @@ impl UpdateModelMeta {
         }
         let library =
             self.libraries.get(detail.summary.library)?.ok_or(AppError::LibraryNotFound(detail.summary.library))?;
-        let writes_sidecars = library.settings.metadata() == MetadataStorage::IndexAndSidecar
-            && library.settings.access() != AccessMode::ReadOnly;
-        if writes_sidecars && let Some(file) = sidecar_path(&detail.summary.path, detail.summary.kind) {
-            self.sidecars
-                .write(&library.root, &file, &meta)
-                .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
-        }
         self.meta.save_meta(library.id, &detail.summary.path, &meta)?;
+        // A metadata file that cannot be written now waits in a queue; the change in the index stands.
+        self.sync.paths_changed(library.id, std::slice::from_ref(&detail.summary.path));
         let _sync = self.locks.search_sync();
         if let Some(document) = self.models.search_document(id)? {
             self.search.update_documents(&[document])?;

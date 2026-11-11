@@ -22,7 +22,7 @@ pub use duplicates::DuplicateGroupDto;
 pub use error::{IpcError, rel_path};
 pub use journal::{FileChangeDto, JournalEntryDto, ScreenshotDto};
 pub use library::{AccessModeDto, ExistingIndexDto, FolderDto, LibraryDto, MetadataStorageDto};
-pub use meta::{ImportReportDto, ModelMetaDto, RebuildReportDto, TagCountDto};
+pub use meta::{ImportReportDto, ModelMetaDto, TagCountDto};
 pub use model::ModelDetailDto;
 pub use rules::{FolderRuleDto, PresetProposalDto};
 pub use search::{SearchRequestDto, SearchResultDto};

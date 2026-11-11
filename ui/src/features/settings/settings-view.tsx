@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { commands, describeError, unwrap, type LibraryDto } from "../../ipc";
 import { Icon, type IconName } from "../../shared/icons";
-import { languageChoice, plural, setLanguage, t, type LanguageChoice } from "../../shared/i18n";
+import { formatDate, languageChoice, plural, setLanguage, t, type LanguageChoice } from "../../shared/i18n";
 import { settingsRoute, type SettingsRoute, type SettingsTab } from "../../shared/route";
 import type { Theme } from "../../shared/use-theme";
 import { AiSettings } from "../ai/ai-settings";
@@ -18,6 +18,7 @@ import { UpdateCard } from "../update/update-pill";
 import { UpdateSettings } from "../update/update-settings";
 import { useUpdate } from "../update/use-update";
 import { IndexSettings } from "./index-settings";
+import { offerTagRules, restoreMessage } from "./metadata-files";
 import { ACCESS_LABELS, LibrarySettings, type LibrarySub } from "./library-settings";
 import { SlicerSettings } from "./slicer-settings";
 import { renderMode, setRenderMode, type RenderMode } from "../render/render-queue";
@@ -35,15 +36,34 @@ type Props = {
 };
 
 /** Asks for a folder, registers it (nothing is written into it until the user allows it) and starts the first scan. */
-export function useAddLibrary(onError: (message: string) => void) {
+export function useAddLibrary(onError: (message: string) => void, onMessage: (message: string) => void = onError) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const root = await open({ directory: true, title: t("Choose a library folder") });
       if (typeof root !== "string") return null;
-      const name = root.split(/[\\/]/).filter(Boolean).pop() ?? root;
+      // A folder that carries saved 3D Hoard Deck data (another computer, a lost index): offer to bring it back.
+      const saved = await unwrap(commands.savedLibraryData(root)).catch(() => null);
+      const restoreSaved = saved !== null && await ask(
+        t("This folder has saved 3D Hoard Deck data (written {date}: {rules} folder rules, {collections} collections, {entries} models and folders with tags, notes or other data). Restore it after the first scan?", {
+          date: saved.exportedAt ? formatDate(new Date(saved.exportedAt * 1000)) : "?",
+          rules: saved.folderRules,
+          collections: saved.collections,
+          entries: saved.entries,
+        }),
+        { title: t("Saved data found"), kind: "info", okLabel: t("Restore"), cancelLabel: t("Don't restore") },
+      );
+      const name = (saved?.name || root.split(/[\\/]/).filter(Boolean).pop()) ?? root;
       const library = await unwrap(commands.addLibrary(name, root));
-      await unwrap(commands.scanLibrary(library.id, false));
+      await queryClient.invalidateQueries({ queryKey: ["libraries"] });
+      if (!restoreSaved) {
+        await unwrap(commands.scanLibrary(library.id, false));
+        return library;
+      }
+      const report = await unwrap(commands.scanAndRestore(library.id));
+      await queryClient.invalidateQueries();
+      onMessage(restoreMessage(report));
+      await offerTagRules(library.id, report, null, onMessage);
       return library;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["libraries"] }),

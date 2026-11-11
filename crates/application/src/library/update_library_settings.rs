@@ -3,17 +3,14 @@ use std::sync::Arc;
 use hoarddeck_domain::{AccessMode, Library, LibraryId, LibrarySettings, MetadataStorage};
 
 use crate::AppError;
-use crate::organize::sidecar_path;
-use crate::ports::{LibraryRepository, MetaStore, ModelRepository, SidecarFiles};
+use crate::ports::LibraryRepository;
 
 /// Changes what the app may write into a library: nothing, metadata files only, or also renames and moves.
 /// Switching metadata files on writes them for every model that already has names, tags, marks or notes, and the
 /// folder rules into the `.3dhoarddeck` at the library root.
 pub struct UpdateLibrarySettings {
     pub libraries: Arc<dyn LibraryRepository>,
-    pub models: Arc<dyn ModelRepository>,
-    pub meta: Arc<dyn MetaStore>,
-    pub sidecars: Arc<dyn SidecarFiles>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl UpdateLibrarySettings {
@@ -31,31 +28,9 @@ impl UpdateLibrarySettings {
         let before = writes_sidecars(library.settings);
         library.settings = LibrarySettings::new(access, metadata)?;
         self.libraries.save_settings(id, library.settings)?;
-        let written = if writes_sidecars(library.settings) && !before { self.backfill(&library)? } else { 0 };
+        // Switching metadata files on writes them for everything that has user data (the same as "Write metadata files").
+        let written = if writes_sidecars(library.settings) && !before { self.sync.export(id)?.written } else { 0 };
         Ok((library, written))
-    }
-
-    fn backfill(&self, library: &Library) -> Result<usize, AppError> {
-        let rules = self.libraries.scan_rules(library.id)?.folder_rules;
-        if !rules.is_empty() {
-            self.sidecars
-                .write_folder_rules(&library.root, &rules)
-                .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
-        }
-        let mut written = 0;
-        for document in self.models.search_documents(library.id)? {
-            let meta = self.meta.meta(library.id, &document.path)?;
-            if meta.is_empty() {
-                continue;
-            }
-            if let Some(file) = sidecar_path(&document.path, document.kind) {
-                self.sidecars
-                    .write(&library.root, &file, &meta)
-                    .map_err(|error| AppError::InvalidInput(format!("metadata file: {error}")))?;
-                written += 1;
-            }
-        }
-        Ok(written)
     }
 }
 

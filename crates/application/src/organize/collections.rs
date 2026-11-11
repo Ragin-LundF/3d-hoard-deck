@@ -11,6 +11,7 @@ pub struct ManageCollections {
     pub store: Arc<dyn CollectionStore>,
     pub models: Arc<dyn ModelRepository>,
     pub search: Arc<SearchModels>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl ManageCollections {
@@ -28,20 +29,29 @@ impl ManageCollections {
         if smart.as_ref().is_some_and(|search| search.scope.is_some() && search.library.is_none()) {
             return Err(AppError::InvalidInput("a folder scope needs a library".to_owned()));
         }
-        Ok(self.store.create_collection(&collection_name(name)?, smart.as_ref())?)
+        let done = self.store.create_collection(&collection_name(name)?, smart.as_ref())?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(done)
     }
 
     /// # Errors
     /// Fails for an invalid name or when the index cannot be written.
     pub fn rename(&self, id: CollectionId, name: &str) -> Result<(), AppError> {
-        Ok(self.store.rename_collection(id, &collection_name(name)?)?)
+        self.store.rename_collection(id, &collection_name(name)?)?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(())
     }
 
     /// Deletes the collection only; its models stay in the library.
     /// # Errors
     /// Fails when the index cannot be written.
     pub fn delete(&self, id: CollectionId) -> Result<(), AppError> {
-        Ok(self.store.delete_collection(id)?)
+        self.store.delete_collection(id)?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(())
     }
 
     /// Appends models that are not members yet.
@@ -49,14 +59,20 @@ impl ManageCollections {
     /// Fails for a smart collection, unknown models or when the index cannot be written.
     pub fn add(&self, id: CollectionId, models: &[ModelId]) -> Result<(), AppError> {
         self.hand_made(id)?;
-        Ok(self.store.add_members(id, models)?)
+        self.store.add_members(id, models)?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(())
     }
 
     /// # Errors
     /// Fails for a smart collection or when the index cannot be written.
     pub fn remove(&self, id: CollectionId, models: &[ModelId]) -> Result<(), AppError> {
         self.hand_made(id)?;
-        Ok(self.store.remove_members(id, models)?)
+        self.store.remove_members(id, models)?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(())
     }
 
     /// Moves one member to position `index` of the shown members (0 = first).
@@ -64,7 +80,10 @@ impl ManageCollections {
     /// Fails for a smart collection, a model that is not a member, or when the index cannot be written.
     pub fn move_to(&self, id: CollectionId, model: ModelId, index: usize) -> Result<(), AppError> {
         self.hand_made(id)?;
-        Ok(self.store.move_member(id, model, index)?)
+        self.store.move_member(id, model, index)?;
+        // Collections can span libraries; each library file keeps its part.
+        self.sync.all_libraries_changed();
+        Ok(())
     }
 
     /// The collection's models: in the user's order, or as the saved search finds them now.

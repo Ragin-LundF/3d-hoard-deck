@@ -4,6 +4,7 @@ import { commands, describeError, unwrap, type AccessModeDto, type LibraryDto, t
 import { Icon } from "../../shared/icons";
 import { isScanning, type ScanStatus } from "../library/use-scan-status";
 import { LibraryRules } from "./library-rules";
+import { MetadataFiles } from "./metadata-files";
 import { t, plural } from "../../shared/i18n";
 
 const ACCESS: { value: AccessModeDto; title: string; text: string }[] = [
@@ -40,17 +41,6 @@ export function LibrarySettings({ library, scan, sub, onSub, onError }: Props) {
     onSuccess: (written) => {
       void queryClient.invalidateQueries({ queryKey: ["libraries"] });
       if (written > 0) onError(plural(written, "Wrote {count} metadata file for models that already had names, tags, marks or notes.", "Wrote {count} metadata files for models that already had names, tags, marks or notes."));
-    },
-    onError: (error) => onError(describeError(error)),
-  });
-  const rebuild = useMutation({
-    mutationFn: () => unwrap(commands.rebuildFromSidecars(library.id)),
-    onSuccess: (report) => {
-      void queryClient.invalidateQueries();
-      const rules = report.rulesRestored > 0 ? " " + plural(report.rulesRestored, "Restored {count} folder rule.", "Restored {count} folder rules.") : "";
-      onError(report.restored === 0 && report.unreadable === 0 && report.rulesRestored === 0
-        ? t("No metadata files were found in this library.")
-        : t("Restored {count} models.", { count: report.restored }) + rules + unreadable(report.unreadable));
     },
     onError: (error) => onError(describeError(error)),
   });
@@ -154,13 +144,7 @@ export function LibrarySettings({ library, scan, sub, onSub, onError }: Props) {
       </div>
       </div>}
       {sub === "import" && <div className="panel">
-      <div className="prow2">
-        <div className="t">
-          <b>{t("Rebuild from metadata files")}</b>
-          <span>{t("Reads the .3dhoarddeck files in this library. Where a file is newer than the values in the index, it replaces them: names, tags, marks and notes, plus the folder rules (one model, collection). Useful after moving to a new computer. Only reads the folders.")}</span>
-        </div>
-        <button className="btn" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>{t("Rebuild")}</button>
-      </div>
+      <MetadataFiles library={library} onMessage={onError} />
       <div className="prow2">
         <div className="t">
           <b>{t("Import from Orynt3D")}</b>

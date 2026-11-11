@@ -10,7 +10,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use crate::IoPriority;
 use hoarddeck_application::ScanError;
 use hoarddeck_application::ports::LibraryScanner;
-use hoarddeck_application::scan::{CompiledRules, KnownDirs, ScanItem};
+use hoarddeck_application::scan::{CompiledRules, KnownDirs, ScanItem, is_metadata_file};
 use hoarddeck_domain::{Entry, EntryKind, FileKind, RelPath, SNIFF_LEN, Sniff, classify_by_header, classify_by_name};
 
 /// Parallel, read-only directory walker. Folders whose mtime is unchanged since the last scan are not listed again,
@@ -145,7 +145,8 @@ fn list(absolute: &Path, dir: &RelPath, rules: &CompiledRules) -> std::io::Resul
         let Ok(path) = dir.join(&name) else { continue };
         // Ignore rules by name come before any stat: macOS lists AppleDouble `._` files on SMB shares that it
         // cannot stat.
-        if rules.is_ignored(&path) || rules.is_ignored_dir(&path) {
+        // `.3dhoarddeck` files are kept as entries for a restore; grouping ignores them.
+        if !is_metadata_file(&name) && (rules.is_ignored(&path) || rules.is_ignored_dir(&path)) {
             continue;
         }
         let Ok(file_type) = item.file_type() else {

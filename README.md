@@ -140,10 +140,11 @@ Changing a role regroups the library within seconds; the folders are not read ag
 - **Rename and move on disk, with undo.** If you set a library to **Metadata files, rename and move**, the model
   page offers **Rename on disk…** and **Move to folder…**. Names, tags, notes and collections move along, an
   existing file or folder is never overwritten, and **Settings › Recent file changes** undoes any change.
-- **Optional metadata files.** Under **Settings › Libraries** you can allow metadata files. Then names, tags,
-  marks and notes are also stored in a small `.3dhoarddeck` file beside each model, the folder roles in one at the
-  library root, and **Rebuild from metadata files** restores everything from the folders, for example on a new
-  computer.
+- **Optional metadata files.** Under **Settings › Libraries** you can allow metadata files. Then everything you
+  decided (names, tags, notes, marks, covers, folder marks, collections, tag groups) is also kept in small
+  `.3dhoarddeck` files in the library, and **Restore from metadata files** rebuilds it all from the folders, for
+  example after a lost index or on a new computer with the same drive. Read-only libraries can write the same data
+  into one **backup file** anywhere else.
 - **All app data lives in one folder**, by default `~/.3dhoarddeck` (`%USERPROFILE%\.3dhoarddeck` on Windows):
   the database, the search index and the cover thumbnails. Delete it to start fresh; your library is not
   affected. Move it under **Settings › Index**. It must be on a local disk: network shares and cloud-sync
@@ -156,7 +157,7 @@ Changing a role regroups the library within seconds; the folders are not read ag
 ![Settings](docs/screenshots/settings.png)
 
 - **Libraries**: add folders, rescan (a **Full rescan** also catches files that were overwritten in place),
-  write access, where metadata is kept, rebuild from metadata files, import from Orynt3D, suggested collections
+  write access, where metadata is kept, write and restore metadata files or a backup file, import from Orynt3D, suggested collections
   and folder rules.
 - **Slicers**: the list "Open in" uses. The first entry is the default; the others are in the button's menu.
   **Find installed slicers** detects Bambu Studio, OrcaSlicer, PrusaSlicer and Lychee in their usual places;

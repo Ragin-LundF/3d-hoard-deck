@@ -63,6 +63,13 @@ impl CompiledRules {
     }
 }
 
+/// A `.3dhoarddeck` file (not a temporary copy): the scan keeps it, so a restore finds every one without walking the
+/// library again; grouping ignores it like the app's other own files.
+#[must_use]
+pub fn is_metadata_file(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".3dhoarddeck")
+}
+
 /// The app's metadata files and their temporary copies are never library content, whatever the rules say.
 #[allow(clippy::case_sensitive_file_extension_comparisons)] // compared lower-cased; `.3dhoarddeck` has no extension
 fn is_own_file(name: &str) -> bool {

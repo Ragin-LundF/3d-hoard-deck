@@ -6,6 +6,15 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 ## [Unreleased]
 
 ### New
+- **Rebuild everything from the library folders.** Where metadata files are allowed, the `.3dhoarddeck` files now hold
+  everything you decided: names, tags, notes, marks, covers, the date a model was added, "no rendered preview",
+  folder marks and folder covers (kept in the folder itself, so they follow a folder renamed outside the app), and at
+  the library root the scan rules, tag groups, pinned tags, collections and a copy of the tag rules. Settings ›
+  Library › Import & rebuild has **Write metadata files now** (only changed files are written) and **Restore from
+  metadata files** ("newer wins" or "files win"). Adding a folder that carries saved data offers to restore it after
+  the first scan, so a lost index or a new computer starts with everything in place. Read-only libraries get
+  **Export backup file**: one file with the same data, saved anywhere. A metadata file that cannot be written (NAS
+  offline) no longer stops the change; it is written later.
 - **Extract ZIP, RAR and 7z archives.** A model page with archives, and a folder with loose archives, offer
   **Extract…** for one archive or **Extract all…** (untick the ones to leave packed); a long extraction can run in
   the background while you browse on. Each archive goes into a new folder named after it (with a number if the name is taken; a single

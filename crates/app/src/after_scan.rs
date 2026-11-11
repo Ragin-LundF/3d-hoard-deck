@@ -32,6 +32,10 @@ impl EventSink for AfterScan {
         self.inner.suggest_progress(library, done, total, failed, running);
     }
 
+    fn metadata_progress(&self, library: LibraryId, done: usize, total: usize) {
+        self.inner.metadata_progress(library, done, total);
+    }
+
     fn extract_progress(&self, archive: &hoarddeck_domain::RelPath, done: u64, total: u64, file: &str) {
         self.inner.extract_progress(archive, done, total, file);
     }

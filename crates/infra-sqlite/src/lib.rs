@@ -15,5 +15,6 @@ mod schema;
 mod settings;
 mod suggestions;
 mod tags;
+mod user_data;
 
 pub use database::SqliteIndex;

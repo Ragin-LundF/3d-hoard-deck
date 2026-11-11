@@ -9,6 +9,7 @@ pub mod index;
 pub mod library;
 pub mod organize;
 pub mod rules;
+pub mod sidecar;
 pub mod slicers;
 pub mod tag_rules;
 pub mod tags;

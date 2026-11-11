@@ -56,6 +56,9 @@ impl LibraryRepository for Store {
 }
 
 impl EntryStore for Store {
+    fn metadata_files(&self, _: LibraryId) -> Result<Vec<RelPath>, IndexError> {
+        Ok(Vec::new())
+    }
     fn begin_scan(&self, _: LibraryId) -> Result<(Generation, KnownDirs), IndexError> {
         Ok((Generation(2), KnownDirs::new()))
     }

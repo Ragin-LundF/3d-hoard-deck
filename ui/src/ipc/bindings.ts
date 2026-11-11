@@ -119,8 +119,26 @@ export const commands = {
 	testTagRules: (list: TagRuleDto[], path: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("test_tag_rules", { list, path })),
 	/**  How many models each (unsaved) rule would tag, in all libraries. */
 	countTagRules: (list: TagRuleDto[]) => typedError<number[], IpcError_Serialize>(__TAURI_INVOKE("count_tag_rules", { list })),
-	/**  Restores names, tags, marks and notes from the library's `.3dhoarddeck` files (reads only). */
-	rebuildFromSidecars: (library: number) => typedError<RebuildReportDto, IpcError_Serialize>(__TAURI_INVOKE("rebuild_from_sidecars", { library })),
+	/**  Writes the root file and a file for every model and folder with user data; progress as `MetadataProgressEvent`. */
+	writeMetadataFiles: (library: number) => typedError<ExportReportDto, IpcError_Serialize>(__TAURI_INVOKE("write_metadata_files", { library })),
+	/**  Stops a running "Write metadata files". */
+	cancelMetadataFiles: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cancel_metadata_files")),
+	metadataStatus: (library: number) => typedError<MetadataStatusDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("metadata_status", { library })),
+	/**  Tries the files that could not be written again. */
+	retryMetadataFiles: (library: number) => typedError<MetadataStatusDto_Serialize, IpcError_Serialize>(__TAURI_INVOKE("retry_metadata_files", { library })),
+	/**  Writes one backup file with everything of the library to `path`; returns the number of model and folder entries. */
+	exportBackup: (library: number, path: string) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("export_backup", { library, path })),
+	/**
+	 *  Restores from the library's `.3dhoarddeck` files (after a quick scan), or from `backup`. `filesWin` replaces index values; otherwise a
+	 *  file wins only when it is newer.
+	 */
+	restoreFromSidecars: (library: number, filesWin: boolean, backup: string | null) => typedError<RestoreReportDto, IpcError_Serialize>(__TAURI_INVOKE("restore_from_sidecars", { library, filesWin, backup })),
+	/**  After adding a library whose folder holds saved data: the first scan, then the restore. */
+	scanAndRestore: (library: number) => typedError<RestoreReportDto, IpcError_Serialize>(__TAURI_INVOKE("scan_and_restore", { library })),
+	/**  Replaces the app's tag rules with those saved for the library (after the user agreed). Returns how many. */
+	useSavedTagRules: (library: number, backup: string | null) => typedError<number, IpcError_Serialize>(__TAURI_INVOKE("use_saved_tag_rules", { library, backup })),
+	/**  What the `.3dhoarddeck` at the root of `folder` holds; `None` when there is no saved library data. */
+	savedLibraryData: (folder: string) => typedError<SavedSummaryDto | null, IpcError_Serialize>(__TAURI_INVOKE("saved_library_data", { folder })),
 	/**  Takes names, notes and tags from `Orynt3D`'s `config.orynt3d` files (reads only, safe to run again). */
 	importOrynt3d: (library: number) => typedError<ImportReportDto, IpcError_Serialize>(__TAURI_INVOKE("import_orynt3d", { library })),
 	/**  Identical model files across all libraries. Reads files, which takes a while over a network share. */
@@ -188,6 +206,7 @@ export const commands = {
 export const events = {
 	duplicatesProgressEvent: makeEvent<DuplicatesProgressEvent, DuplicatesProgressEvent>("duplicates-progress-event"),
 	extractProgressEvent: makeEvent<ExtractProgressEvent, ExtractProgressEvent>("extract-progress-event"),
+	metadataProgressEvent: makeEvent<MetadataProgressEvent, MetadataProgressEvent>("metadata-progress-event"),
 	scanProgressEvent: makeEvent<ScanProgressEvent_Serialize, ScanProgressEvent_Deserialize>("scan-progress-event"),
 	suggestProgressEvent: makeEvent<SuggestProgressEvent, SuggestProgressEvent>("suggest-progress-event"),
 	updateProgressEvent: makeEvent<UpdateProgressEvent, UpdateProgressEvent>("update-progress-event"),
@@ -363,6 +382,12 @@ export type DuplicatesProgressEvent = {
 /**  What to do when the chosen index folder already holds an index. */
 export type ExistingIndexDto = "ask" | "use" | "replace";
 
+export type ExportReportDto = {
+	written: number,
+	unchanged: number,
+	failed: FailedFileDto[],
+};
+
 /**  What extracting an archive would do; `problem` says why it cannot be done. */
 export type ExtractPlanDto = ExtractPlanDto_Serialize | ExtractPlanDto_Deserialize;
 
@@ -433,6 +458,11 @@ export type ExtractedDto_Serialize = {
 	unwrapped: string | null,
 	pictures: string[],
 	warning: string | null,
+};
+
+export type FailedFileDto = {
+	file: string,
+	reason: string,
 };
 
 /**  A finished rename, move or undo; `warning` when something after it did not work, like the rescan. */
@@ -577,6 +607,29 @@ export type LibraryDto = {
 	metadata: MetadataStorageDto,
 };
 
+/**  Pushed while "Write metadata files" runs: `done` of `total` files handled. */
+export type MetadataProgressEvent = {
+	library: number,
+	done: number,
+	total: number,
+};
+
+export type MetadataStatusDto = MetadataStatusDto_Serialize | MetadataStatusDto_Deserialize;
+
+export type MetadataStatusDto_Deserialize = {
+	/**  Last full "Write metadata files", seconds since 1970. */
+	exportedAt?: number | null,
+	/**  Files that could not be written yet. */
+	pending: number,
+};
+
+export type MetadataStatusDto_Serialize = {
+	/**  Last full "Write metadata files", seconds since 1970. */
+	exportedAt: number | null,
+	/**  Files that could not be written yet. */
+	pending: number,
+};
+
 /**  Where tags, names and notes are kept. */
 export type MetadataStorageDto = "indexOnly" | "indexAndSidecar";
 
@@ -717,13 +770,6 @@ export type PresetProposalDto = {
 	samples: string[],
 };
 
-export type RebuildReportDto = {
-	restored: number,
-	unreadable: number,
-	/**  Folder rules (one model, collection) taken from the library root's `.3dhoarddeck`. */
-	rulesRestored: number,
-};
-
 export type RenamedDto = {
 	from: string,
 	to: string,
@@ -740,6 +786,16 @@ export type ResolutionDto = {
 	path: string,
 	added: string[],
 	removed: string[],
+};
+
+export type RestoreReportDto = {
+	restored: number,
+	unchanged: number,
+	unreadable: string[],
+	rulesRestored: number,
+	droppedMembers: number,
+	tagRulesRestored: number,
+	tagRulesOffered: number,
 };
 
 /**  A model with suggested tags waiting for review. */
@@ -766,6 +822,15 @@ export type ReviewItemDto_Serialize = {
 };
 
 export type RuleKindDto = "any" | "all" | "regex" | "folder";
+
+/**  What a folder's root `.3dhoarddeck` holds, for "this folder has saved data". */
+export type SavedSummaryDto = {
+	name: string,
+	exportedAt: number | null,
+	folderRules: number,
+	collections: number,
+	entries: number,
+};
 
 /**  Pushed while a library is scanned. `phase` is `walking`, `grouping`, `done` or `failed`. */
 export type ScanProgressEvent = ScanProgressEvent_Serialize | ScanProgressEvent_Deserialize;

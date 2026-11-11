@@ -8,6 +8,7 @@ use hoarddeck_app::App;
 use hoarddeck_application::ports::EventSink;
 use hoarddeck_application::scan::{ScanMode, ScanProgress};
 use hoarddeck_application::search::SearchRequest;
+use hoarddeck_application::sidecar::{RestoreMode, RestoreSource};
 use hoarddeck_domain::{AccessMode, MetadataStorage, ModelMeta, SmartSearch, TagName};
 
 struct Silent;
@@ -56,7 +57,10 @@ fn user_metadata_is_searchable_and_reaches_sidecars_only_when_allowed() {
         .update_library_settings
         .execute(library.id, AccessMode::MetadataWrite, MetadataStorage::IndexAndSidecar)
         .expect("allow sidecars");
-    assert_eq!(written, 1, "existing data is written when metadata files are switched on");
+    assert_eq!(
+        written, 2,
+        "existing data (the model and the library file) is written when metadata files are switched on"
+    );
     assert!(sidecar.exists());
     app.update_model_meta.execute(dragon, meta.clone()).expect("save again");
 
@@ -65,8 +69,10 @@ fn user_metadata_is_searchable_and_reaches_sidecars_only_when_allowed() {
         .execute(library.id, AccessMode::ReadOnly, MetadataStorage::IndexOnly)
         .expect("read-only");
     fs::write(&sidecar, serde_json::to_vec(&meta).expect("json")).expect("restore file");
-    let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
-    assert_eq!((report.restored, report.unreadable), (1, 0));
+    app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan finds the file");
+    let report =
+        app.restore_from_sidecars.execute(library.id, &RestoreSource::Files, RestoreMode::NewerWins).expect("rebuild");
+    assert_eq!((report.restored, report.unreadable.len()), (1, 0));
     assert_eq!(search("wyrm")[0].id, dragon, "restored from the file");
     assert_eq!(app.tags.list(library.id).expect("tags")[0].name.as_str(), "Resin");
 }
@@ -215,7 +221,8 @@ fn folder_rules_survive_a_lost_index_through_the_metadata_files() {
     let app = App::open(index_dir.path(), 2, Arc::new(Silent)).expect("open");
     let library = app.add_library.execute("Minis", root.to_str().expect("utf-8")).expect("add");
     app.scan_library.execute(library.id, ScanMode::Incremental).expect("scan");
-    let report = app.rebuild_from_sidecars.execute(library.id).expect("rebuild");
+    let report =
+        app.restore_from_sidecars.execute(library.id, &RestoreSource::Files, RestoreMode::NewerWins).expect("rebuild");
     assert_eq!(report.rules_restored, 1);
     let rules = app.folder_rules.list(library.id).expect("rules");
     assert_eq!(rules.len(), 1, "{rules:?}");

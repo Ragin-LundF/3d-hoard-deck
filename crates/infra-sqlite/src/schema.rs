@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use crate::database::db_error;
 
 /// Ordered migrations; `PRAGMA user_version` stores how many have run.
-const MIGRATIONS: [&str; 18] = [
+const MIGRATIONS: [&str; 19] = [
     r"
 CREATE TABLE libraries (
     id              INTEGER PRIMARY KEY,
@@ -224,6 +224,20 @@ ALTER TABLE file_journal ADD COLUMN archive_mtime INTEGER;
     r"
 -- 18: the archive files of an extraction (all parts of a multi-volume RAR), so only those are ever deleted.
 ALTER TABLE file_journal ADD COLUMN archive_parts TEXT;
+",
+    r"
+-- 19: metadata files that could not be written (tried again later; the root file as path ''), and per library the id
+-- its files carry and when they were last written in full.
+CREATE TABLE sidecar_pending (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    PRIMARY KEY (library_id, path)
+) WITHOUT ROWID;
+CREATE TABLE sidecar_status (
+    library_id  INTEGER PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
+    uid         TEXT,
+    exported_at INTEGER
+);
 ",
 ];
 

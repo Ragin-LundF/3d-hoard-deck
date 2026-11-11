@@ -5,10 +5,8 @@ use hoarddeck_domain::{ModelId, ModelKind, RelPath};
 use super::FileChange;
 use super::disk::{apply, check_name, refuse_ignored, require_managed, rescan};
 use crate::AppError;
-use crate::ports::{
-    FileJournal, FileOperations, JournalEntry, JournalStatus, LibraryRepository, ModelRepository, SidecarFiles,
-};
-use crate::scan::{LibraryLocks, ScanLibrary, model_stem, save_rules_file};
+use crate::ports::{FileJournal, FileOperations, JournalEntry, JournalStatus, LibraryRepository, ModelRepository};
+use crate::scan::{LibraryLocks, ScanLibrary, model_stem};
 
 /// Where a model should go.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +26,7 @@ pub struct MoveModel {
     pub journal: Arc<dyn FileJournal>,
     pub locks: Arc<LibraryLocks>,
     pub scan: Arc<ScanLibrary>,
-    pub sidecars: Arc<dyn SidecarFiles>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl MoveModel {
@@ -62,7 +60,7 @@ impl MoveModel {
                 status: JournalStatus::Pending,
             };
             apply(self.files.as_ref(), self.journal.as_ref(), &library.root, &entry, true)?;
-            save_rules_file(self.sidecars.as_ref(), &library, &self.libraries.scan_rules(library.id)?);
+            self.sync.library_changed(library.id);
             id
         };
         Ok(FileChange { journal, warning: rescan(&self.scan, library.id) })

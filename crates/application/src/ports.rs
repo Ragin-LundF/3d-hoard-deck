@@ -10,8 +10,9 @@ use hoarddeck_domain::{
 };
 
 use crate::browse::{BrowsePage, BrowseRequest};
-use crate::scan::{CompiledRules, FolderRule, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
+use crate::scan::{CompiledRules, Generation, KnownDirs, ScanItem, ScanProgress, ScanRules};
 use crate::search::{SearchDocument, SearchHits, SearchQuery};
+use crate::sidecar::{BackupFile, EntryFile, RootFile, SavedCollection, SavedTagGroup};
 use crate::{IndexError, ModelDetail, ModelSummary, ScanError, SearchError};
 
 pub trait LibraryRepository: Send + Sync {
@@ -50,6 +51,10 @@ pub type SizedFile = (LibraryId, RelPath, u64, i64);
 
 /// Raw walk results. Only the scan use case writes here, from one thread.
 pub trait EntryStore: Send + Sync {
+    /// The `.3dhoarddeck` files the last scans found (the scanner keeps them as entries; grouping ignores them).
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn metadata_files(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError>;
     /// Starts a scan generation and returns what is known about the folders from the last scan.
     /// # Errors
     /// Fails when the index cannot be read or written.
@@ -523,24 +528,107 @@ pub trait FileJournal: Send + Sync {
     fn unfinished(&self) -> Result<Vec<JournalEntry>, IndexError>;
 }
 
-/// `.3dhoarddeck` files beside the models, for libraries where the user allowed them.
+/// `.3dhoarddeck` files: one per model or folder with user data, one at the library root, and backup files.
 pub trait SidecarFiles: Send + Sync {
-    /// Writes atomically and keeps fields this version does not know.
-    /// # Errors
-    /// Fails when the file cannot be written.
-    fn write(&self, root: &str, file: &RelPath, meta: &ModelMeta) -> Result<(), String>;
-    /// The metadata and when it was last written (seconds since 1970); `None` when there is no file.
+    /// The file's content and when it was last written (seconds since 1970); `None` when there is no file.
     /// # Errors
     /// Fails when the file exists but cannot be read or parsed.
-    fn read(&self, root: &str, file: &RelPath) -> Result<Option<(ModelMeta, i64)>, String>;
-    /// The library's folder rules (one model, collection, accepted suggestions), in the `.3dhoarddeck` at its root.
+    fn read_entry(&self, root: &str, file: &RelPath) -> Result<Option<(EntryFile, i64)>, String>;
+    /// Writes atomically, keeps fields this version does not know, and leaves an unchanged file alone (no folder
+    /// mtime change, so no needless rescan). Returns whether it wrote.
     /// # Errors
     /// Fails when the file cannot be written.
-    fn write_folder_rules(&self, root: &str, rules: &[FolderRule]) -> Result<(), String>;
-    /// `None` when the root has no file or the file holds no rules.
+    fn write_entry(&self, root: &str, file: &RelPath, entry: &EntryFile) -> Result<bool, String>;
+    /// The `.3dhoarddeck` at the library root and when it was written.
     /// # Errors
     /// Fails when the file exists but cannot be read or parsed.
-    fn read_folder_rules(&self, root: &str) -> Result<Option<Vec<FolderRule>>, String>;
+    fn read_root(&self, root: &str) -> Result<Option<(RootFile, i64)>, String>;
+    /// As [`Self::write_entry`], for the root file.
+    /// # Errors
+    /// Fails when the file cannot be written.
+    fn write_root(&self, root: &str, file: &RootFile) -> Result<bool, String>;
+    /// Writes a backup file anywhere (outside the library), replacing an older one.
+    /// # Errors
+    /// Fails when the file cannot be written.
+    fn write_backup(&self, path: &Path, backup: &BackupFile) -> Result<(), String>;
+    /// # Errors
+    /// Fails when the file cannot be read or is no backup file.
+    fn read_backup(&self, path: &Path) -> Result<BackupFile, String>;
+}
+
+/// What the index holds about one model or folder path that a metadata file keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SavedEntry {
+    /// A model path or a folder path.
+    pub path: RelPath,
+    /// The kind of the model at `path`; without a model, whether the path is a file or a folder; `None` when the
+    /// path no longer exists (then no file is written for it).
+    pub kind: Option<ModelKind>,
+    pub meta: ModelMeta,
+    pub added_at: Option<i64>,
+    /// The rendered preview state (`skipped`, …), if any.
+    pub rendered: Option<String>,
+    pub folder_cover: Option<RelPath>,
+}
+
+/// One path's user data read back from a metadata file.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RestoredEntry {
+    pub path: RelPath,
+    /// The metadata and when its file was written; restored as the index row's update time.
+    pub meta: Option<(ModelMeta, i64)>,
+    pub added_at: Option<i64>,
+    pub rendered_skipped: bool,
+    pub folder_cover: Option<RelPath>,
+}
+
+/// Library-wide user data a library file keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SavedLibraryData {
+    pub tag_groups: Vec<SavedTagGroup>,
+    pub pinned_tags: Vec<String>,
+    pub collections: Vec<SavedCollection>,
+}
+
+/// The user data in the index, read and written for metadata files.
+pub trait UserDataStore: Send + Sync {
+    /// Entries at `paths` (also those without data), or with `None` every path that has any user data.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn saved_entries(&self, library: LibraryId, paths: Option<&[RelPath]>) -> Result<Vec<SavedEntry>, IndexError>;
+    /// Tag groups, pins and the collections with members (or a scope) in this library.
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn saved_library(&self, library: LibraryId) -> Result<SavedLibraryData, IndexError>;
+    /// Writes restored entries in one transaction. `added_at` only applies to models that exist.
+    /// # Errors
+    /// Fails when the index cannot be written; then nothing changed.
+    fn restore_entries(&self, library: LibraryId, entries: &[RestoredEntry]) -> Result<(), IndexError>;
+    /// Merges tag groups, pins and collections by name; `replace` makes the saved members and colors win. Returns
+    /// how many collection members were dropped because no such model exists.
+    /// # Errors
+    /// Fails when the index cannot be written; then nothing changed.
+    fn restore_library(&self, library: LibraryId, data: &SavedLibraryData, replace: bool) -> Result<usize, IndexError>;
+    /// Remembers files that could not be written (the root file as the root path), to try again later.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn mark_pending(&self, library: LibraryId, paths: &[RelPath]) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn pending(&self, library: LibraryId) -> Result<Vec<RelPath>, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn clear_pending(&self, library: LibraryId, paths: &[RelPath]) -> Result<(), IndexError>;
+    /// The library's stable id for its files, created on first use; `adopt` takes over the id from a saved file.
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn library_uid(&self, library: LibraryId, adopt: Option<&str>) -> Result<String, IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be written.
+    fn set_exported_at(&self, library: LibraryId, at: i64) -> Result<(), IndexError>;
+    /// # Errors
+    /// Fails when the index cannot be read.
+    fn exported_at(&self, library: LibraryId) -> Result<Option<i64>, IndexError>;
 }
 
 /// What `Orynt3D` stored for a model folder.
@@ -892,4 +980,6 @@ pub trait EventSink: Send + Sync {
     fn suggest_progress(&self, _library: LibraryId, _done: usize, _total: usize, _failed: usize, _running: bool) {}
     /// Archive extraction: `done` of `total` bytes written, `file` being written.
     fn extract_progress(&self, _archive: &RelPath, _done: u64, _total: u64, _file: &str) {}
+    /// "Write metadata files": `done` of `total` files handled.
+    fn metadata_progress(&self, _library: LibraryId, _done: usize, _total: usize) {}
 }

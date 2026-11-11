@@ -9,6 +9,7 @@ pub mod organize;
 pub mod ports;
 pub mod scan;
 pub mod search;
+pub mod sidecar;
 pub mod slicer;
 pub mod tagging;
 mod views;

@@ -27,6 +27,9 @@ impl ModelRepository for SqliteIndex {
                     existing.insert(path, value);
                 }
             }
+            // The first grouping of a library (also after a lost index): "date added" comes from the files' times, so
+            // "recently added" still means something; later new models get the time they appeared.
+            let first = existing.is_empty();
             let mut change = CatalogChange::default();
             for model in &catalog.models {
                 let fingerprint = fingerprint(model);
@@ -44,6 +47,14 @@ impl ModelRepository for SqliteIndex {
             for (id, _) in existing.into_values() {
                 transaction.execute("DELETE FROM models WHERE id = ?1", [id])?;
                 change.removed.push(ModelId(id));
+            }
+            if first {
+                transaction.execute(
+                    "UPDATE models SET added_at = COALESCE((SELECT MIN(e.mtime) / 1000 FROM model_files f
+                         JOIN entries e ON e.library_id = models.library_id AND e.path = f.path WHERE f.model_id = models.id), added_at)
+                     WHERE library_id = ?1",
+                    [library.0],
+                )?;
             }
             replace_folders(&transaction, library, &catalog.folders)?;
             transaction.commit()?;

@@ -1,20 +1,13 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
-use std::thread;
 
 use hoarddeck_domain::{LibraryId, ModelId, ModelKind, ModelMeta, RelPath, TagName};
 
-use super::sidecar_path;
 use crate::AppError;
-use crate::library::writes_sidecars;
-use crate::ports::{
-    LibraryRepository, MetaStore, ModelRepository, SearchIndex, SidecarFiles, TagGroup, TagInfo, TagScope, TagStore,
-};
+use crate::ports::{LibraryRepository, MetaStore, ModelRepository, SearchIndex, TagGroup, TagInfo, TagScope, TagStore};
 use crate::scan::LibraryLocks;
 use crate::search::{SearchModels, SearchRequest};
 
-/// `.3dhoarddeck` files written at the same time; modest, so a NAS stays usable for others.
-const SIDECAR_WRITERS: usize = 4;
 /// More changed models than this rebuild the library's search index instead of updating them one by one.
 const FULL_REFRESH_ABOVE: usize = 2000;
 /// Counting tags of a search looks at this many hits; enough to rank the chips above the grid.
@@ -27,7 +20,7 @@ pub struct ManageTags {
     pub models: Arc<dyn ModelRepository>,
     pub meta: Arc<dyn MetaStore>,
     pub tags: Arc<dyn TagStore>,
-    pub sidecars: Arc<dyn SidecarFiles>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
     pub search: Arc<dyn SearchIndex>,
     pub search_models: Arc<SearchModels>,
     pub locks: Arc<LibraryLocks>,
@@ -83,6 +76,7 @@ impl ManageTags {
             meta.hidden_tags.retain(|tag| tag.key() != to.key());
         })?;
         self.tags.move_tag_info(library, from, to)?;
+        self.sync.library_changed(library);
         Ok(changed)
     }
 
@@ -97,50 +91,24 @@ impl ManageTags {
             meta.hidden_tags.extend(tags.iter().cloned());
         })?;
         self.tags.forget_tags(library, tags)?;
+        self.sync.library_changed(library);
         Ok(changed)
     }
 
     /// # Errors
     /// Fails when the index cannot be written.
     pub fn set_group(&self, library: LibraryId, tags: &[TagName], group: Option<i64>) -> Result<(), AppError> {
-        Ok(self.tags.set_tag_group(library, tags, group)?)
+        self.tags.set_tag_group(library, tags, group)?;
+        self.sync.library_changed(library);
+        Ok(())
     }
 
     /// # Errors
     /// Fails when the index cannot be written.
     pub fn set_pinned(&self, library: LibraryId, tags: &[TagName], pinned: bool) -> Result<(), AppError> {
-        Ok(self.tags.set_tag_pinned(library, tags, pinned)?)
-    }
-
-    /// Writes the `.3dhoarddeck` files a few at a time: each is its own file in its own folder, and on a network share
-    /// one write after another spends most of the time waiting. Every file is tried; the first failure is returned.
-    fn write_sidecars(&self, root: &str, files: &[(RelPath, ModelMeta)]) -> Result<(), AppError> {
-        if files.is_empty() {
-            return Ok(());
-        }
-        let chunk = files.len().div_ceil(SIDECAR_WRITERS);
-        let failures: Vec<String> = thread::scope(|scope| {
-            let workers: Vec<_> = files
-                .chunks(chunk)
-                .map(|part| {
-                    scope.spawn(move || {
-                        part.iter()
-                            .filter_map(|(file, meta)| self.sidecars.write(root, file, meta).err())
-                            .collect::<Vec<_>>()
-                    })
-                })
-                .collect();
-            workers
-                .into_iter()
-                .flat_map(|worker| worker.join().unwrap_or_else(|_| vec!["writer stopped".to_owned()]))
-                .collect()
-        });
-        match failures.first() {
-            None => Ok(()),
-            Some(first) => {
-                Err(AppError::InvalidInput(format!("metadata file: {first} ({} files failed)", failures.len())))
-            }
-        }
+        self.tags.set_tag_pinned(library, tags, pinned)?;
+        self.sync.library_changed(library);
+        Ok(())
     }
 
     /// # Errors
@@ -157,13 +125,17 @@ impl ManageTags {
         if name.is_empty() {
             return Err(AppError::InvalidInput("a group needs a name".to_owned()));
         }
-        Ok(self.tags.save_tag_group(library, id, name, color)?)
+        let id = self.tags.save_tag_group(library, id, name, color)?;
+        self.sync.library_changed(library);
+        Ok(id)
     }
 
     /// # Errors
     /// Fails when the index cannot be written.
     pub fn delete_group(&self, library: LibraryId, id: i64) -> Result<(), AppError> {
-        Ok(self.tags.delete_tag_group(library, id)?)
+        self.tags.delete_tag_group(library, id)?;
+        self.sync.library_changed(library);
+        Ok(())
     }
 
     /// Applies `change` to the tags of every model carrying one of `tags`, then refreshes the search index once.
@@ -192,23 +164,18 @@ impl ManageTags {
         let models: HashMap<RelPath, (ModelId, ModelKind)> =
             self.models.models_at(library, paths)?.into_iter().map(|(path, id, kind)| (path, (id, kind))).collect();
         let mut changed: Vec<ModelId> = Vec::new();
-        let mut files: Vec<(RelPath, ModelMeta)> = Vec::new();
         let mut metas: Vec<(RelPath, ModelMeta)> = Vec::new();
         for path in paths {
             let mut meta = self.meta.meta(library, path)?;
             change(path, &mut meta);
             let meta = meta.normalized()?;
             changed.extend(models.get(path).map(|(id, _)| *id));
-            if writes_sidecars(found.settings)
-                && let Some(file) = models.get(path).and_then(|(_, kind)| sidecar_path(path, *kind))
-            {
-                files.push((file, meta.clone()));
-            }
             metas.push((path.clone(), meta));
         }
         // One transaction for all models: a batch is applied whole or not at all, and quickly.
         self.meta.save_metas(library, &metas)?;
-        let written = self.write_sidecars(&found.root, &files);
+        // A file that cannot be written waits in the queue; the index change stands.
+        self.sync.paths_changed(found.id, paths);
         let _sync = self.locks.search_sync();
         // Only the changed models go to search; rebuilding all of a big library took seconds per click.
         let refreshed: Result<(), AppError> = if changed.len() > FULL_REFRESH_ABOVE {
@@ -222,7 +189,6 @@ impl ManageTags {
                 .map_err(AppError::from)
                 .and_then(|documents| self.search.update_documents(&documents).map_err(Into::into))
         };
-        written?;
         refreshed?;
         Ok(paths.len())
     }

@@ -3,12 +3,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use hoarddeck_domain::{Library, LibraryId};
+use hoarddeck_domain::LibraryId;
 
 use super::{CompiledRules, LibraryLocks, ScanPhase, ScanProgress, ScanRules, regroup};
 use crate::AppError;
-use crate::library::writes_sidecars;
-use crate::ports::{EntryStore, EventSink, LibraryRepository, ModelRepository, SearchIndex, SidecarFiles};
+use crate::ports::{EntryStore, EventSink, LibraryRepository, ModelRepository, SearchIndex};
 use crate::tagging::TagRuleBook;
 
 /// Changes arriving within this time are grouped together, so marking several folders in a row regroups once.
@@ -22,7 +21,7 @@ pub struct RuleEditor {
     pub models: Arc<dyn ModelRepository>,
     pub search: Arc<dyn SearchIndex>,
     pub locks: Arc<LibraryLocks>,
-    pub sidecars: Arc<dyn SidecarFiles>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
     pub tag_rules: Arc<TagRuleBook>,
     /// Tells the UI that a background regroup started and finished.
     pub events: Arc<dyn EventSink>,
@@ -35,10 +34,10 @@ impl RuleEditor {
     /// Fails for an unknown or busy library, invalid rules, or when the index cannot be written.
     pub(crate) fn edit(&self, library: LibraryId, change: impl FnOnce(&mut ScanRules)) -> Result<(), AppError> {
         let _busy = self.locks.lock(library)?;
-        let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
+        let before = self.libraries.scan_rules(library)?;
         let rules = self.change_rules(library, change)?;
         let compiled = CompiledRules::compile(&rules)?;
-        save_rules_file(self.sidecars.as_ref(), &found, &rules);
+        self.sync.rules_changed(library, &before, &rules);
         regroup(
             self.entries.as_ref(),
             self.models.as_ref(),
@@ -62,9 +61,9 @@ impl RuleEditor {
     ) -> Result<(), AppError> {
         let ticket = {
             let mut queue = self.queue();
-            let found = self.libraries.get(library)?.ok_or(AppError::LibraryNotFound(library))?;
+            let before = self.libraries.scan_rules(library)?;
             let rules = self.change_rules(library, change)?;
-            save_rules_file(self.sidecars.as_ref(), &found, &rules);
+            self.sync.rules_changed(library, &before, &rules);
             Self::next_ticket(&mut queue, library)
         };
         let editor = Arc::clone(self);
@@ -173,13 +172,5 @@ impl RuleEditor {
     /// Fails when the index cannot be read.
     pub(crate) fn rules(&self, library: LibraryId) -> Result<ScanRules, AppError> {
         Ok(self.libraries.scan_rules(library)?)
-    }
-}
-
-/// Copies the folder rules into the `.3dhoarddeck` at the library root when the library keeps metadata files, so a
-/// rebuild restores them. The index stays the source of truth: a failed write is caught up by the next rule change.
-pub(crate) fn save_rules_file(sidecars: &dyn SidecarFiles, library: &Library, rules: &ScanRules) {
-    if writes_sidecars(library.settings) {
-        let _ = sidecars.write_folder_rules(&library.root, &rules.folder_rules);
     }
 }

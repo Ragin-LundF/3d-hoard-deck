@@ -15,6 +15,7 @@ pub struct SetFolderCover {
     pub covers: Arc<dyn FolderCoverStore>,
     pub files: Arc<dyn FileOperations>,
     pub scan: Arc<ScanLibrary>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl SetFolderCover {
@@ -34,6 +35,7 @@ impl SetFolderCover {
         let library = self.libraries.get(id)?.ok_or(AppError::LibraryNotFound(id))?;
         let Some(image) = image else {
             self.covers.set_folder_cover(id, folder, None)?;
+            self.sync.paths_changed(id, std::slice::from_ref(folder));
             return Ok(None);
         };
         if classify_by_name(image.name()) != Sniff::Known(FileKind::Image) {
@@ -45,6 +47,7 @@ impl SetFolderCover {
             None
         };
         self.covers.set_folder_cover(id, folder, Some(copy.as_ref().unwrap_or(image)))?;
+        self.sync.paths_changed(id, std::slice::from_ref(folder));
         Ok(copy)
     }
 

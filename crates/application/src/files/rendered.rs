@@ -29,6 +29,7 @@ pub struct RenderedPreviews {
     pub store: Arc<dyn RenderedStore>,
     pub cache: Arc<dyn RenderedCache>,
     pub screenshot: Arc<SaveScreenshot>,
+    pub sync: Arc<crate::sidecar::SidecarSync>,
 }
 
 impl RenderedPreviews {
@@ -111,7 +112,9 @@ impl RenderedPreviews {
 
     fn set(&self, ids: &[ModelId], state: Option<&str>) -> Result<(), AppError> {
         for summary in self.models.summaries(ids)? {
-            self.store.set_rendered(summary.library, &[summary.path], state)?;
+            self.store.set_rendered(summary.library, std::slice::from_ref(&summary.path), state)?;
+            // "Not this one" is user data: it goes into the model's metadata file.
+            self.sync.paths_changed(summary.library, &[summary.path]);
         }
         Ok(())
     }

@@ -12,13 +12,14 @@ use hoarddeck_application::files::{
 };
 use hoarddeck_application::library::{AddLibrary, MoveIndexLocation, UpdateLibrarySettings};
 use hoarddeck_application::organize::{
-    FindDuplicates, ImportOrynt3d, ManageCollections, ManageTags, RebuildFromSidecars, SetFolderCover, UpdateModelMeta,
+    FindDuplicates, ImportOrynt3d, ManageCollections, ManageTags, SetFolderCover, UpdateModelMeta,
 };
 use hoarddeck_application::ports::{EventSink, FileJournal, LibraryRepository};
 use hoarddeck_application::scan::{
     AutoRescan, CollectionPresets, FolderRules, LibraryLocks, RuleEditor, ScanLibrary, SetFolderRole,
 };
 use hoarddeck_application::search::{RebuildSearchIndex, SearchModels};
+use hoarddeck_application::sidecar::{RestoreFromSidecars, SidecarSync};
 use hoarddeck_application::slicer::{ManageSlicers, OpenInSlicer};
 use hoarddeck_application::tagging::{ManageTagRules, TagRuleBook};
 use hoarddeck_infra_ai::{HttpTagSuggester, Keychain};
@@ -67,7 +68,8 @@ pub struct App {
     pub slicers: Arc<ManageSlicers>,
     pub update_model_meta: Arc<UpdateModelMeta>,
     pub import_orynt3d: ImportOrynt3d,
-    pub rebuild_from_sidecars: RebuildFromSidecars,
+    pub restore_from_sidecars: RestoreFromSidecars,
+    pub sidecar_sync: Arc<SidecarSync>,
     pub set_folder_cover: SetFolderCover,
     pub tags: Arc<ManageTags>,
     pub tag_rules: ManageTagRules,
@@ -97,6 +99,7 @@ impl App {
         let locks = Arc::new(LibraryLocks::default());
         let io_priority = Arc::new(IoPriority::default());
         let tag_rules = Arc::new(TagRuleBook::new(index.clone()));
+        let sync = sidecar_sync(&index, &tag_rules, events.clone());
         let scan_library = Arc::new(ScanLibrary::new(
             index.clone(),
             index.clone(),
@@ -107,34 +110,29 @@ impl App {
             locks.clone(),
             tag_rules.clone(),
         ));
-        let editor = rule_editor(&index, &search, &locks, &tag_rules, events.clone());
+        let editor = rule_editor(&index, &search, &locks, &tag_rules, &sync, events.clone());
         let search_models = Arc::new(SearchModels { search: search.clone(), models: index.clone() });
         let update_model_meta = Arc::new(UpdateModelMeta {
             libraries: index.clone(),
             models: index.clone(),
             meta: index.clone(),
-            sidecars: Arc::new(SidecarFileStore),
+            sync: sync.clone(),
             search: search.clone(),
             locks: locks.clone(),
         });
         let slicers = Arc::new(ManageSlicers { store: index.clone(), detector: Arc::new(InstalledSlicers) });
         let (move_model, undo_file_operation, save_screenshot, set_folder_cover) =
-            file_operations(&index, &locks, &scan_library);
-        let tags = Arc::new(manage_tags(&index, &search, &search_models, &locks));
+            file_operations(&index, &locks, &scan_library, &sync);
+        let tags = Arc::new(manage_tags(&index, &search, &search_models, &locks, &sync));
         let thumbnails = Arc::new(ThumbnailCache::new(index_dir.join("thumbnails")));
         let suggest_tags = suggest_tags(&index, &tags, &thumbnails, &update_model_meta, events.clone());
-        let rendered = rendered_previews(&index, &thumbnails, &save_screenshot);
+        let rendered = rendered_previews(&index, &thumbnails, &save_screenshot, &sync);
         let _ = after_scan.suggest.set(Arc::downgrade(&suggest_tags));
         Ok(Self {
             io_priority: io_priority.clone(),
             index_dir: index_dir.clone(),
             libraries: index.clone(),
-            update_library_settings: UpdateLibrarySettings {
-                libraries: index.clone(),
-                models: index.clone(),
-                meta: index.clone(),
-                sidecars: Arc::new(SidecarFileStore),
-            },
+            update_library_settings: UpdateLibrarySettings { libraries: index.clone(), sync: sync.clone() },
             move_index_location: move_index_location(&index, &locks),
             add_library: AddLibrary { libraries: index.clone(), index_dir: index_dir.clone() },
             move_model,
@@ -161,7 +159,7 @@ impl App {
             slicers,
             import_orynt3d: import_orynt3d(&index, &update_model_meta),
             update_model_meta,
-            rebuild_from_sidecars: rebuild_from_sidecars(&index, &search, &locks, &editor),
+            restore_from_sidecars: restore_from_sidecars(&index, &search, &locks, &editor, &tag_rules),
             set_folder_cover,
             tags,
             suggest_tags,
@@ -171,12 +169,15 @@ impl App {
                 libraries: index.clone(),
                 entries: index.clone(),
                 editor: editor.clone(),
+                sync: sync.clone(),
             },
             collections: ManageCollections {
                 store: index.clone(),
                 models: index.clone(),
                 search: search_models.clone(),
+                sync: sync.clone(),
             },
+            sidecar_sync: sync,
             find_duplicates: find_duplicates(&index, &io_priority, events),
             search_models,
         })
@@ -188,6 +189,7 @@ fn file_operations(
     index: &Arc<SqliteIndex>,
     locks: &Arc<LibraryLocks>,
     scan: &Arc<ScanLibrary>,
+    sync: &Arc<SidecarSync>,
 ) -> (MoveModel, UndoFileOperation, Arc<SaveScreenshot>, SetFolderCover) {
     // An interrupted rename must not block opening; it is tried again on the next start.
     let reconcile =
@@ -202,7 +204,7 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
-        sidecars: Arc::new(SidecarFileStore),
+        sync: sync.clone(),
     };
     let undo = UndoFileOperation {
         libraries: index.clone(),
@@ -210,7 +212,7 @@ fn file_operations(
         journal: index.clone(),
         locks: locks.clone(),
         scan: scan.clone(),
-        sidecars: Arc::new(SidecarFileStore),
+        sync: sync.clone(),
     };
     let screenshot = Arc::new(SaveScreenshot {
         libraries: index.clone(),
@@ -220,6 +222,7 @@ fn file_operations(
         scan: scan.clone(),
     });
     let folder_cover = SetFolderCover {
+        sync: sync.clone(),
         libraries: index.clone(),
         covers: index.clone(),
         files: Arc::new(FsFileOperations),
@@ -253,6 +256,7 @@ fn rule_editor(
     search: &Arc<TantivySearchIndex>,
     locks: &Arc<LibraryLocks>,
     tag_rules: &Arc<TagRuleBook>,
+    sync: &Arc<SidecarSync>,
     events: Arc<dyn EventSink>,
 ) -> Arc<RuleEditor> {
     Arc::new(RuleEditor {
@@ -261,7 +265,7 @@ fn rule_editor(
         models: index.clone(),
         search: search.clone(),
         locks: locks.clone(),
-        sidecars: Arc::new(SidecarFileStore),
+        sync: sync.clone(),
         tag_rules: tag_rules.clone(),
         events,
         queue: Mutex::default(),
@@ -273,13 +277,14 @@ fn manage_tags(
     search: &Arc<TantivySearchIndex>,
     search_models: &Arc<SearchModels>,
     locks: &Arc<LibraryLocks>,
+    sync: &Arc<SidecarSync>,
 ) -> ManageTags {
     ManageTags {
         libraries: index.clone(),
         models: index.clone(),
         meta: index.clone(),
         tags: index.clone(),
-        sidecars: Arc::new(SidecarFileStore),
+        sync: sync.clone(),
         search: search.clone(),
         search_models: search_models.clone(),
         locks: locks.clone(),
@@ -324,8 +329,10 @@ fn rendered_previews(
     index: &Arc<SqliteIndex>,
     thumbnails: &Arc<ThumbnailCache>,
     screenshot: &Arc<SaveScreenshot>,
+    sync: &Arc<SidecarSync>,
 ) -> RenderedPreviews {
     RenderedPreviews {
+        sync: sync.clone(),
         libraries: index.clone(),
         models: index.clone(),
         store: index.clone(),
@@ -357,20 +364,40 @@ fn suggest_tags(
     })
 }
 
-fn rebuild_from_sidecars(
+fn sidecar_sync(
+    index: &Arc<SqliteIndex>,
+    tag_rules: &Arc<TagRuleBook>,
+    events: Arc<dyn EventSink>,
+) -> Arc<SidecarSync> {
+    Arc::new(SidecarSync {
+        libraries: index.clone(),
+        store: index.clone(),
+        entries: index.clone(),
+        files: Arc::new(SidecarFileStore),
+        tag_rules: tag_rules.clone(),
+        events,
+        cancel: AtomicBool::new(false),
+    })
+}
+
+fn restore_from_sidecars(
     index: &Arc<SqliteIndex>,
     search: &Arc<TantivySearchIndex>,
     locks: &Arc<LibraryLocks>,
     editor: &Arc<RuleEditor>,
-) -> RebuildFromSidecars {
-    RebuildFromSidecars {
+    tag_rules: &Arc<TagRuleBook>,
+) -> RestoreFromSidecars {
+    RestoreFromSidecars {
         libraries: index.clone(),
         models: index.clone(),
         meta: index.clone(),
-        sidecars: Arc::new(SidecarFileStore),
+        store: index.clone(),
+        entries: index.clone(),
+        files: Arc::new(SidecarFileStore),
         search: search.clone(),
         locks: locks.clone(),
         editor: editor.clone(),
+        tag_rules: tag_rules.clone(),
     }
 }
 
