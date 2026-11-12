@@ -123,6 +123,12 @@ export function ContextMenuHost() {
         menu.returnFocus?.focus();
         close();
       }
+      // Tab leaves the menu, as with the system's menus.
+      if (event.key === "Tab") {
+        event.preventDefault();
+        menu.returnFocus?.focus();
+        close();
+      }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];

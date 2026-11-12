@@ -121,6 +121,7 @@ export function App() {
                 library={item.id}
                 query={libraryRoute && item.id === library?.id ? libraryRoute.q : null}
                 onSearch={(q) => navigate({ ...HOME, ...(libraryRoute && item.id === library?.id ? libraryRoute : {}), library: item.id, q, view: "library" })}
+                onMessage={setToast}
               />
             </div>
           ))}
@@ -152,7 +153,7 @@ export function App() {
             onMessage={setToast}
           />
         ) : route.view === "duplicates" ? (
-          <DuplicatesView libraries={list} onOpenModel={(id) => navigate({ view: "model", id })} />
+          <DuplicatesView libraries={list} onOpenModel={(id) => navigate({ view: "model", id })} onMessage={setToast} />
         ) : route.view === "collection" ? (
           <CollectionView id={route.id} onOpenModel={(id) => navigate({ view: "model", id })} onDeleted={() => navigate(HOME)} onError={setToast} />
         ) : route.view === "model" ? (

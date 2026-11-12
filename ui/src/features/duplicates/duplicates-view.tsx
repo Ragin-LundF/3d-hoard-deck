@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import { describeError, commands, events, IpcFailure, unwrap, type LibraryDto } from "../../ipc";
 import { formatBytes } from "../../shared/format";
 import { Icon } from "../../shared/icons";
+import { menuProps } from "../../shared/context-menu";
+import { copyPath, revealPath } from "../../shared/file-actions";
 import { t, plural } from "../../shared/i18n";
 
-type Props = { libraries: LibraryDto[]; onOpenModel: (id: number) => void };
+type Props = { libraries: LibraryDto[]; onOpenModel: (id: number) => void; onMessage: (message: string) => void };
 
 /** Finds identical model files across all libraries. Only reads; nothing is deleted from here. */
-export function DuplicatesView({ libraries, onOpenModel }: Props) {
+export function DuplicatesView({ libraries, onOpenModel, onMessage }: Props) {
   const find = useMutation({ mutationFn: () => unwrap(commands.findDuplicates()) });
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   useEffect(() => {
@@ -43,7 +45,14 @@ export function DuplicatesView({ libraries, onOpenModel }: Props) {
         <div className="panel" key={index}>
           <div className="prow2"><div className="t"><b>{plural(group.files.length, "{count} copy", "{count} copies")} · {t("{size} each", { size: formatBytes(group.size) })}</b></div></div>
           {group.files.map((file) => (
-            <div className="prow2" key={`${file.library}/${file.path}`}>
+            <div className="prow2" key={`${file.library}/${file.path}`} {...menuProps(() => {
+              const root = libraries.find((library) => library.id === file.library)?.root ?? null;
+              return [
+                { label: t("Open model"), hidden: file.model === null, onSelect: () => onOpenModel(file.model ?? 0) },
+                { label: t("Show in folder"), hidden: root === null, onSelect: () => root !== null && revealPath(root, file.path, onMessage) },
+                { label: t("Copy path"), hidden: root === null, onSelect: () => root !== null && copyPath(root, file.path, onMessage) },
+              ];
+            })}>
               <div className="t">
                 <span className="mono">{file.path}</span>
                 <span>{libraryName(file.library)}</span>

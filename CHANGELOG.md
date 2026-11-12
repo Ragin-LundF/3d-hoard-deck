@@ -6,6 +6,10 @@ All notable changes to 3D Hoard Deck are listed here. The format follows
 ## [Unreleased]
 
 ### New
+- **Right-click menus everywhere.** Folders, model cards, pictures and files on a model page, collections, tags and
+  duplicates have their own menu (open, open in your slicer, show in folder, copy path, favorite, collections, tag
+  actions, …), the same wherever the thing appears. The browser's own menu ("Reload", "Save Image") no longer shows
+  up; text fields keep Cut, Copy and Paste. The folder menu is also behind a new "⋯" after the folder path.
 - **Rebuild everything from the library folders.** Where metadata files are allowed, the `.3dhoarddeck` files now hold
   everything you decided: names, tags, notes, marks, covers, the date a model was added, "no rendered preview",
   folder marks and folder covers (kept in the folder itself, so they follow a folder renamed outside the app), and at

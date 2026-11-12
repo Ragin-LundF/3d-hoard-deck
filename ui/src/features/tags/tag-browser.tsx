@@ -6,7 +6,9 @@ import { formatNumber, plural, t } from "../../shared/i18n";
 import { Icon } from "../../shared/icons";
 import { likelyDuplicates } from "./duplicates";
 import { GROUP_COLORS, useTagGroups, useTags } from "./queries";
-import { toggleInclude } from "./tag-query";
+import { toggleExclude, toggleInclude } from "./tag-query";
+import { menuProps } from "../../shared/context-menu";
+import { takeRenameRequest, useTagMenu } from "./tag-menu";
 import { SuggestionReview } from "../ai/suggestion-review";
 
 type Sort = "count" | "name" | "recent";
@@ -27,8 +29,20 @@ export function TagBrowser({ library, libraryName, onSearch, onMessage }: Props)
   const [sort, setSort] = useState<Sort>("count");
   const [view, setView] = useState<"list" | "cloud">("list");
   const [group, setGroup] = useState<GroupFilter>("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [action, setAction] = useState<"merge" | "rename" | "delete" | null>(null);
+  // "Rename…" chosen in a tag's menu elsewhere opens this page with that tag ready to rename.
+  const [renameFirst] = useState(() => takeRenameRequest(library));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(renameFirst ? [renameFirst] : []));
+  const [action, setAction] = useState<"merge" | "rename" | "delete" | null>(renameFirst ? "rename" : null);
+  const tagMenu = useTagMenu(onMessage);
+  const menuOf = (name: string) =>
+    tagMenu(library, name, {
+      onShow: () => onSearch(toggleInclude("", name)),
+      onExclude: () => onSearch(toggleExclude("", name)),
+      onRename: () => {
+        setSelected(new Set([name]));
+        setAction("rename");
+      },
+    });
   const [editingGroup, setEditingGroup] = useState<{ id: number | null; name: string; color: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -193,7 +207,7 @@ export function TagBrowser({ library, libraryName, onSearch, onMessage }: Props)
                   if (!tag) return null;
                   const isOn = selected.has(tag.name);
                   return (
-                    <div key={tag.name} role="listitem" className={`tb-row${isOn ? " on" : ""}`} style={{ position: "absolute", top: row.start, height: ROW, left: 0, right: 0 }}>
+                    <div key={tag.name} role="listitem" className={`tb-row${isOn ? " on" : ""}`} style={{ position: "absolute", top: row.start, height: ROW, left: 0, right: 0 }} {...menuProps(() => menuOf(tag.name))}>
                       <input type="checkbox" checked={isOn} onChange={() => toggle(tag.name)} aria-label={t("Select {name}", { name: tag.name })} />
                       <span className="gd" style={{ background: colorOf(tag.group) ?? "transparent" }} />
                       <button className="linkish name" onClick={() => onSearch(toggleInclude("", tag.name))} title={t("Show models with this tag")}>{tag.name}</button>
@@ -230,6 +244,7 @@ export function TagBrowser({ library, libraryName, onSearch, onMessage }: Props)
                 className={selected.has(tag.name) ? "on" : ""}
                 style={{ fontSize: `${12 + Math.round(12 * Math.sqrt(tag.count / maxCount))}px`, color: colorOf(tag.group) }}
                 onClick={(event) => (event.metaKey || event.ctrlKey || event.shiftKey ? toggle(tag.name) : onSearch(toggleInclude("", tag.name)))}
+                {...menuProps(() => menuOf(tag.name))}
                 title={t("{count} models. ⌘-click to select", { count: tag.count })}
               >
                 {tag.name}

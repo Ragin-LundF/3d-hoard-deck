@@ -15,17 +15,40 @@ export function useFolderMenu(onMessage: (message: string) => void) {
   const setRole = (library: LibraryDto, folder: string, role: FolderRoleDto | null) =>
     run(unwrap(commands.setFolderRole(library.id, folder, role)));
   /** `isCollection` is unknown where the folder's role is not loaded (breadcrumbs): then no check mark. */
-  return (library: LibraryDto, folder: string, isCollection?: boolean): MenuItem[] => [
-    { label: t("Open"), onSelect: () => navigate({ ...HOME, library: library.id, folder }) },
-    { label: t("Show in folder"), onSelect: () => revealPath(library.root, folder, onMessage) },
-    { label: t("Copy path"), onSelect: () => copyPath(library.root, folder, onMessage) },
+  return (library: LibraryDto, folder: string, isCollection?: boolean): MenuItem[] =>
+    folderMenuItems(isCollection, {
+      open: () => navigate({ ...HOME, library: library.id, folder }),
+      reveal: () => revealPath(library.root, folder, onMessage),
+      copy: () => copyPath(library.root, folder, onMessage),
+      setRole: (role) => setRole(library, folder, role),
+      automaticCover: () => run(unwrap(commands.setFolderCover(library.id, folder, null))),
+      scan: () => run(unwrap(commands.scanFolder(library.id, folder))),
+    });
+}
+
+/** What a folder menu does. */
+export type FolderMenuActions = {
+  open: () => void;
+  reveal: () => void;
+  copy: () => void;
+  setRole: (role: FolderRoleDto | null) => void;
+  automaticCover: () => void;
+  scan: () => void;
+};
+
+/** The items of a folder menu. */
+export function folderMenuItems(isCollection: boolean | undefined, act: FolderMenuActions): MenuItem[] {
+  return [
+    { label: t("Open"), onSelect: act.open },
+    { label: t("Show in folder"), onSelect: act.reveal },
+    { label: t("Copy path"), onSelect: act.copy },
     "separator",
-    { label: t("Treat as one model"), onSelect: () => setRole(library, folder, "model") },
-    { label: t("Treat as collection"), checked: isCollection, onSelect: () => setRole(library, folder, "collection") },
-    { label: t("Detect automatically"), onSelect: () => setRole(library, folder, null) },
+    { label: t("Treat as one model"), onSelect: () => act.setRole("model") },
+    { label: t("Treat as collection"), checked: isCollection, onSelect: () => act.setRole("collection") },
+    { label: t("Detect automatically"), onSelect: () => act.setRole(null) },
     "separator",
-    { label: t("Automatic cover"), onSelect: () => run(unwrap(commands.setFolderCover(library.id, folder, null))) },
-    { label: t("Scan this folder"), onSelect: () => run(unwrap(commands.scanFolder(library.id, folder))) },
+    { label: t("Automatic cover"), onSelect: act.automaticCover },
+    { label: t("Scan this folder"), onSelect: act.scan },
     { hint: t("Rules for whole patterns (suggested collections) are listed in Settings › Libraries.") },
   ];
 }

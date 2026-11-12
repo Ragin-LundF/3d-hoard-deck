@@ -183,6 +183,7 @@ export function LibraryView({ library, route, navigate, onShownChange, onError }
           onQuery={(q) => navigate({ ...route, q })}
           onCheck={(tag) => navigate({ view: "check", library: library.id, tag, folder: route.folder })}
           onRemoveAll={(tag) => void removeEverywhere(tag)}
+          onMessage={onError}
         />
       </div>
       <RenderedStrip

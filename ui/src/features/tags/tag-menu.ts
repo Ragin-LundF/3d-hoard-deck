@@ -32,25 +32,41 @@ export function useTagMenu(onMessage: (message: string) => void) {
   return (library: number, tag: string, options: Options = {}): MenuItem[] => {
     const known = queryClient.getQueryData<TagInfoDto_Serialize[]>(["tags", library])?.find((info) => info.name.toLowerCase() === tag.toLowerCase());
     const pinned = known?.pinned ?? false;
-    return [
-      { label: t("Show models with this tag"), onSelect: options.onShow ?? (() => navigate({ ...HOME, library, q: toggleInclude("", tag) })) },
-      { label: t("Exclude this tag"), onSelect: options.onExclude ?? (() => navigate({ ...HOME, library, q: toggleExclude("", tag) })) },
-      {
-        label: pinned ? t("Unpin from the sidebar") : t("Pin to the sidebar"),
-        onSelect: () => void unwrap(commands.setTagsPinned(library, [tag], !pinned))
-          .then(() => queryClient.invalidateQueries({ queryKey: ["tags", library] }))
-          .catch((error) => onMessage(describeError(error))),
-      },
-      {
-        label: t("Rename…"),
-        onSelect: options.onRename ?? (() => {
-          renameRequest = { library, tag };
-          navigate({ view: "tags", library });
-        }),
-      },
-      { label: t("Check this tag…"), hidden: !options.onCheck, onSelect: () => options.onCheck?.() },
-      "separator",
-      { label: t("Remove from all here…"), danger: true, hidden: !options.onRemoveAll, onSelect: () => options.onRemoveAll?.() },
-    ];
+    return tagMenuItems(pinned, {
+      show: options.onShow ?? (() => navigate({ ...HOME, library, q: toggleInclude("", tag) })),
+      exclude: options.onExclude ?? (() => navigate({ ...HOME, library, q: toggleExclude("", tag) })),
+      pin: () => void unwrap(commands.setTagsPinned(library, [tag], !pinned))
+        .then(() => queryClient.invalidateQueries({ queryKey: ["tags", library] }))
+        .catch((error) => onMessage(describeError(error))),
+      rename: options.onRename ?? (() => {
+        renameRequest = { library, tag };
+        navigate({ view: "tags", library });
+      }),
+      check: options.onCheck,
+      removeAll: options.onRemoveAll,
+    });
   };
+}
+
+/** What a tag menu does; `check` and `removeAll` only where they exist (the tag bar). */
+export type TagMenuActions = {
+  show: () => void;
+  exclude: () => void;
+  pin: () => void;
+  rename: () => void;
+  check?: () => void;
+  removeAll?: () => void;
+};
+
+/** The items of a tag menu. */
+export function tagMenuItems(pinned: boolean, act: TagMenuActions): MenuItem[] {
+  return [
+    { label: t("Show models with this tag"), onSelect: act.show },
+    { label: t("Exclude this tag"), onSelect: act.exclude },
+    { label: pinned ? t("Unpin from the sidebar") : t("Pin to the sidebar"), onSelect: act.pin },
+    { label: t("Rename…"), onSelect: act.rename },
+    { label: t("Check this tag…"), hidden: !act.check, onSelect: () => act.check?.() },
+    "separator",
+    { label: t("Remove from all here…"), danger: true, hidden: !act.removeAll, onSelect: () => act.removeAll?.() },
+  ];
 }

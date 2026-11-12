@@ -632,3 +632,6 @@ button.subhead[aria-expanded="true"] svg { transform: rotate(90deg); }
 .row-actions { display: flex; gap: 8px; align-items: center; flex: none; }
 .prow2 .t .seg.mini { align-self: flex-start; margin-top: 6px; }
 .prow2 .t .xprogress { margin-top: 6px; }
+.menu button.danger { color: var(--danger); }
+.bc .bc-more { margin-left: 6px; padding: 0 6px; border-radius: 6px; color: var(--muted); }
+.bc .bc-more:hover { background: var(--hover); color: var(--text); }
